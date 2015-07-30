@@ -31,7 +31,11 @@ object SymbolicChecker {
     }
   }
 
-  def freshVar() : Vars = ???
+  private var varCounter : int = 0
+
+  def freshVar() : Vars =
+    varCounter += 1
+    s"__internal__$varCounter"
 
   def oracle(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = ???
 
