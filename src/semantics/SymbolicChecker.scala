@@ -14,12 +14,20 @@ object SymbolicChecker {
       case Skip() => oracle(pre, post)
       case AssignVar(x, e, c) =>
         val newx = freshVar()
-        val newpre =
-          SymbolicHeap(And(Eq(Var(x), e.subst(x, Var(newx))), pre.pi.subst(x, Var(newx))), pre.sig.subst(x, Var(newx)))
-        check(newpre, c, post)
+        val newpre = pre.subst(x, Var(newx))
+        val newpre2 = SymbolicHeap(And(Eq(Var(x), e.subst(x, Var(newx))), newpre.pi), newpre.sig)
+        check(newpre2, c, post)
+      case New(x, s, c) =>
+        val newx = freshVar()
+        val newpre = pre.subst(x, Var(newx))
+        val newpre2 = SymbolicHeap(newpre.pi, Sep(Inst(Var(newx), Map()),newpre.sig))
+        check(newpre2, c, post)
+      case If(p, ct, ce, c) =>
+        val newpre1 = SymbolicHeap(And(p, pre.pi), pre.sig)
+        val newpre2 = SymbolicHeap(And(Not(p), pre.pi), pre.sig)
+        check(newpre1, ct, post) && check(newpre2, ce, post)
       case HeapLookup(x, e, f, c) => ???
       case HeapMutate(e1, f, e2, c) => ???
-      case New(x, s, c) => ???
     }
   }
 

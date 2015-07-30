@@ -27,6 +27,6 @@ case class Skip() extends Command
 case class AssignVar(x : Vars, e : Expr, c : Command) extends Command
 case class HeapLookup(x : Vars, e : Expr, f : Fields, c : Command) extends Command
 case class HeapMutate(e1 : Expr, f : Fields, e2 : Expr, c : Command) extends Command
-case class New(x : Var, s : Sort, c : Command) extends Command
-case class If(p : SimpleProp, ct : Command, ce : Command, c : Command)
+case class New(x : Vars, s : Sort, c : Command) extends Command
+case class If(p : SimpleProp, ct : Command, ce : Command, c : Command) extends Command
 
