@@ -1,10 +1,8 @@
 package semantics
 
-import syntax.ast._
 import helper._
-import Subst._
-
-import scala.None
+import semantics.Subst._
+import syntax.ast._
 
 object SymbolicHeapChecker {
 
@@ -37,10 +35,26 @@ object SymbolicHeapChecker {
     ppc(h1.pi, h1.sig, h2.pi, h2.sig, Set())
   }
 
+  def satSplit(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
+     var hsold = Set[(SymbolicHeap, SymbolicHeap)]()
+     var hs    = Set((h1, h2))
+     while(hsold != hs) {
+       hsold = hs
+       if (hs.size > 0) {
+         val hh = hs.head
+         hs = hs.tail
+         propagatePureConstraints(hh._1, hh._2) match {
+           case Some(hh2) => ???
+           case None => ???
+         }
+       }
+     }
+  }
+
   private def normalise(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
     val newprop = resolveSpatialConstraints(h1.sig)
     val newh1 = SymbolicHeap(h1.pi ++ newprop, h1.sig)
-    propagatePureConstraints(newh1, h2).toSet
+    satSplit(newh1, h2)
     // TODO: Add SAT search phase, hint: consider only operator relevant variables in search
   }
 

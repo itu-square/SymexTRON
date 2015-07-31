@@ -20,6 +20,7 @@ case class HeapMutate(e1 : Expr, f : Fields, e2 : Expr, c : Command) extends Com
 case class New(x : Vars, s : Sort, c : Command) extends Command
 case class If(p : SimpleProp, ct : Command, ce : Command, c : Command) extends Command
 
+// Smart constructor
 object Accesses {
   def unapply(c : Command): Option[Expr] = {
     c match {
