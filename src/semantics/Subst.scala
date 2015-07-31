@@ -14,21 +14,19 @@ object Subst {
     }
   }
 
-  implicit class SubstProp(pi : Prop) extends Subst[Prop] {
-    override def subst(x: Vars, e: Expr): Prop = pi match {
-      case True() => True()
-      case And(p1, p2) => And(p1.subst(x, e), p2.subst(x, e))
+  implicit class SubstSimpleProp(p : SimpleProp) extends Subst[SimpleProp] {
+    override def subst(x: Vars, e: Expr): SimpleProp = p match {
       case Eq(e1, e2) => Eq(e1.subst(x, e), e2.subst(x, e))
-      case Not(e1) => Not(e1.subst(x, e).asInstanceOf[SimpleProp]) //Cast should be safe
+      case Not(e1) => not(e1.subst(x, e))
     }
   }
 
+  implicit class SubstProp(pi : Prop) extends Subst[Prop] {
+    override def subst(x: Vars, e: Expr): Prop = pi.map(_.subst(x, e))
+  }
+
   implicit class SubstSpatial(sig : Spatial) extends Subst[Spatial] {
-    override def subst(x: Vars, e: Expr): Spatial = sig match {
-      case Empty() => Empty()
-      case Inst(e1, l) => Inst(e1.subst(x, e), l.mapValues(ei => ei.subst(x, e)))
-      case Sep(sig1, sig2) => Sep(sig1.subst(x, e), sig2.subst(x, e))
-    }
+    override def subst(x: Vars, e: Expr): Spatial = sig.mapValues(_.map(_.mapValues(_.subst(x, e))))
   }
 
   implicit class SubstSymbolicHeap(h : SymbolicHeap) extends Subst[SymbolicHeap] {
