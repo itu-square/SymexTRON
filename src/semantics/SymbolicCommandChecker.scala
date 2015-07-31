@@ -8,7 +8,7 @@ import syntax.ast._
 import Subst._
 import helper._
 
-object SymbolicChecker {
+object SymbolicCommandChecker {
 
   def check(pre : SymbolicHeap, c : Command, post : SymbolicHeap) : Boolean = {
     // Inconsistent precondition
