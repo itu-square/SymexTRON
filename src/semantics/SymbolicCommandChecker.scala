@@ -12,10 +12,10 @@ object SymbolicCommandChecker {
 
   def check(pre : SymbolicHeap, c : Command, post : SymbolicHeap) : Boolean = {
     // Inconsistent precondition
-    if (incon(pre)) true
+    if (SymbolicHeapChecker.incon(pre)) true
     else c match {
       // Operational rules
-      case Skip() => oracle(pre, post)
+      case Skip() => SymbolicHeapChecker.oracle(pre, post)
       case AssignVar(x, e, c) => {
         val newx = freshVar()
         val newpre = pre.subst(x, Var(newx))
@@ -47,7 +47,7 @@ object SymbolicCommandChecker {
       }
       // Rearrangement rules
       case Accesses(e) =>
-        val othere = pre.sig.find(p => oracle(pre, SymbolicHeap(Set(Eq(e, p._1)), pre.sig)))
+        val othere = pre.sig.find(p => SymbolicHeapChecker.oracle(pre, SymbolicHeap(Set(Eq(e, p._1)), pre.sig)))
         othere match {
           case Some(p) =>
             val newpre = SymbolicHeap(pre.pi, (pre.sig - p._1).updated(e, p._2))
@@ -61,30 +61,18 @@ object SymbolicCommandChecker {
 
   private var varCounter : Int = 0
 
-  def freshVar() : Vars = {
+  private def freshVar() : Vars = {
     varCounter += 1
     s"__internal__$varCounter"
   }
 
-  def lookup(fs: Map[Fields, Expr], f: Fields): (Map[Fields, Expr], Expr) =
+  private def lookup(fs: Map[Fields, Expr], f: Fields): (Map[Fields, Expr], Expr) =
     if (fs.contains(f)) (fs, fs(f))
     else {
       val newx = freshVar()
       (fs.updated(f, Var(newx)), Var(newx))
     }
 
-  def mutate(fs: Map[Fields, Expr], f: Fields, e2: Expr) =
+  private def mutate(fs: Map[Fields, Expr], f: Fields, e2: Expr) =
     fs.updated(f, e2)
-
-  def oracle(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
-    println(s"left heap: $h1, right heap: $h2")
-    false
-  }
-
-  def incon(h : SymbolicHeap) : Boolean = oracle(h, SymbolicHeap(Set(Eq(Nil(), Nil())), Map()))
-
-  def allocd(h : SymbolicHeap, e : Expr) : Boolean = {
-    incon(SymbolicHeap(h.pi, h.sig.adjust(e) {_ + Map()})) &&
-      incon(SymbolicHeap(h.pi + Eq(e, Nil()), h.sig))
-  }
 }
