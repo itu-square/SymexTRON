@@ -4,6 +4,8 @@ import helper._
 import semantics.Subst._
 import syntax.ast._
 
+import FreeVariables._
+
 object SymbolicHeapChecker {
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
@@ -43,19 +45,26 @@ object SymbolicHeapChecker {
        if (hs.size > 0) {
          val hh = hs.head
          hs = hs.tail
-         propagatePureConstraints(hh._1, hh._2) match {
-           case Some(hh2) => ???
-           case None => ???
+         (for (hh2 <- propagatePureConstraints(hh._1, hh._2);
+              es = (hh2._1.freevars ++ hh2._2.freevars).map[_, Set[Expr]](Var(_)) + Nil();
+              eps = for (e1 <- es; e2 <- es; if e1 != e2) yield (e1, e2);
+              ep <- eps.find(ep => !hh2._1.pi.contains(Eq(ep._1, ep._2)) && !hh2._1.pi.contains(Not(Eq(ep._1, ep._2)))))
+           yield (hh2, ep)) match {
+             case Some((hh2,ep)) =>
+               hs = hs + ((SymbolicHeap(hh2._1.pi + Eq(ep._1, ep._2), hh2._1.sig), hh2._2))
+               hs = hs + ((SymbolicHeap(hh2._1.pi + Not(Eq(ep._1, ep._2)), hh2._1.sig), hh2._2))
+             case None =>
          }
        }
      }
+    hs
   }
 
   private def normalise(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
     val newprop = resolveSpatialConstraints(h1.sig)
     val newh1 = SymbolicHeap(h1.pi ++ newprop, h1.sig)
     satSplit(newh1, h2)
-    // TODO: Add SAT search phase, hint: consider only operator relevant variables in search
+    // NOTICE: Add SAT search phase, hint: consider only operator relevant variables in search
   }
 
   private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = ???
