@@ -4,9 +4,8 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
+import semantics.Subst._
 import syntax.ast._
-import Subst._
-import helper._
 
 object SymbolicCommandChecker {
 
@@ -25,7 +24,7 @@ object SymbolicCommandChecker {
       case New(x, s, c) => {
         val newx = freshVar()
         val newpre = pre.subst(x, Var(newx))
-        val newpre2 = SymbolicHeap(newpre.pi, newpre.sig.updated(Var(newx), Set(Map())))
+        val newpre2 = SymbolicHeap(newpre.pi, newpre.sig.updated(Var(x), Set(Map())))
         check(newpre2, c, post)
       }
       case If(p, ct, ce, c) => {

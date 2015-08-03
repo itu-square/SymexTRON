@@ -6,9 +6,16 @@ sealed trait Expr
 case class Nil() extends Expr
 case class Var(name: Vars) extends Expr
 
-sealed trait SimpleProp
-case class Eq(e1: Expr, e2: Expr) extends SimpleProp
-case class Not(e : Eq) extends SimpleProp
+sealed trait SimpleProp {
+  def sym: SimpleProp
+}
+
+case class Eq(e1: Expr, e2: Expr) extends SimpleProp {
+  override def sym: Eq = Eq(e2, e1)
+}
+case class Not(e : Eq) extends SimpleProp {
+  override def sym: Not = Not(e.sym)
+}
 
 case class SymbolicHeap(pi : Prop, sig : Spatial)
 
