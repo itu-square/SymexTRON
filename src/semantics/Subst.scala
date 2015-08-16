@@ -9,7 +9,7 @@ trait Subst[T] {
 object Subst {
   implicit class SubstExpr(e0 : Expr) extends Subst[Expr] {
     override def subst(x: Vars, e1: Expr): Expr = e0 match {
-      case Var(name) if name == x => e1
+      case Symbol(name) if name == x => e1
       case _ => e0
     }
   }

@@ -10,7 +10,7 @@ object FreeVariables {
   implicit class FreeVariablesExpr(e : Expr) extends FreeVariables[Expr] {
     override def freevars: Set[Vars] = e match {
       case Nil() => Set()
-      case Var(name) => Set(name)
+      case Symbol(name) => Set(name)
     }
   }
 
