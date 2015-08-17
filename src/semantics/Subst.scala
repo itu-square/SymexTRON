@@ -1,8 +1,6 @@
 package semantics
 
-import syntax.ast._
-
-trait Subst[T] {
+/*trait Subst[T] {
   def subst(x : Vars, e : Expr) : T
 }
 
@@ -34,4 +32,4 @@ object Subst {
       case SymbolicHeap(pi, sig) => SymbolicHeap(pi.subst(x, e), sig.subst(x, e))
     }
   }
-}
+}*/

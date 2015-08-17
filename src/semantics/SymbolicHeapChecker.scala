@@ -1,12 +1,12 @@
 package semantics
 
 import helper._
-import semantics.Subst._
 import syntax.ast._
 
-import FreeVariables._
+import scalaz.\/
 
 object SymbolicHeapChecker {
+  def sortOf(mem: SymbolicMemory, e1: Expr[TRUE.type]): String \/ Sort = ???
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
   // Alternatively have a separate phase for non-pointing spatial constraints (list/trees/checkers)
@@ -21,7 +21,7 @@ object SymbolicHeapChecker {
   }.flatten
 
   private def propagatePureConstraints(h1: SymbolicHeap, h2: SymbolicHeap): Option[(SymbolicHeap, SymbolicHeap)] = {
-    def ppc(pure1 : Prop, spatial1 : Spatial, pure2 : Prop, spatial2 : Spatial, pureh : Prop)
+    /*def ppc(pure1 : Prop, spatial1 : Spatial, pure2 : Prop, spatial2 : Spatial, pureh : Prop)
             : Option[(SymbolicHeap, SymbolicHeap)] = {
       if (pure1.size <= 0) Some (SymbolicHeap(pureh, spatial1), SymbolicHeap(pure2, spatial2))
       else pure1.head match {
@@ -34,7 +34,8 @@ object SymbolicHeapChecker {
         case p => ppc(pure1.tail, spatial1, pure2, spatial2, pureh + p)
       }
     }
-    ppc(h1.pure, h1.spatial, h2.pure, h2.spatial, Set())
+    ppc(h1.pure, h1.spatial, h2.pure, h2.spatial, Set())*/
+    ???
   }
 
   private def propagateConstraints(h1: SymbolicHeap, h2: SymbolicHeap): Option[(SymbolicHeap, SymbolicHeap)] = {
@@ -50,7 +51,7 @@ object SymbolicHeapChecker {
        hsold = hs
        if (hs.size > 0) {
          var hsvisited = Set[(SymbolicHeap, SymbolicHeap)]()
-         for (hh <- hs) {
+         /*for (hh <- hs) {
            propagateConstraints(hh._1, hh._2) match {
              case Some(hh2) => {
                val es = (hh2._1.freevars ++ hh2._2.freevars).map[Expr, Set[Expr]](Symbol(_)) + Nil()
@@ -67,7 +68,7 @@ object SymbolicHeapChecker {
              }
              case None =>
            }
-         }
+         }*/
          hs = hsvisited
        }
      }
@@ -83,13 +84,13 @@ object SymbolicHeapChecker {
 
 
   private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
-    def subfields(rho1: Map[Fields, Expr], rho2: Map[Fields, Expr]): Boolean =
+    def subfields(rho1: Map[Fields, Expr[TRUE.V]], rho2: Map[Fields, Expr[TRUE.V]]): Boolean =
       rho2.forall(p => rho1.contains(p._1) && rho1(p._1) == p._2)
-    val newh2 = SymbolicHeap(h2.pure.filterNot {
+    val newh2 = SymbolicHeap(h2.pure /*.filterNot {
       case Eq(e1, e2) if e1 == e2 => true
-      case e if h1.pure.contains(e) || h1.pure.contains(e.sym) => true // TODO: Support transitivity
+      case e if h1.pure.contains(e) => true // TODO: Support symmetry transitivity
       case _ => false
-    }, h2.spatial) //Remove tautologies and hypotheses
+    }*/, h2.spatial) //Remove tautologies and hypotheses
     if (newh2.pure.isEmpty && newh2.spatial.isEmpty) h1.spatial.isEmpty
     else if (newh2.spatial.size > 0 && newh2.spatial.size == h1.spatial.size)
       newh2.spatial.forall(p => h1.spatial.contains(p._1) && subfields(h1.spatial(p._1).head, p._2.head))

@@ -1,6 +1,6 @@
 package semantics
 
-import syntax.ast._
+/*import syntax.ast._
 
 trait FreeVariables[T] {
   def freevars : Set[Vars]
@@ -10,14 +10,15 @@ object FreeVariables {
   implicit class FreeVariablesExpr(e : Expr) extends FreeVariables[Expr] {
     override def freevars: Set[Vars] = e match {
       case Nil() => Set()
-      case Symbol(name) => Set(name)
+      case Symbol(name) => Set()
+      case Var(name) => Set(name)
     }
   }
 
   implicit class FreeVariablesSimpleProp(p : SimpleProp) extends FreeVariables[SimpleProp] {
     override def freevars: Set[Vars] = p match {
       case Eq(e1, e2) => e1.freevars ++ e2.freevars
-      case Not(e) => e.freevars
+      case NotEq(e1, e2) => e1.freevars ++ e2.freevars
     }
   }
 
@@ -30,6 +31,6 @@ object FreeVariables {
   }
 
   implicit class FreeVariablesSymbolicHeap(h : SymbolicHeap) extends FreeVariables[SymbolicHeap] {
-    override def freevars: Set[Vars] = h.pi.freevars ++ h.sig.freevars
+    override def freevars: Set[Vars] = h.pure.freevars ++ h.spatial.freevars
   }
-}
+}*/
