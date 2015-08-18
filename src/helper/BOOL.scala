@@ -1,5 +1,7 @@
 package helper
 
+import scala.language.higherKinds
+
 sealed trait BOOL {
   type V <: BOOL
   type NOT <: BOOL

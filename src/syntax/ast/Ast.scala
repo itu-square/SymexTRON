@@ -30,9 +30,9 @@ case class AssignVar(x : Vars, e : Expr[FALSE.V], c : Command) extends Command
 case class Load(x : Vars, e : Expr[FALSE.V], f : Fields, c : Command) extends Command
 case class New(x : Vars, s : Sort, c : Command) extends Command
 case class AssignField(e1 : Expr[FALSE.V], f : Fields, e2 : Expr[FALSE.V], c : Command) extends Command
-case class If(p : SimpleProp[FALSE.V], cs : Set[(Expr[FALSE.V], Command)], c : Command) extends Command
+case class If(cs : Set[(SimpleProp[FALSE.V], Command)], c : Command) extends Command
 case class For(x : Vars, s : Sort, e : Expr[FALSE.V], inv: (Symbols, Set[SymbolicMemory]), cb: Command, c: Command)
   extends Command
 case class ForMatch(x : Vars, s : Sort, e : Expr[FALSE.V], inv: (Symbols, Set[SymbolicMemory]), cb: Command, c: Command)
   extends Command
-case class Fix(e : Expr[FALSE.V], inv: (Symbols, Set[SymbolicMemory]), cb: Command, c : Command)
+case class Fix(e : Expr[FALSE.V], inv: (Symbols, Set[SymbolicMemory]), cb: Command, c : Command) extends Command

@@ -4,6 +4,7 @@ import helper._
 import syntax.ast._
 
 import scalaz.\/
+import scalaz.\/._
 
 object SymbolicHeapChecker {
   def sortOf(mem: SymbolicMemory, e1: Expr[TRUE.type]): String \/ Sort = ???
@@ -103,6 +104,16 @@ object SymbolicHeapChecker {
     println(s"pre-heap: $h1, post-heap: $h2")
     true
   }
+
+  def ==>(ls : Set[SymbolicMemory], rs : Set[SymbolicMemory]): SymbolicMemory \/ Unit = {
+    val cex = for {
+      l <- ls
+      if !rs.exists(r => SymbolicHeapChecker.oracle(l.heap, r.heap))
+    } yield l
+    if (cex.size <= 0) right(())
+    else left(cex.head)
+  }
+
   def incon(h : SymbolicHeap) : Boolean =
     SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(NotEq(Nil(), Nil())), Map()))
 }

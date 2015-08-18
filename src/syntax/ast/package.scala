@@ -16,4 +16,16 @@ package object ast {
     case SortMem(e, s) => NotSortMem(e, s)
     case NotSortMem(e, s) => SortMem(e, s)
   } //Smart constructor
+
+  def seq(c1: Command, c2: Command): Command = c1 match {
+    case Skip() => c2
+    case Fail() => Fail()
+    case AssignVar(x, e, c) => AssignVar(x, e, seq(c, c2))
+    case Load(x, e, f, c) => Load(x, e, f, seq(c, c2))
+    case New(x, s, c) => New(x, s, seq(c, c2))
+    case AssignField(e1, f, e2, c) => AssignField(e1, f, e2, seq(c, c2))
+    case If(cs, c) => If(cs, seq(c, c2))
+    case For(x, s, e, inv, cb, c) => For(x, s, e, inv, cb, seq(c, c2))
+    case ForMatch(x, s, e, inv, cb, c) => ForMatch(x, s, e, inv, cb, seq(c, c2))
+  }
 }
