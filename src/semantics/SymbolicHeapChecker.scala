@@ -16,8 +16,8 @@ object SymbolicHeapChecker {
       yield {
         (for (e2 <- h1.keySet; if e1 != e2)
           yield {
-            NotEq(e1, e2)
-          }) + NotEq(e1, Nil())
+            Not(Eq(e1, e2))
+          }) + Not(Eq(e1, Nil()))
       }
   }.flatten
 
@@ -115,5 +115,5 @@ object SymbolicHeapChecker {
   }
 
   def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(NotEq(Nil(), Nil())), Map()))
+    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(Nil(), Nil()))), Map()))
 }
