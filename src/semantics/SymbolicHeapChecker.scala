@@ -7,7 +7,12 @@ import scalaz.\/
 import scalaz.\/._
 
 object SymbolicHeapChecker {
-  def sortOf(mem: SymbolicMemory, e1: Expr[TRUE.type]): String \/ Sort = ???
+  def sortOf(mem: SymbolicMemory, e1: Expr[TRUE.type]): String \/ Sort = mem.heap.pure.find { p =>
+    p match {
+      case SortMem(e2, s) if e1 == e2 => true
+      case _ => false
+    }
+  }.map(_.asInstanceOf[SortMem[TRUE.V]].s).fold[String \/ Sort](left(s"Can't find sort of $e1"))(right(_))
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
   // Alternatively have a separate phase for non-pointing spatial constraints (list/trees/checkers)
@@ -17,7 +22,7 @@ object SymbolicHeapChecker {
         (for (e2 <- h1.keySet; if e1 != e2)
           yield {
             Not(Eq(e1, e2))
-          }) + Not(Eq(e1, Nil()))
+          }) + Not(Eq(e1, ESet()))
       }
   }.flatten
 
@@ -102,7 +107,7 @@ object SymbolicHeapChecker {
     // val newhs = normalise(h1, h2)
     // newhs.forall(hs => subtract(hs._1, hs._2))
     println(s"pre-heap: $h1, post-heap: $h2")
-    true
+    false
   }
 
   def ==>(ls : Set[SymbolicMemory], rs : Set[SymbolicMemory]): SymbolicMemory \/ Unit = {
@@ -115,5 +120,5 @@ object SymbolicHeapChecker {
   }
 
   def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(Nil(), Nil()))), Map()))
+    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(ESet(), ESet()))), Map()))
 }

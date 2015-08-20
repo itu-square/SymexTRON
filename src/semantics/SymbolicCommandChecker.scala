@@ -24,19 +24,20 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
     if (pres exists (pre => SymbolicHeapChecker.incon(pre.heap))) right(Set())
     else pres.map[String \/ Set[SymbolicMemory], Set[String \/ Set[SymbolicMemory]]] { pre: SymbolicMemory =>
       c match {
-        case Skip() => right(Set(pre))
         case Fail() => left("Error because of reachable _fail_ command")
-        case Seq(c1, c2) =>
-          for {
-            newpres <- execute(Set(pre), c1)
-            posts <- execute(newpres, c2)
-          } yield posts
+        case CSeq(cs @ _*) =>
+          cs.foldLeft(right[String, Set[SymbolicMemory]](Set(pre))) { (acc, c) =>
+            for {
+              newpres <- acc
+              posts <- execute(newpres, c)
+            } yield posts
+          }
         case AssignVar(x, e) =>
           for {
             ee <- (evalExpr(pre.stack, e))
             post = SymbolicMemory(pre.stack + (x -> ee), pre.heap)
           } yield Set(post)
-        case Load(x, e, f) =>
+        case LoadField(x, e, f) =>
             for {
               ee <- evalExpr(pre.stack, e)
               posts <- (for {
@@ -54,7 +55,7 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
               val alpha = freshSym()
               val newsh = SymbolicHeap(pre.heap.pure + SortMem(Symbol(alpha), s),
                 pre.heap.spatial +
-                  (Symbol(alpha) -> Set((sdef.children ++ sdef.fields).mapValues(_ => Nil()) + ("@owner" -> Nil()))))
+                  (Symbol(alpha) -> Set((sdef.children ++ sdef.refs).mapValues(_ => ESet()) + ("@owner" -> ESet()))))
               val post = SymbolicMemory(pre.stack + (x -> Symbol(alpha)), newsh)
               right(Set(post))
           }
@@ -75,12 +76,11 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
         }
         case If(cs) => {
           for {
-            cs_ <- cs.map(p => {
-                val (ei, ci) = p
+            cs_ <- cs.map(chc => {
                 for {
-                  eei <- evalSimpleProp(pre.stack, ei)
+                  eei <- evalSimpleProp(pre.stack, chc.e)
                   res =  if (SymbolicHeapChecker.oracle(pre.heap, SymbolicHeap(Set(not(eei)), pre.heap.spatial))) None
-                         else Some(eei, ci)
+                         else Some(eei, chc.c)
                 } yield res
               }).foldLeft(right[String, Set[Option[(SimpleProp[TRUE.V], Command)]]](Set()))((acc, el) => {
                 for {
@@ -118,18 +118,18 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
       res =
         (for {
           e1fs <- spm.get(ee1)
-          fv <- e1fs.get(f)
+          fv <- e1fs.get(f.fi)
         } yield (e1fs, fv)).fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee1.$f not allocated"))(mi1 => {
           val (e1fs, fv1) = mi1
           (for {
             e2fs <- spm.get(ee2)
-            own2 <- e2fs.get("@owner")
+            own2 <- e2fs.get(ownerinf)
           } yield (e2fs, own2)).fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee2 not allocated"))(mi2 => {
             val (e2fs, own2) = mi2
             var newspatial = spatial
             for {
               _ <- own2 match {
-                case Nil() => right(())
+                case ESet() => right(())
                 case Symbol(id) =>
                   for {
                     sown2 <- SymbolicHeapChecker.sortOf(pre, own2)
@@ -140,20 +140,20 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
                       f2 <- own2fs.find(p => sown2def.children.contains(p._1) && p._2 == ee2).map(p => p._1)
                     } yield (own2fs, f2)).fold[String \/ Unit](left(s"Error, cannot find a child field of $own2 that " +
                       s"refers to $ee2"))(owf => right {
-                      newspatial = newspatial.updated(own2, Set(owf._1.updated(owf._2, Nil())))
+                      newspatial = newspatial.updated(own2, Set(owf._1.updated(owf._2, ESet())))
                     })
                   } yield ()
               }
               _ <- fv1 match {
-                case Nil() => right(())
+                case ESet() => right(())
                 case Symbol(id) =>
                   spm.get(fv1).fold[String \/ Unit](left(s"Error, $fv1 not allocated"))(fv1fs => right {
-                    newspatial = newspatial.updated(fv1, Set(fv1fs.updated("@owner", Nil())))
+                    newspatial = newspatial.updated(fv1, Set(fv1fs.updated("@owner", ESet())))
                   })
               }
               _ <- right {
-                newspatial = newspatial.updated(ee1, Set(e1fs.updated(f, ee2)))
-                newspatial = newspatial.updated(ee2, Set(e2fs.updated("@owner", ee1)))
+                newspatial = newspatial.updated(ee1, Set(e1fs.updated(f.fi, ee2)))
+                newspatial = newspatial.updated(ee2, Set(e2fs.updated(OwnerInfo()(Option(f)), ee1)))
               }
             } yield ()
             val post = SymbolicMemory(pre.stack, SymbolicHeap(pre.heap.pure, newspatial))
@@ -177,7 +177,7 @@ class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
 
     def evalExpr[B <: BOOL](s : SymbolicStack, e : Expr[B]) : String \/ Expr[TRUE.V] = {
       e match {
-        case Nil() => right(Nil())
+        case ESet() => right(ESet())
         case Symbol(id) => right(Symbol(id))
         case Var(name) =>
           // Scalas type inference is really primitive...
