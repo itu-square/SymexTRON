@@ -7,12 +7,12 @@ import scalaz.\/
 import scalaz.\/._
 
 object SymbolicHeapChecker {
-  def sortOf(mem: SymbolicMemory, e1: Expr[TRUE.type]): String \/ Sort = mem.heap.pure.find { p =>
+  def sortOf(mem: SymbolicMemory, e1: Expr): String \/ Sort = mem.heap.pure.find { p =>
     p match {
       case SortMem(e2, s) if e1 == e2 => true
       case _ => false
     }
-  }.map(_.asInstanceOf[SortMem[TRUE.V]].s).fold[String \/ Sort](left(s"Can't find sort of $e1"))(right(_))
+  }.map(_.asInstanceOf[SortMem].s).fold[String \/ Sort](left(s"Can't find sort of $e1"))(right(_))
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
   // Alternatively have a separate phase for non-pointing spatial constraints (list/trees/checkers)
@@ -22,7 +22,7 @@ object SymbolicHeapChecker {
         (for (e2 <- h1.keySet; if e1 != e2)
           yield {
             Not(Eq(e1, e2))
-          }) + Not(Eq(e1, ESet()))
+          }) + Not(Eq(e1, SetE()))
       }
   }.flatten
 
@@ -90,7 +90,7 @@ object SymbolicHeapChecker {
 
 
   private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
-    def subfields(rho1: Map[Fields, Expr[TRUE.V]], rho2: Map[Fields, Expr[TRUE.V]]): Boolean =
+    def subfields(rho1: Map[SFields, Expr], rho2: Map[SFields, Expr]): Boolean =
       rho2.forall(p => rho1.contains(p._1) && rho1(p._1) == p._2)
     val newh2 = SymbolicHeap(h2.pure /*.filterNot {
       case Eq(e1, e2) if e1 == e2 => true
@@ -120,5 +120,5 @@ object SymbolicHeapChecker {
   }
 
   def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(ESet(), ESet()))), Map()))
+    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetE(), SetE()))), Map()))
 }

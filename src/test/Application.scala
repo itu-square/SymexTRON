@@ -13,7 +13,7 @@ object Application extends App {
   val scc = new SymbolicCommandChecker(sortDefs)
   val pre = Set(SymbolicMemory(Map(), SymbolicHeap(Set(), Map())))
   // TODO: Think about aliasing problems
-  val prog = CSeq(AssignVar("x", ESet())
+  val prog = CSeq(AssignVar("x", SetE())
                  ,New("y1", Sort("Plus"))
                  ,New("y2", Sort("Plus"))
                  ,AssignVar("x", Var("y1"))
