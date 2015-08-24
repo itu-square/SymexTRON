@@ -20,8 +20,8 @@ object Application extends App {
                  ,AssignVar("x", Var("y1"))
                  ,New("z", Sort("CstI"))
                  ,AssignField(Var("x"), "left", Var("z"))
-              //   ,LoadField("z", Var("y1"), "left")
-              //   ,AssignField(Var("y2"), "right", Var("z"))
+                 ,LoadField("z", Var("y1"), "left")
+                 ,AssignField(Var("y2"), "right", Var("z"))
                  )
   println(s"Resulting heap: ${scc.execute(pre, prog).fold(identity, mems =>
     mems.map(PrettyPrinter.pretty).mkString("\n"))}")

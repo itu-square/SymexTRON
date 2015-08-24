@@ -42,8 +42,9 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
               ee <- evalExpr(pre.stack, e)
               posts <- (for {
                   spu <- pre.heap.spatial.merge
-                  efs <- spu.get(ee)
-                  fv <- efs.get(f.field)
+                  efss <- spu.get(ee)
+                  (efs, _) = efss
+                  fv <- efs.get(f)
                 } yield fv).fold[String \/ Set[SymbolicMemory]](left(s"Error while loading field $f of symbol $e")) {
                     fv =>
                       val post = SymbolicMemory(pre.stack + (x -> fv), pre.heap)
@@ -55,8 +56,8 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
               val alpha = freshSym()
               val newsh = SymbolicHeap(pre.heap.pure + SortMem(Symbol(alpha), s),
                 pre.heap.spatial +
-                  (Symbol(alpha) -> Set((sdef.children ++ sdef.refs map
-                      (f => (f._1.field.asInstanceOf[SFields], SetE()))) + (ownerinf -> SetE()))),
+                  (Symbol(alpha) -> Set(((sdef.children ++ sdef.refs map
+                      (f => (f._1, SetE()))), Unowned()))),
                   pre.heap.preds)
               val post = SymbolicMemory(pre.stack + (x -> Symbol(alpha)), newsh)
               right(Set(post))
@@ -113,62 +114,64 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
 
   def assignChild(ee1: Expr, f: Fields, ee2: Expr, pre: SymbolicMemory) = {
     val spatial = pre.heap.spatial
-    (for {
-      spm <- spatial.merge
-      res =
-        (for {
-          e1fs <- spm.get(ee1)
-          fv <- e1fs.get(f.field)
-        } yield (e1fs, fv)).fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee1.$f not allocated"))(mi1 => {
-          val (e1fs, fv1) = mi1
-          (for {
-            e2fs <- spm.get(ee2)
-            own2 <- e2fs.get(ownerinf)
-          } yield (e2fs, own2)).fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee2 not allocated"))(mi2 => {
-            val (e2fs, own2) = mi2
-            var newspatial = spatial
+    for {
+      spm  <- spatial.merge.cata(right, left("Error, inconsistent heap"))
+      e1fss <- spm.get(ee1).cata(right, left(s"Error, $ee1 not allocated"))
+      (e1fs, own1) = e1fss
+      fv1 <- e1fs.get(f).cata(right, left(s"Error, no field $f of $ee1"))
+      e2fss <- spm.get(ee2).cata(right, left(s"Error, $ee2 not allocated"))
+      (e2fs, own2) = e2fss
+      post <- {
+        var newspatial = spm
+        for {
+         _ <- own2 match {
+            case Unowned () => right (())
+            case Owned (owner@Symbol (ident), frev) =>
             for {
-              _ <- own2 match {
-                case SetE() => right(())
-                case Symbol(ident) =>
-                  for {
-                    sown2 <- SymbolicHeapChecker.sortOf(pre, own2)
-                    sown2def <- (defs get sown2).fold[String \/ SortDefinition](
-                      left(s"Error, unknown sort $sown2"))(right)
-                    _ <- (for {
-                      own2fs <- spm.get(own2)
-                      f2 <- own2fs.find(kv => kv._1 == ownerinf).flatMap(kv => kv._1.asInstanceOf[OwnerInfo].frev)
-                    } yield (own2fs, f2)).fold[String \/ Unit](left(s"Error, cannot find a child field of $own2 that " +
-                      s"refers to $ee2"))(owf => right {
-                      newspatial = newspatial.updated(own2, Set(owf._1.updated(owf._2.field, SetE())))
-                    })
-                  } yield ()
-              }
-              _ <- fv1 match {
-                case SetE() => right(())
-                case Symbol(ident) =>
-                  spm.get(fv1).fold[String \/ Unit](left(s"Error, $fv1 not allocated"))(fv1fs => right {
-                    newspatial = newspatial.updated(fv1, Set(Map(ownerinf -> SetE()) ++ fv1fs))
-                  })
-              }
-              _ <- right {
-                newspatial = newspatial.updated(ee1, Set(e1fs.updated(f.field, ee2)))
-                // It is important to use Map(k -> v) ++ m instead of m.updated(k, v), due to equality
-                newspatial = newspatial.updated(ee2, Set(Map(OwnerInfo()(Option(f)) -> ee1) ++ e2fs))
-              }
-            } yield ()
-            val post = SymbolicMemory(pre.stack, SymbolicHeap(pre.heap.pure, newspatial, pre.heap.preds))
-            right(Set(post))
-          })
-        })
-    } yield res).fold[String \/ Set[SymbolicMemory]](left(s"Error, inconsistent heap"))(identity)
+              own2fss <- spm.get (owner).cata (right, left (s"Error, owner of $ee2 not allocated"))
+              (own2fs, own2owner) = own2fss
+            } yield right {
+                newspatial = newspatial.updated (owner, (own2fs.updated (frev, SetE ()), own2owner))
+            }
+          }
+         _ <- fv1 match {
+           case Symbol(ident) => for {
+             fv1fss <- spm.get(fv1).cata(right, left(s"Error, $ee1.$f not allocated"))
+             (fv1fs, f1owner) = fv1fss
+           } yield {
+               newspatial = newspatial.updated(fv1, (fv1fs, Unowned()))
+             }
+           case SetE() => right(())
+           case Var(x) => left(s"Error, unevaluated variable $x")
+           case Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) =>
+             left(s"Error, assigning to a field containing a set of items") //TODO: Support assignment to child sets in the future
+         }
+         _ <- right {
+           newspatial = newspatial.updated(ee1, (e1fs.updated(f, ee2), own1))
+           // It is important to use Map(k -> v) ++ m instead of m.updated(k, v), due to equality
+         }
+         _ <- ee1 match {
+           case ee1@Symbol(ident) => right {
+             newspatial = newspatial.updated(ee2, (e2fs, Owned(ee1, f)))
+           }
+           case Var(x) => left(s"Error, unevaluated variable $x")
+           case Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) =>
+             left(s"Error, assigning to a set of items") //TODO: Support assignment to child sets in the future
+         }
+        } yield {
+          val post = SymbolicMemory(pre.stack,
+                        SymbolicHeap(pre.heap.pure, newspatial map (p => (p._1, Set(p._2))) , pre.heap.preds))
+          Set(post)
+        }
+      }
+    } yield post
   }
 
   def assignReference(ee1: Expr, f: Fields, ee2: Expr, pre: SymbolicMemory): String \/ Set[SymbolicMemory] = {
     val spatial = pre.heap.spatial
     val e1fs = spatial.get(ee1)
     e1fs.fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee1 not allocated"))(e1fs => {
-      val newspatial = spatial.updated(ee1, e1fs.map(m => m.updated(f.field, ee2)))
+      val newspatial = spatial.updated(ee1, e1fs.map(m => (m._1.updated(f, ee2), m._2)))
       val post = SymbolicMemory(pre.stack, SymbolicHeap(pre.heap.pure, newspatial, pre.heap.preds))
       right(Set(post))
     })

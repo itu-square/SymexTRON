@@ -91,7 +91,7 @@ object SymbolicHeapChecker {
 
 
   private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
-    def subfields(rho1: Map[SFields, Expr], rho2: Map[SFields, Expr]): Boolean =
+    def subfields(rho1: Map[Fields, Expr], rho2: Map[Fields, Expr]): Boolean =
       rho2.forall(p => rho1.contains(p._1) && rho1(p._1) == p._2)
     val newh2 = SymbolicHeap(h2.pure /*.filterNot {
       case Eq(e1, e2) if e1 == e2 => true
@@ -100,7 +100,11 @@ object SymbolicHeapChecker {
     }*/, h2.spatial, h2.preds) //Remove tautologies and hypotheses
     if (newh2.pure.isEmpty && newh2.spatial.isEmpty) h1.spatial.isEmpty
     else if (newh2.spatial.size > 0 && newh2.spatial.size == h1.spatial.size)
-      newh2.spatial.forall(p => h1.spatial.contains(p._1) && subfields(h1.spatial(p._1).head, p._2.head))
+      newh2.spatial.forall(p => {
+        val (p1fs, p1own) = h1.spatial(p._1).head
+        val (p2fs, p2own) = p._2.head
+        h1.spatial.contains(p._1) && subfields(p1fs, p2fs) && p1own == p2own
+      })
     else false
   }
 

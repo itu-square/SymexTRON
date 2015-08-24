@@ -47,6 +47,7 @@ case class ForMatch(x : Vars, s : Sort, e : Expr, inv: (Symbols, Set[SymbolicMem
   extends Command
 case class Fix(e : Expr, inv: (Symbols, Set[SymbolicMemory]), cb: Command) extends Command
 
-sealed trait SFields
-case class Field(f : Fields) extends SFields
-case class OwnerInfo()(val frev : Option[Fields] = None) extends SFields
+sealed trait OwnerInfo
+case class Unowned() extends OwnerInfo
+case class Owned(owner : Symbol, f : Fields) extends OwnerInfo
+

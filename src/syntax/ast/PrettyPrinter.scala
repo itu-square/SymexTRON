@@ -12,17 +12,20 @@ object PrettyPrinter {
       case Def(s, e) => s"def[$s](${pretty(e)})"
     }
 
-  def pretty(f: SFields) = f match {
-    case Field(f) => s".$f"
-    case o@OwnerInfo() => o.frev.fold("@owner")(frev => s"@owner[$frev]")
+  def pretty(own: OwnerInfo): String = own match {
+    case Unowned() => "@owner ↝ ∅"
+    case Owned(owner, f) => s"@owner[$f] ↝ ${pretty(owner)}"
   }
 
   def pretty(spatial: Spatial, preds: Set[Pred]): String = {
     val pmaptos = for {
-      (e, fss)  <- spatial
-      fs <- fss
-      (f, v) <- fs
-    } yield s"${pretty(e)}${pretty(f)} ↝ ${pretty(v)}"
+      (e, fss_)  <- spatial
+      fss <- fss_
+      (fs, own) = fss
+      sfs <- (for (fv <- fs) yield {
+        s"${pretty(e)}.${fv._1} ↝ ${pretty(fv._2)}"
+      }).toSet + s"${pretty(e)}${pretty(own)}"
+    } yield sfs
     val ppreds = preds.map(pretty)
     (pmaptos ++ ppreds).mkString(" ★ ")
   }
