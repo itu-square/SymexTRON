@@ -24,7 +24,12 @@ case class SetSub(e1: Expr, e2: Expr) extends SimpleProp
 case class SetSubEq(e1: Expr, e2: Expr) extends SimpleProp
 case class Not(p: SimpleProp) extends SimpleProp
 
-case class SymbolicHeap(pure : Prop, spatial : Spatial)
+sealed trait Pred
+case class Descendant(s : Sort, e1 : Expr, e2 : Expr) extends Pred
+case class NotDescendant(e1 : Expr, e2 : Expr) extends Pred
+case class Def(s : Sort, e : Expr) extends Pred
+
+case class SymbolicHeap(pure : Prop, spatial : Spatial, preds: Set[Pred])
 
 case class SymbolicMemory(stack: SymbolicStack, heap: SymbolicHeap)
 

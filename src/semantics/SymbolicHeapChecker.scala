@@ -83,7 +83,7 @@ object SymbolicHeapChecker {
 
   private def normalise(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
     val newprop = resolveSpatialConstraints(h1.spatial)
-    val newh1 = SymbolicHeap(h1.pure ++ newprop, h1.spatial)
+    val newh1 = SymbolicHeap(h1.pure ++ newprop, h1.spatial, h1.preds)
     satSplit(newh1, h2)
     // NOTICE: Add SAT search phase, hint: consider only operator relevant variables in search
   }
@@ -96,7 +96,7 @@ object SymbolicHeapChecker {
       case Eq(e1, e2) if e1 == e2 => true
       case e if h1.pure.contains(e) => true // TODO: Support symmetry transitivity
       case _ => false
-    }*/, h2.spatial) //Remove tautologies and hypotheses
+    }*/, h2.spatial, h2.preds) //Remove tautologies and hypotheses
     if (newh2.pure.isEmpty && newh2.spatial.isEmpty) h1.spatial.isEmpty
     else if (newh2.spatial.size > 0 && newh2.spatial.size == h1.spatial.size)
       newh2.spatial.forall(p => h1.spatial.contains(p._1) && subfields(h1.spatial(p._1).head, p._2.head))
@@ -120,5 +120,5 @@ object SymbolicHeapChecker {
   }
 
   def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetE(), SetE()))), Map()))
+    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetE(), SetE()))), h.spatial, h.preds))
 }
