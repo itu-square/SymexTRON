@@ -1,6 +1,7 @@
 package semantics
 
 import helper._
+import syntax.PrettyPrinter
 import syntax.ast._
 
 import scalaz.\/
@@ -106,7 +107,7 @@ object SymbolicHeapChecker {
   def oracle(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
     // val newhs = normalise(h1, h2)
     // newhs.forall(hs => subtract(hs._1, hs._2))
-    println(s"pre-heap: $h1, post-heap: $h2")
+    println(s"pre-heap: ${PrettyPrinter.pretty(h1)}\npost-heap: ${PrettyPrinter.pretty(h2)}")
     false
   }
 

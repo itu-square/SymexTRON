@@ -10,7 +10,7 @@ import syntax.ast._
 import scalaz._, Scalaz._
 import scalaz.\/.{left, right}
 
-class SymbolicCommandChecker(defs: Map[Sort, SortDefinition]) {
+class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
 
   def check(pres : Set[SymbolicMemory], c : Command, posts: Set[SymbolicMemory]) : String \/ Unit = for {
     posts_ <- execute(pres, c)

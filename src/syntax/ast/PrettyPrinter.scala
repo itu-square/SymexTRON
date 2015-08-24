@@ -60,6 +60,10 @@ object PrettyPrinter {
 
   def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
 
+  def pretty(heap : SymbolicHeap): String = {
+    s"${pretty(heap.spatial, heap.preds)} | ${pretty(heap.pure)}"
+  }
+
   def pretty(mem : SymbolicMemory): String =
-    s"${pretty(mem.stack)} ; ${pretty(mem.heap.spatial, mem.heap.preds)} | ${pretty(mem.heap.pure)}"
+    s"${pretty(mem.stack)} ; ${pretty(mem.heap)}"
 }
