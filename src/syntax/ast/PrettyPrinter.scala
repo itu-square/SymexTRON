@@ -44,13 +44,13 @@ object PrettyPrinter {
 
   def pretty(sp: SimpleProp): String = sp match {
     case Eq(e1, e2) => s"${pretty(e1)} = ${pretty(e2)}"
-    case SortMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}}"
+    case SortMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}"
     case SetMem(e1, e2) => s"${pretty(e1)} ∈ ${pretty(e2)}"
     case SetSub(e1, e2) => s"${pretty(e1)} ⊂ ${pretty(e2)}"
     case SetSubEq(e1, e2) => s"${pretty(e1)} ⊆ ${pretty(e2)}"
     case Not(p) => p match {
       case Eq(e1, e2) => s"${pretty(e1)} ≠ ${pretty(e2)}"
-      case SortMem(e1, s) => s"${pretty(e1)} :∉ ${s.name}}"
+      case SortMem(e1, s) => s"${pretty(e1)} :∉ ${s.name}"
       case SetMem(e1, e2) => s"${pretty(e1)} ∉ ${pretty(e2)}"
       case SetSub(e1, e2) => s"${pretty(e1)} ⊄ ${pretty(e2)}"
       case SetSubEq(e1, e2) => s"${pretty(e1)} ⊈ ${pretty(e2)}"
