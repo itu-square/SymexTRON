@@ -56,8 +56,8 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
               val alpha = freshSym()
               val newsh = SymbolicHeap(pre.heap.pure + SortMem(Symbol(alpha), s),
                 pre.heap.spatial +
-                  (Symbol(alpha) -> Set(((sdef.children ++ sdef.refs map
-                      (f => (f._1, SetE()))), Unowned()))),
+                  (Symbol(alpha) -> Set((sdef.children ++ sdef.refs map
+                    ((f: Fields, _: Sort) => (f, SetE())).tupled, Unowned()))),
                   pre.heap.preds)
               val post = SymbolicMemory(pre.stack + (x -> Symbol(alpha)), newsh)
               right(Set(post))
@@ -77,26 +77,25 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
           } yield res
         case If(cs) =>
           for {
-            cs_ <- cs.map(chc => {
+            cs_ <- cs.map({(ei : SimpleProp, ci : Command) => {
                 for {
-                  eei <- evalSimpleProp(pre.stack, chc._1)
+                  eei <- evalSimpleProp(pre.stack, ei)
                   res =  if (SymbolicHeapChecker.oracle(pre.heap,
                                         SymbolicHeap(Set(not(eei)), pre.heap.spatial, pre.heap.preds))) None
-                         else Some(eei, chc._2)
+                         else Some(eei, ci)
                 } yield res
-              }).foldLeft(right[String, Set[Option[(SimpleProp, Command)]]](Set()))((acc, el) => {
+              }}.tupled).foldLeft(right[String, Set[Option[(SimpleProp, Command)]]](Set()))((acc, el) => {
                 for {
                   acc_ <- acc
                   el_  <- el
                 } yield acc_ + el_
               }).map(_.filter(_.isDefined).map(_.get))
             posts <- {
-              cs_.map[String \/ Set[SymbolicMemory], Set[String \/ Set[SymbolicMemory]]] { eci =>
-                val (ei : SimpleProp, ci : Command) = eci
+              cs_.map[String \/ Set[SymbolicMemory], Set[String \/ Set[SymbolicMemory]]]({ (ei : SimpleProp, ci : Command) =>
                 val newpre = SymbolicMemory(pre.stack,
                                   SymbolicHeap(pre.heap.pure + ei, pre.heap.spatial, pre.heap.preds))
                 execute(Set(newpre), ci)
-              }.foldLeft(right[String, Set[SymbolicMemory]](Set()))((acc, el) =>
+              }.tupled).foldLeft(right[String, Set[SymbolicMemory]](Set()))((acc, el) =>
                  for {
                    acc_ <- acc
                    el_ <- el
@@ -160,7 +159,9 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
          }
         } yield {
           val post = SymbolicMemory(pre.stack,
-                        SymbolicHeap(pre.heap.pure, newspatial map (p => (p._1, Set(p._2))) , pre.heap.preds))
+                        SymbolicHeap(pre.heap.pure,
+                          newspatial map (((e : Expr, fss : (Map[Fields, Expr], OwnerInfo))
+                                                          => (e, Set(fss))).tupled) , pre.heap.preds))
           Set(post)
         }
       }
@@ -238,7 +239,8 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
   private var symCounter = 0
 
   private def freshSym(): Symbols = {
+    val old = symCounter
     symCounter += 1
-    symCounter
+    old
   }
 }
