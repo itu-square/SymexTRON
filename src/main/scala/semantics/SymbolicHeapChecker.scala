@@ -115,13 +115,15 @@ object SymbolicHeapChecker {
     false
   }
 
-  def ==>(ls : Set[SymbolicMemory], rs : Set[SymbolicMemory]): SymbolicMemory \/ Unit = {
-    val cex = for {
-      l <- ls
-      if !rs.exists(r => SymbolicHeapChecker.oracle(l.heap, r.heap))
-    } yield l
-    if (cex.size <= 0) right(())
-    else left(cex.head)
+  implicit class SymbolicMemoryHelpers(ls : Set[SymbolicMemory]) {
+    def ==>(rs : Set[SymbolicMemory]): SymbolicMemory \/ Unit = {
+      val cex = for {
+        r <- rs
+        if !ls.exists(l => SymbolicHeapChecker.oracle(l.heap, r.heap))
+      } yield r
+      if (cex.size <= 0) right(())
+      else left(cex.head)
+    }
   }
 
   def incon(h : SymbolicHeap) : Boolean =

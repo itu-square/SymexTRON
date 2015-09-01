@@ -9,12 +9,14 @@ import syntax.ast._
 
 import scalaz._, Scalaz._
 import scalaz.\/.{left, right}
+import SymbolicHeapChecker._
+import Subst._
 
 class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
 
   def check(pres : Set[SymbolicMemory], c : Command, posts: Set[SymbolicMemory]) : String \/ Unit = for {
     posts_ <- execute(pres, c)
-    _ <- SymbolicHeapChecker.==>(posts_, posts).fold[String \/ Unit](cex =>
+    _ <- (posts ==> posts).fold[String \/ Unit](cex =>
       left(s"Error, could not find a valid implication for symbolic state $cex attained after execution)"),
       right)
     } yield ()
@@ -102,7 +104,19 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
                  } yield acc_ ++ el_)
             }
           } yield posts
-        case For(x, s, e, inv, cb) => ???
+        case For(x, s, e, (as, inv), cb) =>
+          type StringE[E] = String \/ E
+          val a = freshSym
+          for {
+            esym <- evalExpr(pre.stack, e)
+            _ <- (Set(pre) ==> inv.map(_.subst(Symbol(as), SetE())))
+                      .fold(err => left(s"Unstastifiable postcondition: $err"), right)
+            _ <- inv.toList.traverse[StringE, SymbolicMemory]((m: SymbolicMemory) => {
+//              val newm = SymbolicMemory(m.stack + (x -> Symbol(a)), )
+//              execute( )
+              right(m)
+            }).fold(left, p => right(p.toSet))
+          } yield (inv.map(_.subst(Symbol(as), esym)))
         case ForMatch(x, s, e, inv, cb) => ???
         case Fix(e, inv, cb) => ???
       }
