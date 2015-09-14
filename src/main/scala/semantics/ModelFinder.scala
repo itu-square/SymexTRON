@@ -32,20 +32,53 @@ class ModelFinder(defs: Map[Sort, SortDefinition]) {
         })) forAll (x oneOf s)
       }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (Set(freshSet), symbols.toSet, formula, freshSet)
+      (Set(s), symbols.toSet, formula, s)
 
     case Union(e1, e2) =>
+      val s = freshSet
+      val (rs1, is1, f1, r1) = evalSetExpr(e1)
+      val (rs2, is2, f2, r2) = evalSetExpr(e2)
+      val formula = {
+        val x = Variable.unary("x")
+        val x1 = Variable.unary("x1")
+        val x2 = Variable.unary("x2")
+        x.join(syms).eq(x1.join(syms) union x2.join(syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
+      }
+      (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s)
     case Diff(e1, e2) =>
+      val s = freshSet
+      val (rs1, is1, f1, r1) = evalSetExpr(e1)
+      val (rs2, is2, f2, r2) = evalSetExpr(e2)
+      val formula = {
+        val x = Variable.unary("x")
+        val x1 = Variable.unary("x1")
+        val x2 = Variable.unary("x2")
+        x.join(syms).eq(x1.join(syms) intersection x2.join(syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
+      }
+      (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s)
     case ISect(e1, e2) =>
-    case Match(e, s) =>
-    case MatchStar(e, s) =>
+      val s = freshSet
+      val (rs1, is1, f1, r1) = evalSetExpr(e1)
+      val (rs2, is2, f2, r2) = evalSetExpr(e2)
+      val formula = {
+        val x = Variable.unary("x")
+        val x1 = Variable.unary("x1")
+        val x2 = Variable.unary("x2")
+        x.join(syms).eq(x1.join(syms) intersection x2.join(syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
+      }
+      (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s)
+    case Match(e, s) => ???
+    case MatchStar(e, s) => ???
     case SetSymbol(id) =>
+      val s = freshSet
+      (Set(s), Set(), Formula.TRUE, s)
       // Convert to either later
     case SetVar(name) => throw new RuntimeException(s"Error: unevaluated variable: $name")
   }
 
   def findSet(e : SetExpr): Iterator[Solution] = {
     val solver = new Solver()
+    val (rs, is, fs, r) = evalSetExpr(e)
     solver.options.setSolver(SATFactory.DefaultSAT4J)
     solver.solveAll(this.formula, this.bounds).asScala
   }
