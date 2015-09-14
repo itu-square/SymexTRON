@@ -8,7 +8,7 @@ import scalaz.\/
 import scalaz.\/._
 
 object SymbolicHeapChecker {
-  def sortOf(mem: SymbolicMemory, e1: Expr): String \/ Sort = mem.heap.pure.find { p =>
+  def sortOf(mem: SymbolicMemory, e1: SetExpr): String \/ Sort = mem.heap.pure.find { p =>
     p match {
       case SortMem(e2, s) if e1 == e2 => true
       case _ => false
@@ -91,7 +91,7 @@ object SymbolicHeapChecker {
 
 
   private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
-    def subfields(rho1: Map[Fields, Expr], rho2: Map[Fields, Expr]): Boolean =
+    def subfields(rho1: Map[Fields, SetExpr], rho2: Map[Fields, SetExpr]): Boolean =
       rho2.forall(p => rho1.contains(p._1) && rho1(p._1) == p._2)
     val newh2 = SymbolicHeap(h2.pure /*.filterNot {
       case Eq(e1, e2) if e1 == e2 => true

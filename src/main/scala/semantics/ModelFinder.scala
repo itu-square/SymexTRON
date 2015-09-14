@@ -1,12 +1,21 @@
 package semantics
 
 import kodkod.ast._
-import kodkod.engine.Solver
+import kodkod.engine.{Solution, Solver}
 import kodkod.engine.satlab.SATFactory
 import kodkod.instance.{Bounds, Universe}
+import syntax.ast.{SetExpr, SortDefinition, Sort}
 import scala.collection.JavaConverters._
 
-class ModelFinder {
+class ModelFinder(defs: Map[Sort, SortDefinition]) {
+  def formula : Formula = ???
+  def bounds  : Bounds = ???
+
+  def findSet(e : SetExpr): Iterator[Solution] = {
+    val solver = new Solver()
+    solver.options.setSolver(SATFactory.DefaultSAT4J)
+    solver.solveAll(this.formula, this.bounds).asScala
+  }
 
 }
 

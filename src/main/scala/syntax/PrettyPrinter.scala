@@ -30,22 +30,35 @@ object PrettyPrinter {
     (pmaptos ++ ppreds).mkString(" ★ ")
   }
 
-  def pretty(e : Expr): String = {
-    val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
+  private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
+
+  def pretty(e : BasicExpr): String = {
     e match {
       case Symbol(ident) =>
         val l = symbs.length
         val i = ident / l
         s"${symbs(ident % l)}${if (i <= 0) "" else s"'$i"}"
       case Var(name) => name
+    }
+  }
+
+  def pretty(e : SetExpr): String = {
+    e match {
+      case SetSymbol(ident) =>
+        val l = symbs.length
+        val i = ident / l
+        s"${symbs(ident % l).toTitleCase}${if (i <= 0) "" else s"'$i"}"
+      case SetVar(name) => name
       case SetE(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
       case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
       case Diff(e1, e2) => s"${pretty(e1)} ∖ ${pretty(e2)}"
       case ISect(e1, e2) => s"${pretty(e1)} ∩ ${pretty(e2)}"
+      case Match(e, s) => s"(${pretty(e)}) match ${s.name}"
+      case MatchStar(e, s) => s"(${pretty(e)}) match* ${s.name}"
     }
   }
 
-  def pretty(sp: SimpleProp): String = sp match {
+  def pretty(sp: BoolExpr): String = sp match {
     case Eq(e1, e2) => s"${pretty(e1)} = ${pretty(e2)}"
     case SortMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}"
     case SetMem(e1, e2) => s"${pretty(e1)} ∈ ${pretty(e2)}"

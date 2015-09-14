@@ -4,11 +4,11 @@ package object ast {
   type Vars = String
   type Symbols = Int
   type Fields = String
-  type Spatial = Map[Expr, Set[(Map[Fields, Expr], OwnerInfo)]]
-  type Prop = Set[SimpleProp]
-  type SymbolicStack = Map[Vars, Expr]
+  type Spatial = Map[SetExpr, Set[(Map[Fields, SetExpr], OwnerInfo)]]
+  type Prop = Set[BoolExpr]
+  type SymbolicStack = Map[Vars, SetExpr]
 
-  def not(p : SimpleProp) : SimpleProp = p match {
+  def not(p : BoolExpr) : BoolExpr = p match {
     case Not(p) => p
     case p => Not(p)
   } //Smart constructor

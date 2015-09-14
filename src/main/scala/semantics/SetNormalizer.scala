@@ -7,34 +7,34 @@ import syntax.ast._
 object SetNormalizer {
   //Use non-deterministic definitions
   // TODO: Improve membership resolution
-  def normalize(props : Prop) : Strategy = repeat("normalize", rule[Expr] {
+  def normalize(props : Prop) : Strategy = repeat("normalize", rule[SetExpr] {
     case Union(e1, e2) if e1 == e2 => e1
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case ISect(e1, e2) if e1 == e2 => e1
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Diff(e1, e2) if e1 == e2 => SetE()
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Union(e, SetE()) => e
     case Union(SetE(), e) => e
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case ISect(e, SetE()) => SetE()
     case ISect(SetE(), e) => SetE()
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Diff(e, SetE()) => e
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Diff(SetE(), e) => SetE()
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Union(e, SetE(a)) if props.contains(SetMem(a, e)) => e
     case Union(SetE(a), e) if props.contains(SetMem(a, e)) => e
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case ISect(e, SetE(a)) if props.contains(SetMem(a, e)) => SetE(a)
     case ISect(SetE(a), e) if props.contains(SetMem(a, e)) => SetE(a)
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case ISect(e, SetE(a)) if props.contains(Not(SetMem(a, e))) => SetE()
     case ISect(SetE(a), e) if props.contains(Not(SetMem(a, e))) => SetE()
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Diff(e, SetE(a)) if props.contains(Not(SetMem(a, e))) => e
-  } + strategy[Expr] {
+  } + strategy[SetExpr] {
     case Union(e1, e2) => {
       val a = props.map(p => p match {
         case SetMem(a, e1_) if e1 == e1_  && props.contains(SetMem(a, e2))
@@ -46,12 +46,12 @@ object SetNormalizer {
         case None => None
       }
     }
-  } + rule[Expr] {
-    case SetE(a, as @ _*) => Union(a, SetE(as : _*))
-  } + rule[Expr] {
+  } + rule[SetExpr] {
+    case SetE(a1, a2, as @ _*) => Union(SetE(a1), SetE((a2 +: as) : _*))
+  } + rule[SetExpr] {
     case ISect(Union(e1, e2), e3) => Union(ISect(e1, e3), ISect(e2, e3))
     case ISect(e1, Union(e2, e3)) => Union(ISect(e1, e2), ISect(e1, e3))
-  } + rule[Expr] {
+  } + rule[SetExpr] {
     case Diff(Union(e1,e2), e3) => Union(Diff(e1, e3), Diff(e2, e3))
   })
 }

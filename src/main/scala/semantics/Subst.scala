@@ -3,43 +3,64 @@ package semantics
 import syntax.ast._
 
 trait Subst[+T] {
-  def subst(x : Symbol, e : Expr) : T
+  def subst(x : Symbol,    e : BasicExpr) : T
+  def subst(x : SetSymbol, e : SetExpr)   : T
 }
-
-sealed trait Foo
-case class Bar(foos : Foo*) extends Foo
 
 object Subst {
 
-  implicit class SubstBasicExpr(e0: BasicExpr) extends Subst[Expr] {
-    override def subst(x: Symbol, e1: Expr): Expr = e0 match {
+  implicit class SubstBasicExpr(e0: BasicExpr) extends Subst[BasicExpr] {
+    override def subst(x: SetSymbol, e1: SetExpr): BasicExpr = identity(e0)
+    override def subst(x: Symbol, e1: BasicExpr): BasicExpr = e0 match {
       case Var(name) => Var(name)
-      case Symbol(ident) if ident == x.id => e1
-      case Symbol(ident) => Symbol(ident)
+      case Symbol(id) if id == x.id => e1
+      case Symbol(id) => Symbol(id)
     }
   }
 
-  implicit class SubstExpr(e0: Expr) extends Subst[Expr] {
-    override def subst(x: Symbol, e: Expr): Expr = e0 match {
-      case e0: BasicExpr => e.subst(x, e)
-      case SetE(es@_*) => es.map(_.subst(x, e)).fold(SetE())(Union)
+  implicit class SubstExpr(e0: SetExpr) extends Subst[SetExpr] {
+    override def subst(x: SetSymbol, e: SetExpr): SetExpr = e0 match {
+      case SetE(es@_*) => SetE(es :_*)
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
+      case Match(e1, s) => Match(e1.subst(x, e), s)
+      case MatchStar(e1, s) => Match(e1.subst(x, e), s)
+      case SetVar(name) => SetVar(name)
+      case SetSymbol(id) if id == x.id => e
+      case SetSymbol(id) => SetSymbol(id)
+    }
+
+    override def subst(x: Symbol, e: BasicExpr): SetExpr = e0 match {
+      case SetE(es@_*) => SetE(es.map(_.subst(x, e)) :_*)
+      case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
+      case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
+      case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
+      case Match(e1, s) => Match(e1.subst(x, e), s)
+      case MatchStar(e1, s) => MatchStar(e1.subst(x, e), s)
+      case SetVar(name) => SetVar(name)
+      case SetSymbol(id) => SetSymbol(id)
     }
   }
 
-  implicit class SubstSimpleProp(p: SimpleProp) extends Subst[SimpleProp] {
-    override def subst(x: Symbol, e: Expr): SimpleProp = p match {
+  implicit class SubstBoolExpr(p: BoolExpr) extends Subst[BoolExpr] {
+    override def subst(x: SetSymbol, e: SetExpr): BoolExpr = p match {
       case Eq(e1, e2) => Eq(e1.subst(x, e), e2.subst(x, e))
       case SortMem(e1, s) => SortMem(e1.subst(x, e), s)
       case SetMem(e1, e2) =>
         val ee2 = e2.subst(x, e)
-        e1.subst(x, e) match {
-          case ee1:BasicExpr => SetMem(ee1, ee2)
-          case SetE(ee1) => SetMem(ee1, ee2)
-          case ee1 => SetSubEq(ee1, ee2)
-        }
+        SetMem(e1, ee2)
+      case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
+      case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
+      case Not(pp) => Not(pp.subst(x,e))
+    }
+
+    override def subst(x: Symbol, e: BasicExpr): BoolExpr = p match {
+      case Eq(e1, e2) => Eq(e1.subst(x, e), e2.subst(x, e))
+      case SortMem(e1, s) => SortMem(e1.subst(x, e), s)
+      case SetMem(e1, e2) =>
+        val ee2 = e2.subst(x, e)
+        SetMem(e1, ee2)
       case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
       case Not(pp) => Not(pp.subst(x,e))
@@ -47,21 +68,37 @@ object Subst {
   }
 
   implicit class SubstProp(pi: Prop) extends Subst[Prop] {
-    override def subst(x: Symbol, e: Expr): Prop = pi.map(_.subst(x, e))
+    override def subst(x: SetSymbol, e: SetExpr): Prop = pi.map(_.subst(x, e))
+    override def subst(x : Symbol, e: BasicExpr): Prop = pi.map(_.subst(x, e))
   }
 
   implicit class SubstOwnerInfo(o : OwnerInfo) extends Subst[OwnerInfo] {
-    override def subst(x: Symbol, e: Expr): OwnerInfo = o match {
+    override def subst(x: SetSymbol, e: SetExpr): OwnerInfo = o match {
       case Unowned() => Unowned()
       case Owned(owner, f) => Owned(owner.subst(x, e).asInstanceOf, f)
+    }
+
+    override def subst(x: Symbol, e: BasicExpr): OwnerInfo = o match {
+      case Unowned() => Unowned()
+      case Owned(owner, f) =>  Owned(owner.subst(x, e).asInstanceOf, f)
     }
   }
 
   implicit class SubstSpatial(sig: Spatial) extends Subst[Spatial] {
-    override def subst(x: Symbol, e: Expr): Spatial = sig.map({
-      (e0 : Expr, fss : Set[(Map[Fields, Expr], OwnerInfo)]) =>
+    override def subst(x: SetSymbol, e: SetExpr): Spatial = sig.map({
+      (e0 : SetExpr, fss : Set[(Map[Fields, SetExpr], OwnerInfo)]) =>
         (e0.subst(x, e), fss.map({
-          (fs : Map[Fields, Expr], owninfo : OwnerInfo) => {
+          (fs : Map[Fields, SetExpr], owninfo : OwnerInfo) => {
+            val fs_ = fs.mapValues(_.subst(x, e))
+            (fs_, owninfo.subst(x, e))
+          }
+        }.tupled))
+    }.tupled)
+
+    override def subst(x: Symbol, e: BasicExpr): Spatial = sig.map({
+      (e0 : SetExpr, fss : Set[(Map[Fields, SetExpr], OwnerInfo)]) =>
+        (e0.subst(x, e), fss.map({
+          (fs : Map[Fields, SetExpr], owninfo : OwnerInfo) => {
             val fs_ = fs.mapValues(_.subst(x, e))
             (fs_, owninfo.subst(x, e))
           }
@@ -70,7 +107,13 @@ object Subst {
   }
 
   implicit class SubstPred(p : Pred) extends Subst[Pred] {
-    override def subst(x: Symbol, e: Expr): Pred = p match {
+    override def subst(x: SetSymbol, e: SetExpr): Pred = p match {
+      case Descendant(s, e1, e2) => Descendant(s, e1.subst(x, e), e2.subst(x, e))
+      case NotDescendant(e1, e2) => NotDescendant(e1.subst(x, e), e2.subst(x, e))
+      case Def(s, e1) => Def(s, e1.subst(x, e))
+    }
+
+    override def subst(x: Symbol, e: BasicExpr): Pred = p match {
       case Descendant(s, e1, e2) => Descendant(s, e1.subst(x, e), e2.subst(x, e))
       case NotDescendant(e1, e2) => NotDescendant(e1.subst(x, e), e2.subst(x, e))
       case Def(s, e1) => Def(s, e1.subst(x, e))
@@ -78,12 +121,17 @@ object Subst {
   }
 
   implicit class SubstSymbolicHeap(h: SymbolicHeap) extends Subst[SymbolicHeap] {
-    override def subst(x: Symbol, e: Expr): SymbolicHeap = h match {
+    override def subst(x: SetSymbol, e: SetExpr): SymbolicHeap = h match {
+      case SymbolicHeap(pi, sig, preds) => SymbolicHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
+    }
+
+    override def subst(x: Symbol, e: BasicExpr): SymbolicHeap = h match {
       case SymbolicHeap(pi, sig, preds) => SymbolicHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
     }
   }
 
   implicit class SubstSymbolicMemory(m : SymbolicMemory) extends Subst[SymbolicMemory] {
-    override def subst(x: Symbol, e: Expr): SymbolicMemory = SymbolicMemory(m.stack, m.heap.subst(x, e))
+    override def subst(x: SetSymbol, e: SetExpr): SymbolicMemory = SymbolicMemory(m.stack, m.heap.subst(x, e))
+    override def subst(x: Symbol, e: BasicExpr): SymbolicMemory = SymbolicMemory(m.stack, m.heap.subst(x, e))
   }
 }

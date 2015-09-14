@@ -56,12 +56,12 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
         case New(x, s) =>
           (defs get s).fold[String \/ Set[SymbolicMemory]](left(s"Error, unknown sort $s")) { sdef =>
               val alpha = freshSym()
-              val newsh = SymbolicHeap(pre.heap.pure + SortMem(Symbol(alpha), s),
+              val newsh = SymbolicHeap(pre.heap.pure + SortMem(SetE(Symbol(alpha)), s),
                 pre.heap.spatial +
-                  (Symbol(alpha) -> Set((sdef.children ++ sdef.refs map
+                  (SetE(Symbol(alpha)) -> Set((sdef.children ++ sdef.refs map
                     ((f: Fields, _: Sort) => (f, SetE())).tupled, Unowned()))),
                   pre.heap.preds)
-              val post = SymbolicMemory(pre.stack + (x -> Symbol(alpha)), newsh)
+              val post = SymbolicMemory(pre.stack + (x -> SetE(Symbol(alpha))), newsh)
               right(Set(post))
           }
         case AssignField(e1, f, e2) =>
@@ -79,21 +79,21 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
           } yield res
         case If(cs) =>
           for {
-            cs_ <- cs.map({(ei : SimpleProp, ci : Command) => {
+            cs_ <- cs.map({(ei : BoolExpr, ci : Command) => {
                 for {
                   eei <- evalSimpleProp(pre.stack, ei)
                   res =  if (SymbolicHeapChecker.oracle(pre.heap,
                                         SymbolicHeap(Set(not(eei)), pre.heap.spatial, pre.heap.preds))) None
                          else Some(eei, ci)
                 } yield res
-              }}.tupled).foldLeft(right[String, Set[Option[(SimpleProp, Command)]]](Set()))((acc, el) => {
+              }}.tupled).foldLeft(right[String, Set[Option[(BoolExpr, Command)]]](Set()))((acc, el) => {
                 for {
                   acc_ <- acc
                   el_  <- el
                 } yield acc_ + el_
               }).map(_.filter(_.isDefined).map(_.get))
             posts <- {
-              cs_.map[String \/ Set[SymbolicMemory], Set[String \/ Set[SymbolicMemory]]]({ (ei : SimpleProp, ci : Command) =>
+              cs_.map[String \/ Set[SymbolicMemory], Set[String \/ Set[SymbolicMemory]]]({ (ei : BoolExpr, ci : Command) =>
                 val newpre = SymbolicMemory(pre.stack,
                                   SymbolicHeap(pre.heap.pure + ei, pre.heap.spatial, pre.heap.preds))
                 execute(Set(newpre), ci)
@@ -109,15 +109,14 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
           val a = freshSym
           for {
             esym <- evalExpr(pre.stack, e)
-            _ <- (Set(pre) ==> inv.map(_.subst(Symbol(as), SetE())))
+            _ <- (Set(pre) ==> inv.map(_.subst(SetSymbol(as), SetE())))
                       .fold(err => left(s"Unstastifiable postcondition: $err"), right)
             _ <- inv.toList.traverse[StringE, SymbolicMemory]((m: SymbolicMemory) => {
 //              val newm = SymbolicMemory(m.stack + (x -> Symbol(a)), )
 //              execute( )
               right(m)
             }).fold(left, p => right(p.toSet))
-          } yield (inv.map(_.subst(Symbol(as), esym)))
-        case ForMatch(x, s, e, inv, cb) => ???
+          } yield (inv.map(_.subst(SetSymbol(as), esym)))
         case Fix(e, inv, cb) => ???
       }
     }.foldLeft(right[String, Set[SymbolicMemory]](Set())) { (acc, el) =>
@@ -125,7 +124,7 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
     }
   }
 
-  def assignChild(ee1: Expr, f: Fields, ee2: Expr, pre: SymbolicMemory) = {
+  def assignChild(ee1: SetExpr, f: Fields, ee2: SetExpr, pre: SymbolicMemory) = {
     val spatial = pre.heap.spatial
     for {
       spm  <- spatial.merge.cata(right, left("Error, inconsistent heap"))
@@ -141,22 +140,24 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
             case Unowned () => right (())
             case Owned (owner@Symbol (ident), frev) =>
             for {
-              own2fss <- spm.get (owner).cata (right, left (s"Error, owner of $ee2 not allocated"))
+              // Totally incorrect, the symbolic heap may need to be changed
+              // We may have to consider how to represent the symbolic heap so only true pointers point at things
+              own2fss <- spm.get (SetE(owner)).cata (right, left (s"Error, owner of $ee2 not allocated"))
               (own2fs, own2owner) = own2fss
             } yield right {
-                newspatial = newspatial.updated (owner, (own2fs.updated (frev, SetE ()), own2owner))
+                newspatial = newspatial.updated (SetE(owner), (own2fs.updated (frev, SetE ()), own2owner))
             }
           }
          _ <- fv1 match {
-           case Symbol(ident) => for {
+           case SetE(Symbol(ident)) => for {
              fv1fss <- spm.get(fv1).cata(right, left(s"Error, $ee1.$f not allocated"))
              (fv1fs, f1owner) = fv1fss
            } yield {
                newspatial = newspatial.updated(fv1, (fv1fs, Unowned()))
              }
            case SetE() => right(())
-           case Var(x) => left(s"Error, unevaluated variable $x")
-           case Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) =>
+           case SetVar(x) => left(s"Error, unevaluated variable $x")
+           case SetSymbol(_) | Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) =>
              left(s"Error, assigning to a field containing a set of items") //TODO: Support assignment to child sets in the future
          }
          _ <- right {
@@ -164,17 +165,17 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
            // It is important to use Map(k -> v) ++ m instead of m.updated(k, v), due to equality
          }
          _ <- ee1 match {
-           case ee1@Symbol(ident) => right {
+           case SetE(ee1@Symbol(ident)) => right {
              newspatial = newspatial.updated(ee2, (e2fs, Owned(ee1, f)))
            }
-           case Var(x) => left(s"Error, unevaluated variable $x")
-           case Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) =>
+           case SetVar(x) => left(s"Error, unevaluated variable $x")
+           case SetSymbol(_) | Union(_,_) | Diff(_,_) | ISect(_,_) | SetE(_*) | Match(_,_) =>
              left(s"Error, assigning to a set of items") //TODO: Support assignment to child sets in the future
          }
         } yield {
           val post = SymbolicMemory(pre.stack,
                         SymbolicHeap(pre.heap.pure,
-                          newspatial map (((e : Expr, fss : (Map[Fields, Expr], OwnerInfo))
+                          newspatial map (((e : SetExpr, fss : (Map[Fields, SetExpr], OwnerInfo))
                                                           => (e, Set(fss))).tupled) , pre.heap.preds))
           Set(post)
         }
@@ -182,7 +183,7 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
     } yield post
   }
 
-  def assignReference(ee1: Expr, f: Fields, ee2: Expr, pre: SymbolicMemory): String \/ Set[SymbolicMemory] = {
+  def assignReference(ee1: SetExpr, f: Fields, ee2: SetExpr, pre: SymbolicMemory): String \/ Set[SymbolicMemory] = {
     val spatial = pre.heap.spatial
     val e1fs = spatial.get(ee1)
     e1fs.fold[String \/ Set[SymbolicMemory]](left(s"Error, $ee1 not allocated"))(e1fs => {
@@ -193,17 +194,27 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
   }
 
 
-    def evalExpr(s : SymbolicStack, e : Expr) : String \/ Expr = {
+  def evalBasicExpr(s: SymbolicStack, e: BasicExpr): String \/ BasicExpr = e match {
+    case Symbol(id) => right(Symbol(id))
+    case Var(name) =>
+      s.get(name).fold[String \/ BasicExpr](left(s"Error while evaluating expression $e"))((ee : SetExpr) =>
+        ee match {
+          case SetE(evalue) => right(evalue)
+          case _ => left(s"Not a basic expression: $ee")
+        })
+  }
+
+  def evalExpr(s : SymbolicStack, e : SetExpr) : String \/ SetExpr = {
       type StringE[B] = String \/ B
       e match {
         case SetE(es @ _*) =>
           for {
-            ees <- es.toList.traverse[StringE, Expr](e => evalExpr(s, e))
-          } yield SetE(ees.map(_.asInstanceOf[BasicExpr]) : _*)
-        case Symbol(ident) => right(Symbol(ident))
-        case Var(name) =>
+            ees <- es.toList.traverse[StringE, BasicExpr](e => evalBasicExpr(s, e))
+          } yield SetE(ees : _*)
+        case SetSymbol(ident) => right(SetSymbol(ident))
+        case SetVar(name) =>
           // Scalas type inference is really primitive...
-          s.get(name).fold[String \/ Expr](left(s"Error while evaluating expression $e"))(right)
+          s.get(name).fold[String \/ SetExpr](left(s"Error while evaluating expression $e"))(right)
         case Diff(e1, e2) => for {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
@@ -216,10 +227,16 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
         } yield ISect(e1, e2)
+        case Match(e1, ss) => for {
+          ee1 <- evalExpr(s, e1)
+        } yield Match(ee1, ss)
+        case MatchStar(e1, ss) => for {
+          ee1 <- evalExpr(s, e1)
+        } yield Match(ee1, ss)
       }
     }
   
-  def evalSimpleProp(st : SymbolicStack, sp : SimpleProp) : String \/ SimpleProp = sp match {
+  def evalSimpleProp(st : SymbolicStack, sp : BoolExpr) : String \/ BoolExpr = sp match {
     case Eq(e1, e2) =>
       for {
         ee1 <- evalExpr(st, e1)
@@ -235,9 +252,9 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
       } yield Not(ep)
     case SetMem(e1, e2) =>
       for {
-        ee1 <- evalExpr(st, e1)
+        ee1 <- evalBasicExpr(st, e1)
         ee2 <- evalExpr(st, e2)
-      } yield SetMem(ee1.asInstanceOf, ee2)
+      } yield SetMem(ee1, ee2)
     case SetSub(e1, e2) =>
       for {
         ee1 <- evalExpr(st, e1)
