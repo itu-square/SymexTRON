@@ -4,12 +4,45 @@ import kodkod.ast._
 import kodkod.engine.{Solution, Solver}
 import kodkod.engine.satlab.SATFactory
 import kodkod.instance.{Bounds, Universe}
-import syntax.ast.{SetExpr, SortDefinition, Sort}
+import syntax.ast._
 import scala.collection.JavaConverters._
 
 class ModelFinder(defs: Map[Sort, SortDefinition]) {
+  var counter : Int = 0
+
+  val syms = Relation.ternary("syms")
+  val SymbolicSet = Relation.unary("SymbolicSet")
+
+  def freshSet : Relation = {
+    counter = counter + 1
+    Relation.unary(s"ConcreteSymbolicSet${counter}")
+  }
+
   def formula : Formula = ???
   def bounds  : Bounds = ???
+
+  def evalSetExpr(e : SetExpr): (Set[Relation], Set[Integer], Formula, Relation) = e match {
+    case SetE(es@_*) =>
+      val s = freshSet
+      val formula = {
+        val x = Variable.unary("x")
+        x.join(syms).eq(es.foldRight(Expression.NONE)((e1: BasicExpr, e2: Expression) => e1 match {
+          case Symbol(id) => e2 union IntConstant.constant(id).toExpression
+          case Var(name) => throw new RuntimeException(s"Error: unevaluated variable: $name")
+        })) forAll (x oneOf s)
+      }
+      val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
+      (Set(freshSet), symbols.toSet, formula, freshSet)
+
+    case Union(e1, e2) =>
+    case Diff(e1, e2) =>
+    case ISect(e1, e2) =>
+    case Match(e, s) =>
+    case MatchStar(e, s) =>
+    case SetSymbol(id) =>
+      // Convert to either later
+    case SetVar(name) => throw new RuntimeException(s"Error: unevaluated variable: $name")
+  }
 
   def findSet(e : SetExpr): Iterator[Solution] = {
     val solver = new Solver()
