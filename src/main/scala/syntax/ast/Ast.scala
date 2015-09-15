@@ -11,7 +11,7 @@ case class Symbol(id: Symbols) extends BasicExpr
 case class Var(name: Vars) extends BasicExpr
 
 sealed trait SetExpr
-case class SetE(es: BasicExpr*) extends SetExpr
+case class SetLit(es: BasicExpr*) extends SetExpr
 case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr
 case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr
 case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr

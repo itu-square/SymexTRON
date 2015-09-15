@@ -49,7 +49,7 @@ object PrettyPrinter {
         val i = ident / l
         s"${symbs(ident % l).toTitleCase}${if (i <= 0) "" else s"'$i"}"
       case SetVar(name) => name
-      case SetE(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
+      case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
       case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
       case Diff(e1, e2) => s"${pretty(e1)} ∖ ${pretty(e2)}"
       case ISect(e1, e2) => s"${pretty(e1)} ∩ ${pretty(e2)}"

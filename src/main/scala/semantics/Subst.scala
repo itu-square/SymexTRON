@@ -20,7 +20,7 @@ object Subst {
 
   implicit class SubstExpr(e0: SetExpr) extends Subst[SetExpr] {
     override def subst(x: SetSymbol, e: SetExpr): SetExpr = e0 match {
-      case SetE(es@_*) => SetE(es :_*)
+      case SetLit(es@_*) => SetLit(es :_*)
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
@@ -32,7 +32,7 @@ object Subst {
     }
 
     override def subst(x: Symbol, e: BasicExpr): SetExpr = e0 match {
-      case SetE(es@_*) => SetE(es.map(_.subst(x, e)) :_*)
+      case SetLit(es@_*) => SetLit(es.map(_.subst(x, e)) :_*)
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))

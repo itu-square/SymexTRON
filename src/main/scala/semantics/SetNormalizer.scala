@@ -12,33 +12,33 @@ object SetNormalizer {
   } + rule[SetExpr] {
     case ISect(e1, e2) if e1 == e2 => e1
   } + rule[SetExpr] {
-    case Diff(e1, e2) if e1 == e2 => SetE()
+    case Diff(e1, e2) if e1 == e2 => SetLit()
   } + rule[SetExpr] {
-    case Union(e, SetE()) => e
-    case Union(SetE(), e) => e
+    case Union(e, SetLit()) => e
+    case Union(SetLit(), e) => e
   } + rule[SetExpr] {
-    case ISect(e, SetE()) => SetE()
-    case ISect(SetE(), e) => SetE()
+    case ISect(e, SetLit()) => SetLit()
+    case ISect(SetLit(), e) => SetLit()
   } + rule[SetExpr] {
-    case Diff(e, SetE()) => e
+    case Diff(e, SetLit()) => e
   } + rule[SetExpr] {
-    case Diff(SetE(), e) => SetE()
+    case Diff(SetLit(), e) => SetLit()
   } + rule[SetExpr] {
-    case Union(e, SetE(a)) if props.contains(SetMem(a, e)) => e
-    case Union(SetE(a), e) if props.contains(SetMem(a, e)) => e
+    case Union(e, SetLit(a)) if props.contains(SetMem(a, e)) => e
+    case Union(SetLit(a), e) if props.contains(SetMem(a, e)) => e
   } + rule[SetExpr] {
-    case ISect(e, SetE(a)) if props.contains(SetMem(a, e)) => SetE(a)
-    case ISect(SetE(a), e) if props.contains(SetMem(a, e)) => SetE(a)
+    case ISect(e, SetLit(a)) if props.contains(SetMem(a, e)) => SetLit(a)
+    case ISect(SetLit(a), e) if props.contains(SetMem(a, e)) => SetLit(a)
   } + rule[SetExpr] {
-    case ISect(e, SetE(a)) if props.contains(Not(SetMem(a, e))) => SetE()
-    case ISect(SetE(a), e) if props.contains(Not(SetMem(a, e))) => SetE()
+    case ISect(e, SetLit(a)) if props.contains(Not(SetMem(a, e))) => SetLit()
+    case ISect(SetLit(a), e) if props.contains(Not(SetMem(a, e))) => SetLit()
   } + rule[SetExpr] {
-    case Diff(e, SetE(a)) if props.contains(Not(SetMem(a, e))) => e
+    case Diff(e, SetLit(a)) if props.contains(Not(SetMem(a, e))) => e
   } + strategy[SetExpr] {
     case Union(e1, e2) => {
       val a = props.map(p => p match {
         case SetMem(a, e1_) if e1 == e1_  && props.contains(SetMem(a, e2))
-             => Some(SetE(a))
+             => Some(SetLit(a))
         case _ => None
       }).filter(_.isDefined).headOption.flatten
       a match {
@@ -47,7 +47,7 @@ object SetNormalizer {
       }
     }
   } + rule[SetExpr] {
-    case SetE(a1, a2, as @ _*) => Union(SetE(a1), SetE((a2 +: as) : _*))
+    case SetLit(a1, a2, as @ _*) => Union(SetLit(a1), SetLit((a2 +: as) : _*))
   } + rule[SetExpr] {
     case ISect(Union(e1, e2), e3) => Union(ISect(e1, e3), ISect(e2, e3))
     case ISect(e1, Union(e2, e3)) => Union(ISect(e1, e2), ISect(e1, e3))

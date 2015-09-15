@@ -23,7 +23,7 @@ object SymbolicHeapChecker {
         (for (e2 <- h1.keySet; if e1 != e2)
           yield {
             Not(Eq(e1, e2))
-          }) + Not(Eq(e1, SetE()))
+          }) + Not(Eq(e1, SetLit()))
       }
   }.flatten
 
@@ -127,5 +127,5 @@ object SymbolicHeapChecker {
   }
 
   def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetE(), SetE()))), h.spatial, h.preds))
+    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetLit(), SetLit()))), h.spatial, h.preds))
 }
