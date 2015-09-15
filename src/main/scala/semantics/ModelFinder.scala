@@ -8,9 +8,10 @@ import kodkod.ast._
 import kodkod.ast.operator.FormulaOperator
 import kodkod.engine.{Solution, Solver}
 import kodkod.engine.satlab.SATFactory
-import kodkod.instance.{Bounds, Universe}
+import kodkod.instance.{TupleSet, Bounds, Universe}
 import syntax.ast._
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()) {
   var counter : Int = 0
@@ -75,7 +76,8 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
     bounds
   }
 
-  def evalSetExpr(e : SetExpr): (Set[Relation], Set[Integer], Formula, Relation) = e match {
+  def evalSetExpr(e : SetExpr, th : Map[Symbols, Relation] = Map()):
+        (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation]) = e match {
     case SetLit(es@_*) =>
       val s = freshSet
       val formula = {
@@ -91,27 +93,31 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
         }
       }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (Set(s), symbols.toSet, formula, s)
+      (Set(s), symbols.toSet, formula, s, Map())
 
     case Union(e1, e2) =>
-      evalBinarySetExpr(e1, _ union _, e2)
+      evalBinarySetExpr(e1, _ union _, e2, th)
     case Diff(e1, e2) =>
-      evalBinarySetExpr(e1, _ difference _, e2)
+      evalBinarySetExpr(e1, _ difference _, e2, th)
     case ISect(e1, e2) =>
-      evalBinarySetExpr(e1, _ intersection _, e2)
+      evalBinarySetExpr(e1, _ intersection _, e2, th)
     case Match(e, s) => ???
     case MatchStar(e, s) => ???
     case SetSymbol(id) =>
-      val s = freshSet
-      (Set(s), Set(), Formula.TRUE, s)
+      if (th.contains(id)) (Set(), Set(), Formula.TRUE, th(id), th)
+      else {
+        val s = freshSet
+        (Set(s), Set(), Formula.TRUE, s, th + (id -> s))
+      }
       // TODO: Convert to either later
     case SetVar(name) => throw new RuntimeException(s"Error: unevaluated variable: $name")
   }
 
-  def evalBinarySetExpr(e1: SetExpr, op: (Expression, Expression) => Expression, e2: SetExpr):
-        (Set[Relation], Set[Integer], Formula, Relation) = {
-    val (rs1, is1, f1, r1) = evalSetExpr(e1)
-    val (rs2, is2, f2, r2) = evalSetExpr(e2)
+  def evalBinarySetExpr(e1: SetExpr, op: (Expression, Expression) => Expression, e2: SetExpr,
+                        th : Map[Symbols, Relation]):
+                              (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation]) = {
+    val (rs1, is1, f1, r1, th1) = evalSetExpr(e1,th)
+    val (rs2, is2, f2, r2, th2) = evalSetExpr(e2,th1)
     val s = freshSet
     val formula = {
       val x = Variable.unary("x")
@@ -119,15 +125,22 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
       val x2 = Variable.unary("x2")
       x.join(syms).eq(op(x1.join(syms),x2.join(syms))) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
     }
-    (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s)
+    (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def findSet(e : SetExpr, minSymbols : Int = 5): Set[SetLit] = {
-    if (e.isInstanceOf[SetLit]) Set(e.asInstanceOf[SetLit])
+  def findSet(e : SetExpr, minSymbols : Int = 5): Iterator[(Map[Symbols, SetLit], SetLit)] = {
+    def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
+      val rval = rels(r).iterator.next.atom(0)
+      val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
+      val rsymids = rels(name).iterator.asScala.filter(
+        t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
+      SetLit(rsymids.toList.map(Symbol): _*)
+    }
+    if (e.isInstanceOf[SetLit]) Set((Map[Symbols, SetLit](), e.asInstanceOf[SetLit])).iterator
     else
     {
       val solver = new Solver()
-      val (rs, is, fs, r) = evalSetExpr(e)
+      val (rs, is, fs, r, th) = evalSetExpr(e)
       solver.options.setSolver(SATFactory.DefaultSAT4J)
       solver.options.setSymmetryBreaking(20)
       for {
@@ -136,13 +149,9 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
         instance = sol.instance
         rels = instance.relationTuples.asScala
       } yield {
-        val rval = rels(r).iterator.next.atom(0)
-        val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
-        val symids =  rels(name).iterator.asScala.filter(
-          t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
-        SetLit(symids.toList.map(Symbol) :_*)
+        (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
       }
-    }.toSet
+    }
   }
 
 }
