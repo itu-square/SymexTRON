@@ -1,20 +1,25 @@
 package semantics
 
 import java.util
-import javafx.beans.binding.SetExpression
+
+import scala.language.reflectiveCalls
 
 import helper.Ref
 import kodkod.ast._
-import kodkod.ast.operator.FormulaOperator
-import kodkod.engine.{Solution, Solver}
 import kodkod.engine.satlab.SATFactory
-import kodkod.instance.{TupleSet, Bounds, Universe}
+import kodkod.engine.{Solution, Solver}
+import kodkod.instance.{Bounds, TupleSet, Universe}
 import syntax.ast._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scalaz.\/._
+import scalaz._, Scalaz._
 
 class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()) {
-  var counter : Int = 0
+  private type EvalRes =  (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation])
+
+  var counter = 0
 
   val SymbolicSet = Relation.unary("SymbolicSet")
   val syms = Relation.binary("syms")
@@ -25,13 +30,13 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
 
   def freshSet : Relation = {
     counter = counter + 1
-    Relation.unary(s"ConcreteSymbolicSet${counter}")
+    Relation.unary(s"ConcreteSymbolicSet$counter")
   }
 
   def constraints : Formula = {
     val nameTyping = {
       val s = Variable.unary("s")
-      ((s.join(name).one) and (s.join(name) in Expression.INTS) forAll (s oneOf Symbols)) and
+      (s.join(name).one and (s.join(name) in Expression.INTS) forAll (s oneOf Symbols)) and
         (name.join(Expression.UNIV) in Symbols)
     }
     val symsTyping = {
@@ -55,14 +60,14 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
     }).toSet ++ is
 
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
-    val symbolicsets = (for ((r,i) <- rs.zipWithIndex) yield (r, s"set'$i"))
+    val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
     val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2)
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
 
     bounds.boundExactly(Symbols, f setOf (symbolids :_*))
-    for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf (i))
+    for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
     bounds.boundExactly(SymbolicSet, f setOf (symbolicsets.map(_._2).toSeq :_*))
 
     for (symname <- symbolintnames)
@@ -76,24 +81,28 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
     bounds
   }
 
-  def evalSetExpr(e : SetExpr, th : Map[Symbols, Relation] = Map()):
-        (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation]) = e match {
+  def evalSetExpr(e : SetExpr, th : Map[Symbols, Relation] = Map()): String \/ EvalRes = e match {
     case SetLit(es@_*) =>
       val s = freshSet
       val formula = {
         val ss = Variable.unary("ss")
-        if (es.isEmpty) ss.join(syms) eq Expression.NONE forAll (ss oneOf s)
+        if (es.isEmpty) right(ss.join(syms) eq Expression.NONE forAll (ss oneOf s))
         else {
           val sym = Variable.unary("sym")
-          val ee1 +: ees = es.map(e => e match {
-            case Symbol(id) => sym.join(name) eq IntConstant.constant(id).toExpression
-            case Var(x) => throw new RuntimeException(s"Error: unevaluated variable: $name")
+          val ees:  String \/ List[Formula] = es.map {
+            case Symbol(id) => right(sym.join(name) eq IntConstant.constant(id).toExpression)
+            case Var(x) => left(s"Error: unevaluated variable: $name")
+          }.toList.sequence[({ type S[a] = String \/ a })#S, Formula]
+          ees.fold(left, ees => right {
+            val ee1 :: ees1 = ees
+            (ss.join(syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf Symbols))) forAll (ss oneOf s)
           })
-          (ss.join(syms) eq (ees.fold(ee1)(_ or _) comprehension (sym oneOf Symbols))) forAll (ss oneOf s)
         }
       }
-      val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (Set(s), symbols.toSet, formula, s, Map())
+      formula.fold(left, formula => right {
+        val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
+        (Set(s), symbols.toSet, formula, s, Map())
+      })
 
     case Union(e1, e2) =>
       evalBinarySetExpr(e1, _ union _, e2, th)
@@ -104,31 +113,32 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
     case Match(e, s) => ???
     case MatchStar(e, s) => ???
     case SetSymbol(id) =>
-      if (th.contains(id)) (Set(), Set(), Formula.TRUE, th(id), th)
+      if (th.contains(id)) right[String, EvalRes](Set(), Set(), Formula.TRUE, th(id), th)
       else {
         val s = freshSet
-        (Set(s), Set(), Formula.TRUE, s, th + (id -> s))
+        right[String, EvalRes](Set(s), Set(), Formula.TRUE, s, th + (id -> s))
       }
-      // TODO: Convert to either later
-    case SetVar(name) => throw new RuntimeException(s"Error: unevaluated variable: $name")
+    case SetVar(nm) => left(s"Error: unevaluated variable: $nm")
   }
 
   def evalBinarySetExpr(e1: SetExpr, op: (Expression, Expression) => Expression, e2: SetExpr,
-                        th : Map[Symbols, Relation]):
-                              (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation]) = {
-    val (rs1, is1, f1, r1, th1) = evalSetExpr(e1,th)
-    val (rs2, is2, f2, r2, th2) = evalSetExpr(e2,th1)
-    val s = freshSet
-    val formula = {
-      val x = Variable.unary("x")
-      val x1 = Variable.unary("x1")
-      val x2 = Variable.unary("x2")
-      x.join(syms).eq(op(x1.join(syms),x2.join(syms))) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
-    }
-    (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
+                        th : Map[Symbols, Relation]): String \/ EvalRes = {
+    for {
+      ee1 <- evalSetExpr(e1,th)
+      (rs1, is1, f1, r1, th1) = ee1
+      ee2 <- evalSetExpr(e2,th1)
+      (rs2, is2, f2, r2, th2) = ee2
+      s = freshSet
+      formula = {
+        val x = Variable.unary("x")
+        val x1 = Variable.unary("x1")
+        val x2 = Variable.unary("x2")
+        x.join(syms).eq(op(x1.join(syms),x2.join(syms))) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
+      }
+    } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def findSet(e : SetExpr, minSymbols : Int = 5): Iterator[(Map[Symbols, SetLit], SetLit)] = {
+  def findSet(e : SetExpr, minSymbols : Int = 5): String \/ Iterator[(Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
       val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
@@ -136,21 +146,25 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()
         t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
       SetLit(rsymids.toList.map(Symbol): _*)
     }
-    if (e.isInstanceOf[SetLit]) Set((Map[Symbols, SetLit](), e.asInstanceOf[SetLit])).iterator
-    else
-    {
-      val solver = new Solver()
-      val (rs, is, fs, r, th) = evalSetExpr(e)
-      solver.options.setSolver(SATFactory.DefaultSAT4J)
-      solver.options.setSymmetryBreaking(20)
-      for {
-        sol <- solver.solveAll(this.constraints and fs, this.bounds(rs, is, minSymbols)).asScala
-        if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
-        instance = sol.instance
-        rels = instance.relationTuples.asScala
-      } yield {
-        (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
-      }
+    e match {
+      case lit: SetLit => right(Set((Map[Symbols, SetLit](), lit)).iterator)
+      case _ =>
+        val solver = new Solver()
+        val ee = evalSetExpr(e)
+        ee.fold[String \/ Iterator[(Map[Symbols, SetLit], SetLit)]](left, { t => right
+          {
+            val (rs, is, fs, r, th) = t
+            solver.options.setSolver(SATFactory.DefaultSAT4J)
+            solver.options.setSymmetryBreaking(20)
+            for {
+              sol <- solver.solveAll(this.constraints and fs, this.bounds(rs, is, minSymbols)).asScala
+              if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
+              instance = sol.instance
+              rels = instance.relationTuples.asScala
+            } yield {
+              (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
+            }
+          }})
     }
   }
 
