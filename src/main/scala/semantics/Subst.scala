@@ -24,8 +24,7 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case Match(e1, s) => Match(e1.subst(x, e), s)
-      case MatchStar(e1, s) => Match(e1.subst(x, e), s)
+      case GuardedSet(e1, guard) => GuardedSet(e1.subst(x, e), guard.subst(x, e))
       case SetVar(name) => SetVar(name)
       case SetSymbol(id) if id == x.id => e
       case SetSymbol(id) => SetSymbol(id)
@@ -36,8 +35,7 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case Match(e1, s) => Match(e1.subst(x, e), s)
-      case MatchStar(e1, s) => MatchStar(e1.subst(x, e), s)
+      case GuardedSet(e1, guard) => GuardedSet(e1.subst(x, e), guard.subst(x, e))
       case SetVar(name) => SetVar(name)
       case SetSymbol(id) => SetSymbol(id)
     }

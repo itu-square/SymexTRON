@@ -53,8 +53,6 @@ object PrettyPrinter {
       case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
       case Diff(e1, e2) => s"${pretty(e1)} ∖ ${pretty(e2)}"
       case ISect(e1, e2) => s"${pretty(e1)} ∩ ${pretty(e2)}"
-      case Match(e, s) => s"(${pretty(e)}) match ${s.name}"
-      case MatchStar(e, s) => s"(${pretty(e)}) match* ${s.name}"
     }
   }
 

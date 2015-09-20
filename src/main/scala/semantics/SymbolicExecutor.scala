@@ -104,9 +104,10 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
                  } yield acc_ ++ el_)
             }
           } yield posts
-        case For(x, s, e, (as, inv), cb) =>
+        case For(x, s, m, (as, inv), cb) =>
           type StringE[E] = String \/ E
           val a = freshSym
+          val MSet(e) = m
           for {
             esym <- evalExpr(pre.stack, e)
             _ <- (Set(pre) ==> inv.map(_.subst(SetSymbol(as), SetLit())))
@@ -169,7 +170,7 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
              newspatial = newspatial.updated(ee2, (e2fs, Owned(ee1, f)))
            }
            case SetVar(x) => left(s"Error, unevaluated variable $x")
-           case SetSymbol(_) | Union(_,_) | Diff(_,_) | ISect(_,_) | SetLit(_*) | Match(_,_) =>
+           case SetSymbol(_) | Union(_,_) | Diff(_,_) | ISect(_,_) | SetLit(_*) | GuardedSet(_,_) =>
              left(s"Error, assigning to a set of items") //TODO: Support assignment to child sets in the future
          }
         } yield {
@@ -227,12 +228,10 @@ class SymbolicExecutor(defs: Map[Sort, SortDefinition]) {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
         } yield ISect(e1, e2)
-        case Match(e1, ss) => for {
+        case GuardedSet(e1, guard) => for {
           ee1 <- evalExpr(s, e1)
-        } yield Match(ee1, ss)
-        case MatchStar(e1, ss) => for {
-          ee1 <- evalExpr(s, e1)
-        } yield Match(ee1, ss)
+          eguard <- evalSimpleProp(s, guard)
+        } yield GuardedSet(ee1, eguard)
       }
     }
   
