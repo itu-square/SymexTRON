@@ -4,7 +4,7 @@ import syntax.ast._
 
 object PrettyPrinter {
 
-  def pretty(stack: SStack): String = stack.map(p => s"${p._1} ↦ ${pretty(p._2)}").mkString(", ")
+  def pretty(stack: SStack): String = s"[${stack.map(p => s"${p._1} ↦ ${pretty(p._2)}").mkString(", ")}]"
 
   private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
 
@@ -35,13 +35,13 @@ object PrettyPrinter {
 
   def pretty(sp: BoolExpr): String = sp match {
     case Eq(e1, e2) => s"${pretty(e1)} = ${pretty(e2)}"
-    case ClassMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}"
+    case ClassMem(e1, s) => s"${pretty(e1)} : ${s.name}"
     case SetMem(e1, e2) => s"${pretty(e1)} ∈ ${pretty(e2)}"
     case SetSub(e1, e2) => s"${pretty(e1)} ⊂ ${pretty(e2)}"
     case SetSubEq(e1, e2) => s"${pretty(e1)} ⊆ ${pretty(e2)}"
     case Not(p) => p match {
       case Eq(e1, e2) => s"${pretty(e1)} ≠ ${pretty(e2)}"
-      case ClassMem(e1, s) => s"${pretty(e1)} :∉ ${s.name}"
+      case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
       case SetMem(e1, e2) => s"${pretty(e1)} ∉ ${pretty(e2)}"
       case SetSub(e1, e2) => s"${pretty(e1)} ⊄ ${pretty(e2)}"
       case SetSubEq(e1, e2) => s"${pretty(e1)} ⊈ ${pretty(e2)}"
@@ -51,8 +51,34 @@ object PrettyPrinter {
 
   def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
 
-  def pretty(heap : SHeap): String = ???
+  def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
+    case AbstractDesc(c, unowned) => s"${pretty(Symbol(sym))} <: $c ⟨${pretty(unowned)}⟩"
+    case ConcreteDesc(c, children, refs) => sep(s"${pretty(Symbol(sym))} : $c", "★",
+                                            sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
+                                                s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
+  }
+
+  def pretty(sym : Symbols, f : Fields, sep : String, e : SetExpr): String =
+    s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
+
+  def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String =
+    spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
+
+  def pretty(qspatial : (Symbols, SetExpr, Spatial)): String =
+    s"✪⟨${pretty(Symbol(qspatial._1))} ∈ ${pretty(qspatial._2)}⟩ ${pretty(qspatial._3)}"
+
+  def pretty(heap : SHeap): String =
+    sep(s"${pretty(heap.spatial)}", "★",
+      sep(s"${heap.qspatial.map(pretty).mkString(" ★ ")}}", "∧", s"(${pretty(heap.pure)})"))
 
   def pretty(mem : SMem): String =
-    s"${pretty(mem.stack)} ; ${pretty(mem.heap)}"
+    sep(s"${pretty(mem.stack)}", ";", s"${pretty(mem.heap)}")
+
+  def sep(s1 : String, ss : String, s2 : String) =
+    if (s2.trim.isEmpty) s1
+    else if (s1.trim.isEmpty) s2
+    else s"$s1 $ss $s2"
+
+  def default(s : String, sd : String) =
+    if (s.trim.isEmpty) sd else s
 }

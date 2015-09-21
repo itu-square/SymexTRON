@@ -1,7 +1,5 @@
 package syntax.ast
 
-import helper._
-
 case class Class(name: String) // To be defined later
 
 class ClassDefinition(val name: String, val children: Map[Fields, Class], val refs: Map[Fields, Class], supers: Class*)
@@ -11,9 +9,6 @@ case class Symbol(id: Symbols) extends BasicExpr
 case class Var(name: Vars) extends BasicExpr
 
 sealed trait SetExpr
-
-sealed trait BoolExpr
-
 case class SetLit(es: BasicExpr*) extends SetExpr
 case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr
 case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr
@@ -22,6 +17,7 @@ case class SetVar(name: Vars) extends SetExpr
 case class SetSymbol(id: Symbols) extends SetExpr
 case class GuardedSet(e1 : SetExpr, guard: BoolExpr) extends SetExpr
 
+sealed trait BoolExpr
 case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr
 case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr
 case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr
@@ -35,8 +31,10 @@ case class Match(e : SetExpr, c : Class) extends MatchExpr
 case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
 
 sealed trait SpatialDesc
+case class AbstractDesc(c : Class, unowned : SetExpr) extends SpatialDesc
+case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
 
-case class SHeap(spatial: Map[Symbol, SpatialDesc], pure : Prop)
+case class SHeap(spatial: Spatial, qspatial: Set[(Symbols, SetExpr, Spatial)], pure : Prop)
 
 case class SMem(stack: SStack, heap: SHeap)
 
