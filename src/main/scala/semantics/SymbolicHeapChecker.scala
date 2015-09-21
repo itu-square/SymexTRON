@@ -10,10 +10,10 @@ import scalaz.\/._
 object SymbolicHeapChecker {
   def sortOf(mem: SMem, e1: SetExpr): String \/ Class = mem.heap.pure.find { p =>
     p match {
-      case SortMem(e2, s) if e1 == e2 => true
+      case ClassMem(e2, s) if e1 == e2 => true
       case _ => false
     }
-  }.map(_.asInstanceOf[SortMem].s).fold[String \/ Class](left(s"Can't find sort of $e1"))(right(_))
+  }.map(_.asInstanceOf[ClassMem].s).fold[String \/ Class](left(s"Can't find sort of $e1"))(right(_))
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
   // Alternatively have a separate phase for non-pointing spatial constraints (list/trees/checkers)

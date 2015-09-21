@@ -53,20 +53,18 @@ object PrettyPrinter {
       case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
       case Diff(e1, e2) => s"${pretty(e1)} ∖ ${pretty(e2)}"
       case ISect(e1, e2) => s"${pretty(e1)} ∩ ${pretty(e2)}"
-      case Match(e, s) => s"(${pretty(e)}) match ${s.name}"
-      case MatchStar(e, s) => s"(${pretty(e)}) match* ${s.name}"
     }
   }
 
   def pretty(sp: BoolExpr): String = sp match {
     case Eq(e1, e2) => s"${pretty(e1)} = ${pretty(e2)}"
-    case SortMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}"
+    case ClassMem(e1, s) => s"${pretty(e1)} :∈ ${s.name}"
     case SetMem(e1, e2) => s"${pretty(e1)} ∈ ${pretty(e2)}"
     case SetSub(e1, e2) => s"${pretty(e1)} ⊂ ${pretty(e2)}"
     case SetSubEq(e1, e2) => s"${pretty(e1)} ⊆ ${pretty(e2)}"
     case Not(p) => p match {
       case Eq(e1, e2) => s"${pretty(e1)} ≠ ${pretty(e2)}"
-      case SortMem(e1, s) => s"${pretty(e1)} :∉ ${s.name}"
+      case ClassMem(e1, s) => s"${pretty(e1)} :∉ ${s.name}"
       case SetMem(e1, e2) => s"${pretty(e1)} ∉ ${pretty(e2)}"
       case SetSub(e1, e2) => s"${pretty(e1)} ⊄ ${pretty(e2)}"
       case SetSubEq(e1, e2) => s"${pretty(e1)} ⊈ ${pretty(e2)}"

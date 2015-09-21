@@ -25,7 +25,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
         case New(x, s) => ???
         case AssignField(e1, f, e2) => ???
         case If(cs) => ???
-        case For(x, s, e, inv, cb) => ???
+        case For(x, s, m, cb) => ???
         case Fix(e, inv, cb) => ???
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
@@ -66,12 +66,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
         } yield ISect(e1, e2)
-        case Match(e1, ss) => for {
+        case GuardedSet(e1, guard) => for {
           ee1 <- evalExpr(s, e1)
-        } yield Match(ee1, ss)
-        case MatchStar(e1, ss) => for {
-          ee1 <- evalExpr(s, e1)
-        } yield Match(ee1, ss)
+          eguard <- evalSimpleProp(s, guard)
+        } yield GuardedSet(ee1, eguard)
       }
     }
   
@@ -81,10 +79,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
         ee1 <- evalExpr(st, e1)
         ee2 <- evalExpr(st, e2)
       } yield Eq(ee1, ee2)
-    case SortMem(e1, s) =>
+    case ClassMem(e1, s) =>
       for {
         ee1 <- evalExpr(st, e1)
-      } yield SortMem(ee1, s)
+      } yield ClassMem(ee1, s)
     case Not(p) =>
       for {
         ep <- evalBoolExpr(st, p)

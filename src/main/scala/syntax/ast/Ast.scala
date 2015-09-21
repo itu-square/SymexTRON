@@ -11,22 +11,28 @@ case class Symbol(id: Symbols) extends BasicExpr
 case class Var(name: Vars) extends BasicExpr
 
 sealed trait SetExpr
+
+sealed trait BoolExpr
+
 case class SetLit(es: BasicExpr*) extends SetExpr
 case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr
 case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr
 case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr
-case class Match(e : SetExpr, c : Class) extends SetExpr
-case class MatchStar(e : SetExpr, c : Class) extends SetExpr
 case class SetVar(name: Vars) extends SetExpr
 case class SetSymbol(id: Symbols) extends SetExpr
+case class GuardedSet(e1 : SetExpr, guard: BoolExpr) extends SetExpr
 
-sealed trait BoolExpr
 case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr
-case class SortMem(e1: SetExpr, s: Class) extends BoolExpr
+case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr
 case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr
 case class SetSub(e1: SetExpr, e2: SetExpr) extends BoolExpr
 case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr
 case class Not(p: BoolExpr) extends BoolExpr
+
+sealed trait MatchExpr
+case class MSet(e : SetExpr) extends MatchExpr
+case class Match(e : SetExpr, c : Class) extends MatchExpr
+case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
 
 case class SHeap(spatial: Map[Symbol, SpatialDesc], pure : Prop)
 
