@@ -34,6 +34,8 @@ case class MSet(e : SetExpr) extends MatchExpr
 case class Match(e : SetExpr, c : Class) extends MatchExpr
 case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
 
+sealed trait SpatialDesc
+
 case class SHeap(spatial: Map[Symbol, SpatialDesc], pure : Prop)
 
 case class SMem(stack: SStack, heap: SHeap)
@@ -48,3 +50,4 @@ case class If(cs : Set[(BoolExpr, Statement)]) extends Statement
 case class For(x : Vars, c : Class, m : MatchExpr, sb: Statement)
   extends Statement
 case class Fix(e : SetExpr, sb: Statement) extends Statement
+

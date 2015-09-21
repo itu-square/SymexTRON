@@ -9,7 +9,6 @@ import syntax.ast._
 
 import scalaz._, Scalaz._
 import scalaz.\/.{left, right}
-import SymbolicHeapChecker._
 import Subst._
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
@@ -18,15 +17,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
     // Inconsistent precondition
     pres.map[String \/ Set[SMem], Set[String \/ Set[SMem]]] { pre: SMem =>
       c match {
-        case Fail() => ???
-        case StmtSeq(cs) => ???
+        case StmtSeq(ss) => ???
         case AssignVar(x, e) => ???
         case LoadField(x, e, f) => ???
-        case New(x, s) => ???
+        case New(x, c) => ???
         case AssignField(e1, f, e2) => ???
         case If(cs) => ???
-        case For(x, s, m, cb) => ???
-        case Fix(e, inv, cb) => ???
+        case For(x, c, m, sb) => ???
+        case Fix(e, sb) => ???
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
       for (acc_ <- acc; el_ <- el) yield acc_ ++ el_
@@ -68,7 +66,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
         } yield ISect(e1, e2)
         case GuardedSet(e1, guard) => for {
           ee1 <- evalExpr(s, e1)
-          eguard <- evalSimpleProp(s, guard)
+          eguard <- evalBoolExpr(s, guard)
         } yield GuardedSet(ee1, eguard)
       }
     }
