@@ -44,7 +44,7 @@ case class AssignVar(x : Vars, e : SetExpr) extends Statement
 case class LoadField(x : Vars, e : SetExpr, f : Fields) extends Statement
 case class New(x : Vars, c : Class) extends Statement
 case class AssignField(e1 : SetExpr, f : Fields, e2 : SetExpr) extends Statement
-case class If(cs : Set[(BoolExpr, Statement)]) extends Statement
+case class If(cs : (BoolExpr, Statement)*) extends Statement
 case class For(x : Vars, c : Class, m : MatchExpr, sb: Statement)
   extends Statement
 case class Fix(e : SetExpr, sb: Statement) extends Statement
