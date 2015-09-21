@@ -120,18 +120,18 @@ object Subst {
     }
   }
 
-  implicit class SubstSymbolicHeap(h: SymbolicHeap) extends Subst[SymbolicHeap] {
-    override def subst(x: SetSymbol, e: SetExpr): SymbolicHeap = h match {
-      case SymbolicHeap(pi, sig, preds) => SymbolicHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
+  implicit class SubstSymbolicHeap(h: SHeap) extends Subst[SHeap] {
+    override def subst(x: SetSymbol, e: SetExpr): SHeap = h match {
+      case SHeap(pi, sig, preds) => SHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
     }
 
-    override def subst(x: Symbol, e: BasicExpr): SymbolicHeap = h match {
-      case SymbolicHeap(pi, sig, preds) => SymbolicHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
+    override def subst(x: Symbol, e: BasicExpr): SHeap = h match {
+      case SHeap(pi, sig, preds) => SHeap(pi.subst(x, e), sig.subst(x, e), preds.map(_.subst(x, e)))
     }
   }
 
-  implicit class SubstSymbolicMemory(m : SymbolicMemory) extends Subst[SymbolicMemory] {
-    override def subst(x: SetSymbol, e: SetExpr): SymbolicMemory = SymbolicMemory(m.stack, m.heap.subst(x, e))
-    override def subst(x: Symbol, e: BasicExpr): SymbolicMemory = SymbolicMemory(m.stack, m.heap.subst(x, e))
+  implicit class SubstSymbolicMemory(m : SMem) extends Subst[SMem] {
+    override def subst(x: SetSymbol, e: SetExpr): SMem = SMem(m.stack, m.heap.subst(x, e))
+    override def subst(x: Symbol, e: BasicExpr): SMem = SMem(m.stack, m.heap.subst(x, e))
   }
 }

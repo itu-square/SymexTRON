@@ -8,12 +8,12 @@ import scalaz.\/
 import scalaz.\/._
 
 object SymbolicHeapChecker {
-  def sortOf(mem: SymbolicMemory, e1: SetExpr): String \/ Sort = mem.heap.pure.find { p =>
+  def sortOf(mem: SMem, e1: SetExpr): String \/ Class = mem.heap.pure.find { p =>
     p match {
       case SortMem(e2, s) if e1 == e2 => true
       case _ => false
     }
-  }.map(_.asInstanceOf[SortMem].s).fold[String \/ Sort](left(s"Can't find sort of $e1"))(right(_))
+  }.map(_.asInstanceOf[SortMem].s).fold[String \/ Class](left(s"Can't find sort of $e1"))(right(_))
 
   // NOTICE: May need to rerun when having lists/trees or advanced checkers due to guard checks that may become valid
   // Alternatively have a separate phase for non-pointing spatial constraints (list/trees/checkers)
@@ -27,7 +27,7 @@ object SymbolicHeapChecker {
       }
   }.flatten
 
-  private def propagatePureConstraints(h1: SymbolicHeap, h2: SymbolicHeap): Option[(SymbolicHeap, SymbolicHeap)] = {
+  private def propagatePureConstraints(h1: SHeap, h2: SHeap): Option[(SHeap, SHeap)] = {
     /*def ppc(pure1 : Prop, spatial1 : Spatial, pure2 : Prop, spatial2 : Spatial, pureh : Prop)
             : Option[(SymbolicHeap, SymbolicHeap)] = {
       if (pure1.size <= 0) Some (SymbolicHeap(pureh, spatial1), SymbolicHeap(pure2, spatial2))
@@ -45,19 +45,19 @@ object SymbolicHeapChecker {
     ???
   }
 
-  private def propagateConstraints(h1: SymbolicHeap, h2: SymbolicHeap): Option[(SymbolicHeap, SymbolicHeap)] = {
+  private def propagateConstraints(h1: SHeap, h2: SHeap): Option[(SHeap, SHeap)] = {
     for (hh <- propagatePureConstraints(h1, h2);
          if hh._1.spatial.find(p => p._2.size != 1).isEmpty) //Ensure that all spatial elements are defined at most once
       yield hh
   }
 
-  def satSplit(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
-     var hsold = Set[(SymbolicHeap, SymbolicHeap)]()
+  def satSplit(h1: SHeap, h2: SHeap) : Set[(SHeap, SHeap)] = {
+     var hsold = Set[(SHeap, SHeap)]()
      var hs    = Set((h1, h2))
      while(hsold != hs) {
        hsold = hs
        if (hs.size > 0) {
-         var hsvisited = Set[(SymbolicHeap, SymbolicHeap)]()
+         var hsvisited = Set[(SHeap, SHeap)]()
          /*for (hh <- hs) {
            propagateConstraints(hh._1, hh._2) match {
              case Some(hh2) => {
@@ -82,18 +82,18 @@ object SymbolicHeapChecker {
     hs
   }
 
-  private def normalise(h1: SymbolicHeap, h2: SymbolicHeap) : Set[(SymbolicHeap, SymbolicHeap)] = {
+  private def normalise(h1: SHeap, h2: SHeap) : Set[(SHeap, SHeap)] = {
     val newprop = resolveSpatialConstraints(h1.spatial)
-    val newh1 = SymbolicHeap(h1.pure ++ newprop, h1.spatial, h1.preds)
+    val newh1 = SHeap(h1.pure ++ newprop, h1.spatial, h1.preds)
     satSplit(newh1, h2)
     // NOTICE: Add SAT search phase, hint: consider only operator relevant variables in search
   }
 
 
-  private def subtract(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
+  private def subtract(h1: SHeap, h2: SHeap): Boolean = {
     def subfields(rho1: Map[Fields, SetExpr], rho2: Map[Fields, SetExpr]): Boolean =
       rho2.forall(p => rho1.contains(p._1) && rho1(p._1) == p._2)
-    val newh2 = SymbolicHeap(h2.pure /*.filterNot {
+    val newh2 = SHeap(h2.pure /*.filterNot {
       case Eq(e1, e2) if e1 == e2 => true
       case e if h1.pure.contains(e) => true // TODO: Support symmetry transitivity
       case _ => false
@@ -108,15 +108,15 @@ object SymbolicHeapChecker {
     else false
   }
 
-  def oracle(h1: SymbolicHeap, h2: SymbolicHeap): Boolean = {
+  def oracle(h1: SHeap, h2: SHeap): Boolean = {
     // val newhs = normalise(h1, h2)
     // newhs.forall(hs => subtract(hs._1, hs._2))
     println(s"pre-heap: ${PrettyPrinter.pretty(h1)}\npost-heap: ${PrettyPrinter.pretty(h2)}")
     false
   }
 
-  implicit class SymbolicMemoryHelpers(ls : Set[SymbolicMemory]) {
-    def ==>(rs : Set[SymbolicMemory]): SymbolicMemory \/ Unit = {
+  implicit class SymbolicMemoryHelpers(ls : Set[SMem]) {
+    def ==>(rs : Set[SMem]): SMem \/ Unit = {
       val cex = for {
         r <- rs
         if !ls.exists(l => SymbolicHeapChecker.oracle(l.heap, r.heap))
@@ -126,6 +126,6 @@ object SymbolicHeapChecker {
     }
   }
 
-  def incon(h : SymbolicHeap) : Boolean =
-    SymbolicHeapChecker.oracle(h, SymbolicHeap(Set(Not(Eq(SetLit(), SetLit()))), h.spatial, h.preds))
+  def incon(h : SHeap) : Boolean =
+    SymbolicHeapChecker.oracle(h, SHeap(Set(Not(Eq(SetLit(), SetLit()))), h.spatial, h.preds))
 }

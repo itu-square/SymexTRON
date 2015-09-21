@@ -16,7 +16,7 @@ import scala.collection.mutable
 import scalaz.\/._
 import scalaz._, Scalaz._
 
-class ModelFinder(symcounter : Ref[Int], defs: Map[Sort, SortDefinition] = Map()) {
+class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map()) {
   private type EvalRes =  (Set[Relation], Set[Integer], Formula, Relation, Map[Symbols, Relation])
 
   var counter = 0

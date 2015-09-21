@@ -4,7 +4,7 @@ import syntax.ast._
 
 object PrettyPrinter {
 
-  def pretty(stack: SymbolicStack): String = stack.map(p => s"${p._1} ↦ ${pretty(p._2)}").mkString(", ")
+  def pretty(stack: SStack): String = stack.map(p => s"${p._1} ↦ ${pretty(p._2)}").mkString(", ")
 
   def pretty(pred: Pred): String = pred match {
       case Descendant(s, e1, e2) => s"dc[$s](${pretty(e1)}, ${pretty(e2)})"
@@ -76,10 +76,10 @@ object PrettyPrinter {
 
   def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
 
-  def pretty(heap : SymbolicHeap): String = {
+  def pretty(heap : SHeap): String = {
     s"${pretty(heap.spatial, heap.preds)} | ${pretty(heap.pure)}"
   }
 
-  def pretty(mem : SymbolicMemory): String =
+  def pretty(mem : SMem): String =
     s"${pretty(mem.stack)} ; ${pretty(mem.heap)}"
 }

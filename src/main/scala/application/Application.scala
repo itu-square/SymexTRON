@@ -6,19 +6,19 @@ import syntax.ast._
 
 object Application extends App {
   val sortDefs = Set(
-    new SortDefinition("Any", Map(), Map()),
-    new SortDefinition("Expr", Map(), Map(), Sort("Any")),
-    new SortDefinition("CstI", Map("val" -> Sort("Int")), Map(), Sort("Expr")),
-    new SortDefinition("Plus", Map("left" -> Sort("Expr"), "right" -> Sort("Expr")), Map(), Sort("Expr"))
-  ).map(sd => Sort(sd.name) -> sd).toMap
+    new ClassDefinition("Any", Map(), Map()),
+    new ClassDefinition("Expr", Map(), Map(), Class("Any")),
+    new ClassDefinition("CstI", Map("val" -> Class("Int")), Map(), Class("Expr")),
+    new ClassDefinition("Plus", Map("left" -> Class("Expr"), "right" -> Class("Expr")), Map(), Class("Expr"))
+  ).map(sd => Class(sd.name) -> sd).toMap
   val scc = new SymbolicExecutor(sortDefs)
-  val pre = Set(SymbolicMemory(Map(), SymbolicHeap(Set(), Map(), Set())))
+  val pre = Set(SMem(Map(), SHeap(Set(), Map(), Set())))
   // TODO: Think about aliasing problems
-  val prog = CSeq(AssignVar("x", SetLit())
-                 ,New("y1", Sort("Plus"))
-                 ,New("y2", Sort("Plus"))
+  val prog = StmtSeq(AssignVar("x", SetLit())
+                 ,New("y1", Class("Plus"))
+                 ,New("y2", Class("Plus"))
                  ,AssignVar("x", SetLit(Var("y1")))
-                 ,New("z", Sort("CstI"))
+                 ,New("z", Class("CstI"))
                  ,AssignField(SetLit(Var("x")), "left", SetLit(Var("z")))
                  ,LoadField("z", SetLit(Var("y1")), "left")
                  ,AssignField(SetLit(Var("y2")), "right", SetLit(Var("z")))
