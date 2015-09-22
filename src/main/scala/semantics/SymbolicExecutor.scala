@@ -4,7 +4,7 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
-import _root_.syntax.PrettyPrinter
+import _root_.syntax.{ast, PrettyPrinter}
 import helper._
 import syntax.ast._
 
@@ -12,7 +12,8 @@ import scalaz._, Scalaz._
 import scalaz.\/.{left, right}
 import Subst._
 
-class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
+class SymbolicExecutor(defs: Map[Class, ClassDefinition],
+                       nabla: (Prop, BoolExpr) => Prop = _ + _, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
 
   def access(e: SetExpr, f: Fields, heap: SHeap): String \/ SetExpr = ???
@@ -69,23 +70,37 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
             } yield res
           } yield posts).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
           }
-        case For(x, m, sb) => m match {
-          case MSet(e) => for {
+        case For(x, m, sb) =>  for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap
-            esols <- mf.findSet(e)
-            res = {
-              for {
-                esol <- esols.toSet
+            esols <- m match {
+              case MSet(e) => mf.findSet(e, beta)
+              case Match(e, c) => mf.findSet(e, beta) // TODO do actual matching
+              case MatchStar(e, c) => mf.findSet(e, beta) // TODO do actual matching
+            }
+            res <- (for {
+                esol: (Map[Symbols, SetLit], SetLit) <- esols.toSet
                 (th, res) = esol
                 newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) => mem.subst(SetSymbol(sub._1), sub._2))
                 newerpre = expand(newpre)
-              } yield ???
-            }
-          } yield ???
-          case Match(e, c) => ???
-          case MatchStar(e, c) => ???
+              } yield res.es.toSet.foldLeftM[StringE, Set[SMem]](Set(newerpre)) { (mems : Set[SMem], sym : BasicExpr) =>
+                execute(mems.map(mem => SMem(mem.stack + (x -> SetLit(sym)), mem.heap)), sb)
+              }).toList.sequence.map(_.toSet.flatten)
+        } yield res
+        case Fix(e, sb) => {
+          def fixEqCase(bmem: SMem): Disjunction[String, Set[SMem]] = {
+            execute(Set(bmem), sb).rightMap(mems => mems.map(mem => for {
+              eebefore <- evalExpr(bmem.stack, e)
+              eeafter <- evalExpr(mem.stack, e)
+            } yield SMem(mem.stack,
+                SHeap(mem.heap.spatial, mem.heap.qspatial, mem.heap.pure + Eq(eebefore, eeafter)))
+            ).toList.sequence[StringE, SMem].map(_.toSet)
+            ).flatMap(identity)
+          }
+          def fixNeqCase(mem: Set[SMem]): String Disjunction Set[SMem] = {
+            ???
+          }
+          fixEqCase(pre)
         }
-        case Fix(e, sb) => ???
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
       for (acc_ <- acc; el_ <- el) yield acc_ ++ el_

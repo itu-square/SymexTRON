@@ -152,7 +152,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       }
       formula.fold[String \/ EvalRes[Relation]](left, formula => right {
         val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-        (Set(s), symbols.toSet, formula, s, Map())
+        (Set(s), symbols.toSet, formula, s, Map[Symbols, Relation]())
       })
 
     case Union(e1, e2) =>
