@@ -19,8 +19,20 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
 
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = ???
 
+  def expand(pre: SMem) = {
+    val (newspatial, newqspatial) = pre.heap.qspatial.foldLeft((pre.heap.spatial, Set[(Symbols, SetExpr, Spatial)]())) {
+      (part : (Spatial, Set[(Symbols, SetExpr, Spatial)]), qs : (Symbols, SetExpr, Spatial)) => qs._2 match {
+          // TODO: Use String \/ - instead
+        case SetLit(as @_*) =>
+          // TODO: Consider a good way to merge things
+          (as.map(_.asInstanceOf[Symbol]).map(sym => qs._3.subst(Symbol(qs._1), sym)).fold(part._1)(_ ++ _), part._2)
+        case _ => (part._1, part._2 + qs)
+      }
+    }
+    SMem(pre.stack, SHeap(newspatial, newqspatial, pre.heap.pure))
+  }
+
   def execute(pres : Set[SMem], c : Statement) : String \/ Set[SMem] = {
-    // Inconsistent precondition
     pres.map[String \/ Set[SMem], Set[String \/ Set[SMem]]] { pre: SMem =>
       c match {
         case StmtSeq(ss@_*) => ss.toList.foldLeftM[StringE, Set[SMem]](Set(pre))(execute)
@@ -44,17 +56,35 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
           newheap <- update(sym, f, ee2, pre.heap)
         } yield Set(SMem(pre.stack, newheap))
         case If(cs@_*) => {
-          val ecs = cs.map(p => (evalBoolExpr(pre.stack, p._1), p._2))
+          val ecs    = cs.map(p => (evalBoolExpr(pre.stack, p._1), p._2))
+          val newecs = ecs :+ (for {
+            other <- ecs.map(_._1).toList.sequence[StringE, BoolExpr]
+          } yield And(other.map(Not) :_*) -> StmtSeq())
           (for {
             cstmt <- ecs
             (eb, s) = cstmt
-            posts = (for {
+            posts = for {
               eeb <- eb
               res <- execute(Set(SMem(pre.stack, SHeap(pre.heap.spatial, pre.heap.qspatial, pre.heap.pure + eeb))), s)
-            } yield res)
+            } yield res
           } yield posts).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
           }
-        case For(x, c, m, sb) => ???
+        case For(x, m, sb) => m match {
+          case MSet(e) => for {
+           // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap
+            esols <- mf.findSet(e)
+            res = {
+              for {
+                esol <- esols.toSet
+                (th, res) = esol
+                newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) => mem.subst(SetSymbol(sub._1), sub._2))
+                newerpre = expand(newpre)
+              } yield ???
+            }
+          } yield ???
+          case Match(e, c) => ???
+          case MatchStar(e, c) => ???
+        }
         case Fix(e, sb) => ???
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
@@ -124,6 +154,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
       for {
         ep <- evalBoolExpr(st, p)
       } yield Not(ep)
+    case And(ps@_*) =>
+      for {
+        eps <- ps.map(evalBoolExpr(st, _)).toList.sequence[StringE, BoolExpr]
+      } yield And(eps :_*)
     case SetMem(e1, e2) =>
       for {
         ee1 <- evalBasicExpr(st, e1)
@@ -141,13 +175,16 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition]) {
       } yield SetSubEq(ee1, ee2)
   }
 
-  private var symCounter = Ref(0)
+  private val symCounter = Ref(0)
 
   private def freshSym: Symbols = {
     val old = !symCounter
     symCounter := !symCounter + 1
     old
   }
+
+  private val mf = new ModelFinder(symCounter, defs)
+
 
   private val childfields: Set[Fields] = defs.values.flatMap(_.children.map(_._1)).toSet
   private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.map(_._1)).toSet

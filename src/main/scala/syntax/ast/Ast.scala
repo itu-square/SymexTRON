@@ -23,7 +23,8 @@ case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr
 case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr
 case class SetSub(e1: SetExpr, e2: SetExpr) extends BoolExpr
 case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr
-case class Not(p: BoolExpr) extends BoolExpr
+case class And(bs: BoolExpr*) extends BoolExpr
+case class Not(b: BoolExpr) extends BoolExpr
 
 sealed trait MatchExpr
 case class MSet(e : SetExpr) extends MatchExpr
@@ -34,6 +35,7 @@ sealed trait SpatialDesc
 case class AbstractDesc(c : Class, unowned : SetExpr) extends SpatialDesc
 case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
 
+// TODO: Consider nested quantified spatial expressions
 case class SHeap(spatial: Spatial, qspatial: Set[(Symbols, SetExpr, Spatial)], pure : Prop)
 
 case class SMem(stack: SStack, heap: SHeap)
@@ -45,7 +47,7 @@ case class LoadField(x : Vars, e : SetExpr, f : Fields) extends Statement
 case class New(x : Vars, c : Class) extends Statement
 case class AssignField(e1 : SetExpr, f : Fields, e2 : SetExpr) extends Statement
 case class If(cs : (BoolExpr, Statement)*) extends Statement
-case class For(x : Vars, c : Class, m : MatchExpr, sb: Statement)
+case class For(x: Vars, m: MatchExpr, sb: Statement)
   extends Statement
 case class Fix(e : SetExpr, sb: Statement) extends Statement
 

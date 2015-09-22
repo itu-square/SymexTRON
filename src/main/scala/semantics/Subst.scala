@@ -50,6 +50,7 @@ object Subst {
         SetMem(e1, ee2)
       case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
+      case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
     }
 
@@ -61,12 +62,75 @@ object Subst {
         SetMem(e1, ee2)
       case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
+      case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
     }
   }
 
   implicit class SubstProp(pi: Prop) extends Subst[Prop] {
     override def subst(x: SetSymbol, e: SetExpr): Prop = pi.map(_.subst(x, e))
-    override def subst(x : Symbol, e: BasicExpr): Prop = pi.map(_.subst(x, e))
+    override def subst(x: Symbol, e: BasicExpr): Prop = pi.map(_.subst(x, e))
+  }
+
+
+  implicit class SubstSpatialDesc(sd: SpatialDesc) extends Subst[SpatialDesc] {
+    override def subst(x: Symbol, e: BasicExpr): SpatialDesc = sd match {
+      case AbstractDesc(c, unowned) => AbstractDesc(c, unowned.subst(x, e))
+      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
+    }
+
+    override def subst(x: SetSymbol, e: SetExpr): SpatialDesc = sd match {
+      case AbstractDesc(c, unowned) => AbstractDesc(c, unowned.subst(x, e))
+      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
+    }
+  }
+
+  implicit class SubstSpatial(spatial: Spatial) extends Subst[Spatial] {
+    override def subst(x: Symbol, e: BasicExpr): Spatial =
+    e match {
+      case Symbol(id) =>
+        spatial.map((p : (Symbols, SpatialDesc)) => (if (p._1 == x.id) id else p._1, p._2.subst(x, e)))
+      case Var(name) =>
+        spatial.mapValues(_.subst(x, e))
+    }
+
+    override def subst(x: SetSymbol, e: SetExpr): Spatial = spatial.mapValues(_.subst(x, e))
+  }
+
+  implicit class SubstQSpatial(qspatial: Set[(Symbols, SetExpr, Spatial)]) extends Subst[Set[(Symbols, SetExpr, Spatial)]] {
+    // Be careful about name capture and think about expansion
+    override def subst(x: Symbol, e: BasicExpr): Set[(Symbols, SetExpr, Spatial)] =
+      qspatial.map(qs => {
+        val (sym, es, zeta) = qs
+        (sym, es.subst(x, e), zeta.subst(x, e))
+      })
+
+    override def subst(x: SetSymbol, e: SetExpr): Set[(Symbols, SetExpr, Spatial)] =
+      qspatial.map(qs => {
+        val (sym, es, zeta) = qs
+        (sym, es.subst(x, e), zeta.subst(x, e))
+      })
+  }
+
+
+  implicit class SubstSHeap(heap : SHeap) extends Subst[SHeap] {
+    override def subst(x: Symbol, e: BasicExpr): SHeap =
+      SHeap(heap.spatial.subst(x, e), heap.qspatial.subst(x, e), heap.pure.subst(x, e))
+    override def subst(x: SetSymbol, e: SetExpr): SHeap =
+      SHeap(heap.spatial.subst(x, e), heap.qspatial.subst(x, e), heap.pure.subst(x, e))
+  }
+
+  implicit class SubstSStack(stack : SStack) extends Subst[SStack] {
+    override def subst(x: Symbol, e: BasicExpr): SStack = stack.mapValues(_.subst(x, e))
+
+    override def subst(x: SetSymbol, e: SetExpr): SStack = stack.mapValues(_.subst(x, e))
+  }
+
+  implicit class SubstSMem(mem : SMem) extends Subst[SMem] {
+    override def subst(x: Symbol, e: BasicExpr): SMem =
+      SMem(mem.stack.subst(x, e), mem.heap.subst(x, e))
+
+    override def subst(x: SetSymbol, e: SetExpr): SMem =
+      SMem(mem.stack.subst(x, e), mem.heap.subst(x, e))
   }
 }

@@ -2,8 +2,6 @@ package semantics
 
 import java.util
 
-import scala.language.reflectiveCalls
-
 import helper.Ref
 import kodkod.ast._
 import kodkod.engine.satlab.SATFactory
@@ -17,6 +15,7 @@ import scalaz.\/._
 import scalaz._, Scalaz._
 
 class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map()) {
+  private type StringE[T] = String \/ T
   private type EvalRes[T] =  (Set[Relation], Set[Integer], Formula, T, Map[Symbols, Relation])
 
   var counter = 0
@@ -100,9 +99,21 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2), e2, th)
-    case Not(p) => for {
-        ep <- evalBoolExpr(p, th)
-        (rs1, is1, f1, b, th1) = ep
+    case And() => right(Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th)
+    case And(b,bs@_*) =>
+      for {
+        eb <- evalBoolExpr(b, th)
+        ebs <- bs.toList.foldLeftM[StringE, EvalRes[Formula]](eb) { (er: EvalRes[Formula], b1: BoolExpr) =>
+          val (rss, iss, fs, rs, ths) = er
+          for {
+            eb1 <- evalBoolExpr(b1, ths)
+            (rs1, is1, fs1, r1, th1) = eb1
+          } yield (rss union rs1, iss union is1, fs and fs1, rs and r1, th1)
+        }
+      } yield ebs
+    case Not(b) => for {
+        eb <- evalBoolExpr(b, th)
+        (rs1, is1, f1, b, th1) = eb
       } yield (rs1, is1, f1, b.not, th1)
   }
 
@@ -132,7 +143,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
           val ees:  String \/ List[Formula] = es.map {
             case Symbol(ident) => right(sym.join(name) eq IntConstant.constant(ident).toExpression)
             case Var(x) => left(s"Error: unevaluated variable: $name")
-          }.toList.sequence[({ type S[a] = String \/ a })#S, Formula]
+          }.toList.sequence[StringE, Formula]
           ees.fold(left, ees => right {
             val ee1 :: ees1 = ees
             (ss.join(syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf Symbols))) forAll (ss oneOf s)
@@ -202,7 +213,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       case _ =>
         val solver = new Solver()
         val ee = evalSetExpr(e)
-        ee.fold[String \/ Iterator[(Map[Symbols, SetLit], SetLit)]](left, { t => right
+        val res = ee.fold[String \/ Iterator[(Map[Symbols, SetLit], SetLit)]](left, { t => right
           {
             val (rs, is, fs, r, th) = t
             solver.options.setSolver(SATFactory.DefaultSAT4J)
@@ -216,6 +227,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
               (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
             }
           }})
+        res.fold(left, it => if (it.size > 0) right(it) else left(s"Error, no solution found"))
     }
   }
 
