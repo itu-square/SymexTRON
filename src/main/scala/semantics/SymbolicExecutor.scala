@@ -16,17 +16,38 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        nabla: (Prop, BoolExpr) => Prop = _ + _, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
 
-  def access(e: SetExpr, f: Fields, heap: SHeap): String \/ SetExpr = ???
+  def access(e: SetExpr, f: Fields, heap: SHeap): String \/ SetExpr = {
+//    heap.spatial.map(p => p._2 match {
+//      case AbstractDesc(c, unowned) => none
+//      case ConcreteDesc(c, children, refs) => {
+//        val cset = children.getOrElse(f, SetLit())
+//        val rset = children.getOrElse(f, SetLit())
+//        val resset = (cset, rset) match {
+//          case (SetLit(), _) => rset
+//          case (_, SetLit()) => cset
+//          case (_,_)         => Union(rset, cset)
+//        }
+//        ??? // some(GuardedSet(resset, Eq(Symbol(p._1), Ex)))
+//      }
+//    })
+    ???
+  }
 
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = ???
 
+  //TODO Change this method when made Quantification can happen in nested formulae
+  //TODO Use either
+  def instantiate(v: Vars, sym: Symbol, zeta: Spatial[Vars]): Spatial[Symbols] = {
+    zeta.mapKeys(x => if (x == v) sym.id else throw new RuntimeException(s"Unquantified variabe $x"))
+  }
+
   def expand(pre: SMem) = {
-    val (newspatial, newqspatial) = pre.heap.qspatial.foldLeft((pre.heap.spatial, Set[(Symbols, SetExpr, Spatial)]())) {
-      (part : (Spatial, Set[(Symbols, SetExpr, Spatial)]), qs : (Symbols, SetExpr, Spatial)) => qs._2 match {
+    val (newspatial, newqspatial) = pre.heap.qspatial.foldLeft((pre.heap.spatial, Set[QSpatial]())) {
+      (part : (Spatial[Symbols], Set[QSpatial]), qs : QSpatial) => qs._2 match {
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
           // TODO: Consider a good way to merge things
-          (as.map(_.asInstanceOf[Symbol]).map(sym => qs._3.subst(Symbol(qs._1), sym)).fold(part._1)(_ ++ _), part._2)
+          (as.map(_.asInstanceOf[Symbol]).map(sym => instantiate(qs._1, sym, qs._3)).fold(part._1)(_ ++ _), part._2)
         case _ => (part._1, part._2 + qs)
       }
     }
@@ -204,6 +225,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         ee1 <- evalExpr(st, e1)
         ee2 <- evalExpr(st, e2)
       } yield SetSubEq(ee1, ee2)
+    case Exists(v, e1, b) =>
+      for {
+        ee1 <- evalExpr(st, e1)
+        eb  <- evalBoolExpr(st, b)
+      } yield Exists(v, ee1, eb)
   }
 
   private val symCounter = Ref(0)

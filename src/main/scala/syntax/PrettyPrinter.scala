@@ -67,11 +67,26 @@ object PrettyPrinter {
   def pretty(sym : Symbols, f : Fields, sep : String, e : SetExpr): String =
     s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
 
-  def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String =
+  def pretty(spatial : Spatial[Symbols])(implicit d : DummyImplicit) : String =
     spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
 
-  def pretty(qspatial : (Symbols, SetExpr, Spatial)): String =
-    s"✪⟨${pretty(Symbol(qspatial._1))} ∈ ${pretty(qspatial._2)}⟩ ${pretty(qspatial._3)}"
+  //TODO Avoid code duplication between vars and symbols
+
+  def pretty(v : Vars, spatialDesc: SpatialDesc): String = spatialDesc match {
+    case AbstractDesc(c, unowned) => s"$v <: $c ⟨${pretty(unowned)}⟩"
+    case ConcreteDesc(c, children, refs) => sep(s"$v : $c", "★",
+      sep(s"${children.map(p => pretty(v, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
+        s"${refs.map(p => pretty(v, p._1, "↝", p._2)).mkString(" ★ ")}"))
+  }
+
+  def pretty(v : Vars, f : Fields, sep : String, e : SetExpr): String =
+    s"$v.$f $sep ${pretty(e)}"
+
+  def pretty(spatial : Spatial[Vars])(implicit d : DummyImplicit, d2 : DummyImplicit) : String =
+    spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
+
+  def pretty(qspatial : QSpatial): String =
+    s"✪⟨${qspatial._1} ∈ ${pretty(qspatial._2)}⟩ ${pretty(qspatial._3)}"
 
   def pretty(heap : SHeap): String =
     sep(s"${pretty(heap.spatial)}", "★",

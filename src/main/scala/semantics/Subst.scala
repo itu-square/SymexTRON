@@ -52,6 +52,7 @@ object Subst {
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
       case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
+      case Exists(v, e1, b) => Exists(v, e1.subst(x, e), b.subst(x, e))
     }
 
     override def subst(x: Symbol, e: BasicExpr): BoolExpr = p match {
@@ -64,6 +65,7 @@ object Subst {
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
       case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
+      case Exists(v, e1, b) => Exists(v, e1.subst(x, e), b.subst(x, e))
     }
   }
 
@@ -85,27 +87,27 @@ object Subst {
     }
   }
 
-  implicit class SubstSpatial(spatial: Spatial) extends Subst[Spatial] {
-    override def subst(x: Symbol, e: BasicExpr): Spatial =
+  implicit class SubstSpatial[T](spatial: Spatial[T]) extends Subst[Spatial[T]] {
+    override def subst(x: Symbol, e: BasicExpr): Spatial[T] =
     e match {
       case Symbol(id) =>
-        spatial.map((p : (Symbols, SpatialDesc)) => (if (p._1 == x.id) id else p._1, p._2.subst(x, e)))
+        spatial.mapValues(_.subst(x, e))
       case Var(name) =>
         spatial.mapValues(_.subst(x, e))
     }
 
-    override def subst(x: SetSymbol, e: SetExpr): Spatial = spatial.mapValues(_.subst(x, e))
+    override def subst(x: SetSymbol, e: SetExpr): Spatial[T] = spatial.mapValues(_.subst(x, e))
   }
 
-  implicit class SubstQSpatial(qspatial: Set[(Symbols, SetExpr, Spatial)]) extends Subst[Set[(Symbols, SetExpr, Spatial)]] {
+  implicit class SubstQSpatial(qspatial: Set[QSpatial]) extends Subst[Set[QSpatial]] {
     // Be careful about name capture and think about expansion
-    override def subst(x: Symbol, e: BasicExpr): Set[(Symbols, SetExpr, Spatial)] =
+    override def subst(x: Symbol, e: BasicExpr): Set[QSpatial] =
       qspatial.map(qs => {
         val (sym, es, zeta) = qs
         (sym, es.subst(x, e), zeta.subst(x, e))
       })
 
-    override def subst(x: SetSymbol, e: SetExpr): Set[(Symbols, SetExpr, Spatial)] =
+    override def subst(x: SetSymbol, e: SetExpr): Set[QSpatial] =
       qspatial.map(qs => {
         val (sym, es, zeta) = qs
         (sym, es.subst(x, e), zeta.subst(x, e))
