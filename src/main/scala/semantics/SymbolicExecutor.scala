@@ -87,7 +87,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               }).toList.sequence.map(_.toSet.flatten)
         } yield res
         case Fix(e, sb) => {
-          def fixEqCase(bmem: SMem): Disjunction[String, Set[SMem]] = {
+          def fixEqCase(bmem: SMem): String \/ Set[SMem] = {
             execute(Set(bmem), sb).rightMap(mems => mems.map(mem => for {
               eebefore <- evalExpr(bmem.stack, e)
               eeafter <- evalExpr(mem.stack, e)
@@ -96,10 +96,26 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             ).toList.sequence[StringE, SMem].map(_.toSet)
             ).flatMap(identity)
           }
-          def fixNeqCase(mem: Set[SMem]): String Disjunction Set[SMem] = {
-            ???
+          def fixNeqCase(bmem: SMem): String \/ Set[SMem] = {
+            for {
+              imems <- execute(Set(bmem), sb)
+              amems = for {
+                imem <- imems
+                amems = for {
+                  eebefore <- evalExpr(bmem.stack, e)
+                  eeafter  <- evalExpr(imem.stack, e)
+                  newpure = nabla(imem.heap.pure, Not(Eq(eebefore, eeafter)))
+                  amems <- if (newpure == imem.heap.pure) fixEqCase(imem) else
+                                  fixNeqCase(SMem(imem.stack, SHeap(imem.heap.spatial, imem.heap.qspatial, newpure)))
+                } yield amems
+              } yield amems
+              res <- amems.toList.sequence[StringE, Set[SMem]].rightMap(_.toSet.flatten)
+            } yield res
           }
-          fixEqCase(pre)
+          for {
+            mems1 <- fixEqCase(pre)
+            mems2 <- fixNeqCase(pre)
+          } yield mems1 ++ mems2
         }
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
