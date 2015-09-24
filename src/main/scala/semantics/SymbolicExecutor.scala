@@ -17,23 +17,51 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private type StringE[B] = String \/ B
 
   def access(e: SetExpr, f: Fields, heap: SHeap): String \/ SetExpr = {
-//    heap.spatial.map(p => p._2 match {
-//      case AbstractDesc(c, unowned) => none
-//      case ConcreteDesc(c, children, refs) => {
-//        val cset = children.getOrElse(f, SetLit())
-//        val rset = children.getOrElse(f, SetLit())
-//        val resset = (cset, rset) match {
-//          case (SetLit(), _) => rset
-//          case (_, SetLit()) => cset
-//          case (_,_)         => Union(rset, cset)
-//        }
-//        ??? // some(GuardedSet(resset, Eq(Symbol(p._1), Ex)))
-//      }
-//    })
-    ???
+    right(heap.spatial.map(p => p._2 match {
+      case AbstractDesc(c, unowned) => none //Find out how to specify access over these recursive sets, and quantified sets as well
+      case ConcreteDesc(c, children, refs) => {
+        val cset = children.getOrElse(f, SetLit())
+        val rset = children.getOrElse(f, SetLit())
+        val resset = (cset, rset) match {
+          case (SetLit(), _) => rset
+          case (_, SetLit()) => cset
+          case (_,_)         => Union(rset, cset)
+        }
+        some(GuardedSet(resset, Exists("x", e, Eq(SetLit(Var("x")), SetLit(Symbol(p._1))))))
+      }
+    }).filter(_.isDefined).map(_.get.asInstanceOf[SetExpr]).toSet.foldLeft[SetExpr](SetLit())(Union))
   }
 
-  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = ???
+  def disown(heap: SHeap, ee: SetExpr) : SHeap = {
+    def disownSD(desc: SpatialDesc): SpatialDesc = desc match {
+      case AbstractDesc(c, unowned) => AbstractDesc(c, Union(unowned, ee))
+      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(Diff(_, ee)), refs)
+    }
+    SHeap(heap.spatial.mapValues(disownSD), heap.qspatial.map(p => (p._1, p._2, p._3.mapValues(disownSD))), heap.pure)
+  }
+
+  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = {
+    if (childfields.contains(f)) for {
+       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
+       defs <- symv match {
+         case AbstractDesc(c, unowned) => left(s"Updated not supported on folded recursive predicate")
+         case ConcreteDesc(c, children, refs) => right(c, children, refs)
+       }
+       (c, cmap, rmap) = defs
+      _ <- cmap.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+      newheap = disown(heap, ee2)
+    } yield SHeap(newheap.spatial + (sym -> ConcreteDesc(c, cmap + (f -> ee2), rmap)), newheap.qspatial, newheap.pure)
+    else if (reffields.contains(f)) for {
+      symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
+      defs <- symv match {
+        case AbstractDesc(c, unowned) => left(s"Updated not supported on folded recursive predicate")
+        case ConcreteDesc(c, children, refs) => right(c, children, refs)
+      }
+      (c, cmap, rmap) = defs
+      _ <- rmap.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+    } yield SHeap(heap.spatial + (sym -> ConcreteDesc(c, cmap, rmap + (f -> ee2))), heap.qspatial, heap.pure)
+    else left(s"Error unknown field $f")
+  }
 
   //TODO Change this method when made Quantification can happen in nested formulae
   //TODO Use either
