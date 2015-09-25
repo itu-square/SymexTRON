@@ -86,8 +86,8 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     case ClassMem(e1, s) => ???
     case SetMem(e1, e2) => for {
         _ <- e1 match {
-          case Var(name) => vs.get(name).cata(_ => right(), left(s"Error: unevaluated variable: $name"))
-          case _ => right()
+          case Var(name) => vs.get(name).cata(_ => right(()), left(s"Error: unevaluated variable: $name"))
+          case _ => right(())
         }
         ee2 <- evalSetExpr(e2, th, vs)
         (rs2, is2, f2, r2, th2) = ee2
