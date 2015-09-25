@@ -253,6 +253,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         ee1 <- evalExpr(st, e1)
         ee2 <- evalExpr(st, e2)
       } yield SetSubEq(ee1, ee2)
+      // TODO: Consider variable capture
     case Exists(v, e1, b) =>
       for {
         ee1 <- evalExpr(st, e1)

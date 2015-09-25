@@ -80,49 +80,65 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     bounds
   }
 
-  def evalBoolExpr(b : BoolExpr, th : Map[Symbols, Relation]) : String \/ EvalRes[Formula] = b match {
-    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th)
+  def evalBoolExpr(b : BoolExpr, th : Map[Symbols, Relation], vs : Map[Vars, Expression])
+  : String \/ EvalRes[Formula] = b match {
+    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, vs)
     case ClassMem(e1, s) => ???
     case SetMem(e1, e2) => for {
-        symident <- e1 match {
-          case Symbol(ident) => right(ident)
-          case Var(name) => left(s"Error: unevaluated variable: $name")
+        _ <- e1 match {
+          case Var(name) => vs.get(name).cata(_ => right(), left(s"Error: unevaluated variable: $name"))
+          case _ => right()
         }
-        ee2 <- evalSetExpr(e2, th)
+        ee2 <- evalSetExpr(e2, th, vs)
         (rs2, is2, f2, r2, th2) = ee2
         formula = {
           val sym = Variable.unary("sym")
           val x = Variable.unary("x")
-          (sym.join(name) eq IntConstant.constant(symident).toExpression) implies (sym in x.join(syms)) forAll
-            ((sym oneOf Symbols) and (x oneOf r2))
+          (e1 match {
+            case Symbol(symident) => sym.join(name) eq IntConstant.constant(symident).toExpression
+            case Var(name) => sym eq vs.get(name).get
+          }) implies (sym in x.join(syms)) forAll ((sym oneOf Symbols) and (x oneOf r2))
         }
       } yield (rs2, is2, formula and f2, formula, th2)
-    case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th)
-    case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2), e2, th)
+    case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th, vs)
+    case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, vs)
     case And() => right(Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th)
     case And(b,bs@_*) =>
       for {
-        eb <- evalBoolExpr(b, th)
+        eb <- evalBoolExpr(b, th, vs)
         ebs <- bs.toList.foldLeftM[StringE, EvalRes[Formula]](eb) { (er: EvalRes[Formula], b1: BoolExpr) =>
           val (rss, iss, fs, rs, ths) = er
           for {
-            eb1 <- evalBoolExpr(b1, ths)
+            eb1 <- evalBoolExpr(b1, ths, vs)
             (rs1, is1, fs1, r1, th1) = eb1
           } yield (rss union rs1, iss union is1, fs and fs1, rs and r1, th1)
         }
       } yield ebs
     case Not(b) => for {
-        eb <- evalBoolExpr(b, th)
+        eb <- evalBoolExpr(b, th, vs)
         (rs1, is1, f1, b, th1) = eb
       } yield (rs1, is1, f1, b.not, th1)
+      // TODO Think about local variable shadowing
+    case Exists(v, e, b) => {
+      val x = Variable.unary("x")
+      val vr = Variable.unary(v)
+      for {
+        ee <- evalSetExpr(e, th, vs)
+        (rs1, is1, f1, r, th1) = ee
+        eb <- evalBoolExpr(b, th1, vs + (v -> vr))
+        (rs2, is2, f2, b, th2) = eb
+      } yield (rs2, is2, f2, b `forSome` (vr oneOf x.join(syms)) forAll (x oneOf r), th2)
+    }
+
+
   }
 
   def evalBinaryBoolExpr(e1: SetExpr, op: (Expression, Expression) => Formula, e2: SetExpr,
-                         th: Map[Symbols, Relation]): String \/ EvalRes[Formula] = {
+                         th: Map[Symbols, Relation], vs : Map[Vars, Expression]): String \/ EvalRes[Formula] = {
     for {
-      ee1 <- evalSetExpr(e1, th)
+      ee1 <- evalSetExpr(e1, th, vs)
       (rs1, is1, f1, r1, th1) = ee1
-      ee2 <- evalSetExpr(e2, th1)
+      ee2 <- evalSetExpr(e2, th1, vs)
       (rs2, is2, f2, r2, th2) = ee2
       formula = {
         val x1 = Variable.unary("x1")
@@ -132,7 +148,8 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     } yield (rs1 union rs2, is1 union is2, formula and f1 and f2, formula, th2)
   }
 
-  def evalSetExpr(e : SetExpr, th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
+  def evalSetExpr(e : SetExpr, th : Map[Symbols, Relation] = Map(),
+                   vs : Map[Vars, Expression] = Map()): String \/ EvalRes[Relation] = e match {
     case SetLit(es@_*) =>
       val s = freshSet
       val formula = {
@@ -142,7 +159,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
           val sym = Variable.unary("sym")
           val ees:  String \/ List[Formula] = es.map {
             case Symbol(ident) => right(sym.join(name) eq IntConstant.constant(ident).toExpression)
-            case Var(x) => left(s"Error: unevaluated variable: $name")
+            case Var(x) => vs.get(x).cata(r => right(sym eq r), left(s"Error: unevaluated variable: $name"))
           }.toList.sequence[StringE, Formula]
           ees.fold(left, ees => right {
             val ee1 :: ees1 = ees
@@ -156,11 +173,11 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       })
 
     case Union(e1, e2) =>
-      evalBinarySetExpr(e1, _ union _, e2, th)
+      evalBinarySetExpr(e1, _ union _, e2, th, vs)
     case Diff(e1, e2) =>
-      evalBinarySetExpr(e1, _ difference _, e2, th)
+      evalBinarySetExpr(e1, _ difference _, e2, th, vs)
     case ISect(e1, e2) =>
-      evalBinarySetExpr(e1, _ intersection _, e2, th)
+      evalBinarySetExpr(e1, _ intersection _, e2, th, vs)
     case SetSymbol(ident) =>
       if (th.contains(ident)) right[String, EvalRes[Relation]](Set(), Set(), Formula.TRUE, th(ident), th)
       else {
@@ -170,9 +187,9 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     case SetVar(nm) => left(s"Error: unevaluated variable: $nm")
     case GuardedSet(e1, guard) =>
       for {
-        ee1 <- evalSetExpr(e1, th)
+        ee1 <- evalSetExpr(e1, th, vs)
         (rs1, is1, f1, r1, th1) = ee1
-        eguard <- evalBoolExpr(guard, th1)
+        eguard <- evalBoolExpr(guard, th1, vs)
         (rs2, is2, f2, fguard : Formula, th2) = eguard
         s = freshSet
         formula = {
@@ -184,11 +201,11 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
   }
 
   def evalBinarySetExpr(e1: SetExpr, op: (Expression, Expression) => Expression, e2: SetExpr,
-                        th : Map[Symbols, Relation]): String \/ EvalRes[Relation] = {
+                        th : Map[Symbols, Relation], vs : Map[Vars, Expression]): String \/ EvalRes[Relation] = {
     for {
-      ee1 <- evalSetExpr(e1,th)
+      ee1 <- evalSetExpr(e1,th,vs)
       (rs1, is1, f1, r1, th1) = ee1
-      ee2 <- evalSetExpr(e2,th1)
+      ee2 <- evalSetExpr(e2,th1,vs)
       (rs2, is2, f2, r2, th2) = ee2
       s = freshSet
       formula = {
