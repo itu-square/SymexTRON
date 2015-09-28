@@ -8,22 +8,26 @@ object PrettyPrinter {
 
   private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
 
+  private def prettySymb(ident : Int) : String = {
+    val l = symbs.length
+    val j = {
+      val j = ident % l
+      if (j < 0) j + l else j
+    }
+    val i = ident / l
+    s"${symbs(j)}${if (i <= 0) "" else s"'$i"}"
+  }
+
   def pretty(e : BasicExpr): String = {
     e match {
-      case Symbol(ident) =>
-        val l = symbs.length
-        val i = ident / l
-        s"${symbs(ident % l)}${if (i <= 0) "" else s"'$i"}"
+      case Symbol(ident) => prettySymb(ident)
       case Var(name) => name
     }
   }
 
   def pretty(e : SetExpr): String = {
     e match {
-      case SetSymbol(ident) =>
-        val l = symbs.length
-        val i = ident / l
-        s"${symbs(ident % l).toTitleCase}${if (i <= 0) "" else s"'$i"}"
+      case SetSymbol(ident) => prettySymb(ident).toUpperCase
       case SetVar(name) => name
       case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
       case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
@@ -58,8 +62,8 @@ object PrettyPrinter {
   def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
 
   def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case AbstractDesc(c, unowned) => s"${pretty(Symbol(sym))} <: $c ⟨${pretty(unowned)}⟩"
-    case ConcreteDesc(c, children, refs) => sep(s"${pretty(Symbol(sym))} : $c", "★",
+    case AbstractDesc(c, unowned) => s"${pretty(Symbol(sym))} <: ${c.name} ⟨${pretty(unowned)}⟩"
+    case ConcreteDesc(c, children, refs) => sep(s"${pretty(Symbol(sym))} : ${c.name}", "★",
                                             sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
                                                 s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
   }
@@ -73,8 +77,8 @@ object PrettyPrinter {
   //TODO Avoid code duplication between vars and symbols
 
   def pretty(v : Vars, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case AbstractDesc(c, unowned) => s"$v <: $c ⟨${pretty(unowned)}⟩"
-    case ConcreteDesc(c, children, refs) => sep(s"$v : $c", "★",
+    case AbstractDesc(c, unowned) => s"$v <: ${c.name} ⟨${pretty(unowned)}⟩"
+    case ConcreteDesc(c, children, refs) => sep(s"$v : ${c.name}", "★",
       sep(s"${children.map(p => pretty(v, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
         s"${refs.map(p => pretty(v, p._1, "↝", p._2)).mkString(" ★ ")}"))
   }
