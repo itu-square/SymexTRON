@@ -127,7 +127,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
         (rs1, is1, f1, r, th1) = ee
         eb <- evalBoolExpr(b, th1, vs + (v -> vr))
         (rs2, is2, f2, b, th2) = eb
-      } yield (rs2, is2, f2, b `forSome` (vr oneOf x.join(syms)) forAll (x oneOf r), th2)
+      } yield (rs1 union rs2, is1 union is2, f1 and f2, b `forSome` (vr oneOf x.join(syms)) forAll (x oneOf r), th2)
     }
 
 
@@ -169,7 +169,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       }
       formula.fold[String \/ EvalRes[Relation]](left, formula => right {
         val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-        (Set(s), symbols.toSet, formula, s, Map[Symbols, Relation]())
+        (Set(s), symbols.toSet, formula, s, th)
       })
 
     case Union(e1, e2) =>
@@ -190,7 +190,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
         ee1 <- evalSetExpr(e1, th, vs)
         (rs1, is1, f1, r1, th1) = ee1
         eguard <- evalBoolExpr(guard, th1, vs)
-        (rs2, is2, f2, fguard : Formula, th2) = eguard
+        (rs2, is2, f2, fguard, th2) = eguard
         s = freshSet
         formula = {
           val x = Variable.unary("x")
@@ -217,7 +217,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def findSet(e : SetExpr, minSymbols : Int = 5): String \/ Iterator[(Map[Symbols, SetLit], SetLit)] = {
+  def findSet(e : SetExpr, minSymbols : Int = 5): String \/ Set[(Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
       val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
@@ -226,17 +226,19 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       SetLit(rsymids.toList.map(Symbol): _*)
     }
     e match {
-      case lit: SetLit => right(Set((Map[Symbols, SetLit](), lit)).iterator)
+      case lit: SetLit => right(Set((Map[Symbols, SetLit](), lit)))
       case _ =>
         val solver = new Solver()
         val ee = evalSetExpr(e)
-        val res = ee.fold[String \/ Iterator[(Map[Symbols, SetLit], SetLit)]](left, { t => right
+        val res = ee.fold[String \/ Set[(Map[Symbols, SetLit], SetLit)]](left, { t => right
           {
             val (rs, is, fs, r, th) = t
             solver.options.setSolver(SATFactory.DefaultSAT4J)
             solver.options.setSymmetryBreaking(20)
+            val formula = this.constraints and fs
+            val bounds = this.bounds(rs, is, minSymbols)
             for {
-              sol <- solver.solveAll(this.constraints and fs, this.bounds(rs, is, minSymbols)).asScala
+              sol <- solver.solveAll(formula, bounds).asScala.toSet
               if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
               instance = sol.instance
               rels = instance.relationTuples.asScala
