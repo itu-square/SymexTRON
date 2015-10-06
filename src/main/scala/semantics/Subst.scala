@@ -1,5 +1,7 @@
 package semantics
 
+import com.sun.org.apache.xalan.internal.xsltc.compiler.sym
+import syntax.ast.QSpatial._
 import syntax.ast._
 
 trait Subst[+T] {
@@ -24,7 +26,6 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case GuardedSet(e1, guard) => GuardedSet(e1.subst(x, e), guard.subst(x, e))
       case SetVar(name) => SetVar(name)
       case SetSymbol(id) if id == x.id => e
       case SetSymbol(id) => SetSymbol(id)
@@ -35,7 +36,6 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case GuardedSet(e1, guard) => GuardedSet(e1.subst(x, e), guard.subst(x, e))
       case SetVar(name) => SetVar(name)
       case SetSymbol(id) => SetSymbol(id)
     }
@@ -52,7 +52,6 @@ object Subst {
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
       case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
-      case Exists(v, e1, b) => Exists(v, e1.subst(x, e), b.subst(x, e))
     }
 
     override def subst(x: Symbol, e: BasicExpr): BoolExpr = p match {
@@ -65,7 +64,6 @@ object Subst {
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
       case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
       case Not(pp) => Not(pp.subst(x,e))
-      case Exists(v, e1, b) => Exists(v, e1.subst(x, e), b.subst(x, e))
     }
   }
 
@@ -102,16 +100,10 @@ object Subst {
   implicit class SubstQSpatial(qspatial: Set[QSpatial]) extends Subst[Set[QSpatial]] {
     // Be careful about name capture and think about expansion
     override def subst(x: Symbol, e: BasicExpr): Set[QSpatial] =
-      qspatial.map(qs => {
-        val (sym, es, zeta) = qs
-        (sym, es.subst(x, e), zeta.subst(x, e))
-      })
+      qspatial.map(_qs_e.modify(_.subst(x, e)) `andThen` _qs_unowned.modify(_.subst(x, e)))
 
     override def subst(x: SetSymbol, e: SetExpr): Set[QSpatial] =
-      qspatial.map(qs => {
-        val (sym, es, zeta) = qs
-        (sym, es.subst(x, e), zeta.subst(x, e))
-      })
+      qspatial.map(_qs_e.modify(_.subst(x, e)) `andThen` _qs_unowned.modify(_.subst(x, e)))
   }
 
 

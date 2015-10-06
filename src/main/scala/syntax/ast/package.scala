@@ -5,7 +5,6 @@ package object ast {
   type Symbols = Int
   type Fields = String
   type Spatial[T] = Map[T, SpatialDesc]
-  type QSpatial = (Vars, SetExpr, Spatial[Vars])
   type Prop = Set[BoolExpr]
   type SStack = Map[Vars, SetExpr]
 

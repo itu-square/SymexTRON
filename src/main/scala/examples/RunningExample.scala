@@ -23,13 +23,13 @@ object RunningExample extends App {
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = Set(SMem(Map("class" -> SetLit(Symbol(-1))),
                      SHeap(Map(-1 -> ConcreteDesc(Class("Class"), Map("attributes" -> SetSymbol(-2)), Map())),
-                           Set(("a", SetSymbol(-2), Map("a" -> AbstractDesc(Class("Attribute"), SetLit())))),
+                           Set(QSpatial(SetSymbol(-2), Class("Attribute"), SetLit())),
                            Set())))
   val prog = StmtSeq(
     New("table", Class("Table")),
     New("idcol", Class("IdColumn")),
     AssignField(SetLit(Var("table")), "id", SetLit(Var("idcol"))),
-    AssignField(SetLit(Var("table")), "columns", SetLit(Var("idcol"))),
+    AssignField(SetLit(Var("table")), "columns", SetLit(Var("idcol"))) ,
     For("attr", MatchStar(SetLit(Var("class")), Class("Attribute")), StmtSeq(
       New("col", Class("DataColumn")),
       LoadField("attrtype", SetLit(Var("attr")), "type"),
