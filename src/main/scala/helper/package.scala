@@ -1,5 +1,10 @@
+import scala.language.higherKinds
+
 import scala.annotation.elidable
 import scala.annotation.elidable.ASSERTION
+import monocle.Getter
+
+import scalaz.Monad
 
 package object helper {
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
@@ -11,6 +16,11 @@ package object helper {
         ) yield r + (kv._1 -> kv._2.head)
     }
   }
+
+  implicit class TransitiveGetter[S,M[_]](g: Getter[S, M[S]]) {
+    def get_*(s : S)(implicit m: Monad[M]): M[S] = m.bind(g.get(s))(g.get_*)
+  }
+
   /**
    * An expression that fails if ever reached
    * @return no value, since it will always fail if called

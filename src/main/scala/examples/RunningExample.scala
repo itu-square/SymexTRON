@@ -29,14 +29,14 @@ object RunningExample extends App {
     New("table", Class("Table")),
     New("idcol", Class("IdColumn")),
     AssignField(SetLit(Var("table")), "id", SetLit(Var("idcol"))),
-    AssignField(SetLit(Var("table")), "columns", SetLit(Var("idcol"))) ,
+    AssignField(SetLit(Var("table")), "columns", SetLit(Var("idcol"))) /*,
     For("attr", MatchStar(SetLit(Var("class")), Class("Attribute")), StmtSeq(
       New("col", Class("DataColumn")),
       LoadField("attrtype", SetLit(Var("attr")), "type"),
       AssignField(SetLit(Var("col")), "type", SetLit(Var("attrtype"))),
       LoadField("tablecolumns", SetLit(Var("table")), "columns"),
       AssignField(SetLit(Var("table")), "columns", Union(SetVar("tablecolumns"), SetLit(Var("col"))))
-    ))
+    ))*/
   )
   val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap)
   println(s"Resulting memory: ${scc.execute(pre, prog).fold(identity, mems =>

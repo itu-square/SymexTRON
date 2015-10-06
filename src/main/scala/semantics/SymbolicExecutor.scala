@@ -4,11 +4,15 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
+import _root_.syntax.ast.ClassDefinition._
+import _root_.syntax.ast.ConcreteDesc._
 import _root_.syntax.ast.QSpatial._
 import _root_.syntax.ast.SHeap._
+import _root_.syntax.ast.SMem._
 import _root_.syntax.ast.SpatialDesc._
 import _root_.syntax.{ast, PrettyPrinter}
 import helper._
+import monocle.Getter
 import syntax.ast._
 
 import scalaz._, Scalaz._
@@ -17,8 +21,21 @@ import Subst._
 import language.postfixOps
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
-                       nabla: (Prop, BoolExpr) => Prop = _ + _, delta: Int = 3, beta: Int = 5) {
+                       kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
+
+  def unfold(sd : SpatialDesc): String \/ Set[(ConcreteDesc, Prop)] = {
+    sd match {
+      case AbstractDesc(c, unowned) => for {
+        defc <- defs.get(c).cata(right, left(s"Class definition of $c is unknown"))
+        subtypes = defs.values.filter(d => {
+          val allsupers = _cdef_supers.composeGetter(Getter((cc : List[Class]) => cc.map(defs(_)))).get_*(d)
+          allsupers.contains(defc)
+        }).toSet
+      } yield ???
+      case cd@ConcreteDesc(c, children, refs) => right(Set((cd, Set[BoolExpr]())))
+    }
+  }
 
   //TODO Unfold fields when having abstract desc for access and update
   def access(sym: Symbols, f: Fields, heap: SHeap): String \/ SetExpr = {
@@ -37,32 +54,23 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       case AbstractDesc(c, unowned) => AbstractDesc(c, Union(unowned, ee))
       case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(Diff(_, ee)), refs)
     }
+    // TODO consider types when disowning things
     (_sh_spatial.modify(_.mapValues(disownSD)) `andThen`
       _sh_qspatial.modify(_.map(_qs_unowned.modify(Union(_ ,ee))))) (heap)
   }
 
-  // TODO refactor this with lenses
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = {
-    if (childfields.contains(f)) for {
-       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-       defs <- symv match {
-         case AbstractDesc(c, unowned) => left(s"Update not supported on folded recursive predicate")
-         case ConcreteDesc(c, children, refs) => right(c, children, refs)
-       }
-       (c, cmap, rmap) = defs
-      _ <- cmap.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
-      newheap = disown(heap, ee2)
-    } yield SHeap(newheap.spatial + (sym -> ConcreteDesc(c, cmap + (f -> ee2), rmap)), newheap.qspatial, newheap.pure)
-    else if (reffields.contains(f)) for {
+    for {
       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-      defs <- symv match {
-        case AbstractDesc(c, unowned) => left(s"Update not supported on folded recursive predicate")
-        case ConcreteDesc(c, children, refs) => right(c, children, refs)
-      }
-      (c, cmap, rmap) = defs
-      _ <- rmap.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
-    } yield SHeap(heap.spatial + (sym -> ConcreteDesc(c, cmap, rmap + (f -> ee2))), heap.qspatial, heap.pure)
-    else left(s"Error unknown field $f")
+      defs <- _sd_concrete.getOption(symv).cata(right, left(s"Update not supported on folded recursive predicate"))
+      res <- if (childfields.contains(f)) for {
+                  _ <- defs.children.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+              } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(defs))) (disown(heap, ee2))
+              else if (reffields.contains(f)) for {
+                  _ <- defs.refs.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+              } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(defs))) (heap)
+              else left(s"Field $f is neither a child nor a reference field")
+    } yield res
   }
 
   def expand(pre: SMem) = {
@@ -155,7 +163,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             ).toList.sequence[StringE, SMem].map(_.toSet)
             ).flatMap(identity)
           }
-          def fixNeqCase(bmem: SMem): String \/ Set[SMem] = {
+          def fixNeqCase(bmem: SMem, k: Int): String \/ Set[SMem] = {
             for {
               imems <- execute(Set(bmem), sb)
               amems = for {
@@ -163,18 +171,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 amems = for {
                   eebefore <- evalExpr(bmem.stack, e)
                   eeafter  <- evalExpr(imem.stack, e)
-                  newpure = nabla(imem.heap.pure, Not(Eq(eebefore, eeafter)))
-                  amems <- if (newpure == imem.heap.pure) fixEqCase(imem) else
-                                  fixNeqCase(SMem(imem.stack, SHeap(imem.heap.spatial, imem.heap.qspatial, newpure)))
+                  newheap = (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eebefore, eeafter))) (imem)
+                  amems <- if (k <= 0) fixEqCase(imem) else for {
+                      mems2 <- fixEqCase(imem)
+                      mems1 <- fixNeqCase(imem, k)
+                  } yield mems1 ++ mems2
                 } yield amems
               } yield amems
               res <- amems.toList.sequence[StringE, Set[SMem]].rightMap(_.toSet.flatten)
             } yield res
           }
-          for {
-            mems1 <- fixEqCase(pre)
-            mems2 <- fixNeqCase(pre)
-          } yield mems1 ++ mems2
+          fixNeqCase(pre, kappa)
         }
       }
     }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
