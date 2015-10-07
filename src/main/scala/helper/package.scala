@@ -4,7 +4,7 @@ import scala.annotation.elidable
 import scala.annotation.elidable.ASSERTION
 import monocle.Getter
 
-import scalaz.Monad
+import scalaz.{Monoid, Monad}
 
 package object helper {
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
@@ -14,6 +14,19 @@ package object helper {
         for (r <- res;
              if kv._2.size == 1
         ) yield r + (kv._1 -> kv._2.head)
+    }
+  }
+
+  implicit class TransitiveClosure[S](m: Map[S, Set[S]]) {
+    def trans(): Map[S, Set[S]] = {
+      def transget(s : S) : Set[S] = {
+        if (m.contains(s)) {
+          val ms = m(s)
+          ms ++ ms.map(transget).flatten
+        }
+        else Set()
+      }
+      m.keys.map(k => k -> transget(k)).toMap
     }
   }
 

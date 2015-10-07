@@ -25,27 +25,41 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private type StringE[B] = String \/ B
 
   def unfold(sd : SpatialDesc): String \/ Set[(ConcreteDesc, Prop)] = {
+    def all_children(c : Class) : Map[Fields, Class] = {
+      val defc = defs(c)
+      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, Class]())(_ ++ _)
+    }
+    def all_references(c : Class) : Map[Fields, Class] = {
+      val defc = defs(c)
+      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, Class]())(_ ++ _)
+    }
     sd match {
       case AbstractDesc(c, unowned) => for {
         defc <- defs.get(c).cata(right, left(s"Class definition of $c is unknown"))
-        subtypes = defs.values.filter(d => {
-          val allsupers = _cdef_supers.composeGetter(Getter((cc : List[Class]) => cc.map(defs(_)))).get_*(d)
-          allsupers.contains(defc)
-        }).toSet
-      } yield ???
+        sts = subtypes(Class(defc.name))
+      } yield for {
+          st <- sts
+        } yield (ConcreteDesc(c, all_children(c).mapValues(_ => SetSymbol(freshSym)),
+                    all_references(c).mapValues(_ => SetSymbol(freshSym))), Set[BoolExpr]())
+      // TODO Actually add unonwed constraints
       case cd@ConcreteDesc(c, children, refs) => right(Set((cd, Set[BoolExpr]())))
     }
   }
 
   //TODO Unfold fields when having abstract desc for access and update
-  def access(sym: Symbols, f: Fields, heap: SHeap): String \/ SetExpr = {
+  def access(sym: Symbols, f: Fields, heap: SHeap): String \/ Set[(SetExpr, SHeap)] = {
     for {
       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-      defs <- _sd_concrete.getOption(symv).cata(right, left(s"Update not supported on folded recursive predicate"))
-      value = if (childfields.contains(f)) defs.children.get(f)
-              else if (reffields.contains(f)) defs.refs.get(f)
-              else none
-      res <- value.cata(right, left(s"No value for field $f"))
+      unfolded <- unfold(symv)
+      res <- unfolded.map(unf => {
+        val (df, constr) = unf
+        val newheap = (_sh_spatial.modify(_.updated(sym, df)) `andThen` _sh_pure.modify(_ ++ constr))(heap)
+        if (childfields.contains(f))
+          for (chld <- df.children.get(f)) yield (chld, newheap)
+        else if (reffields.contains(f))
+          for (ref <- df.refs.get(f)) yield (ref, newheap)
+        else none
+      }.cata(right, left(s"No value for field $f"))).toList.sequence[StringE, (SetExpr, SHeap)].map(_.toSet)
     } yield res
   }
 
@@ -59,17 +73,21 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       _sh_qspatial.modify(_.map(_qs_unowned.modify(Union(_ ,ee))))) (heap)
   }
 
-  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ SHeap = {
+  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ Set[SHeap] = {
     for {
       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-      defs <- _sd_concrete.getOption(symv).cata(right, left(s"Update not supported on folded recursive predicate"))
-      res <- if (childfields.contains(f)) for {
-                  _ <- defs.children.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
-              } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(defs))) (disown(heap, ee2))
-              else if (reffields.contains(f)) for {
-                  _ <- defs.refs.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
-              } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(defs))) (heap)
-              else left(s"Field $f is neither a child nor a reference field")
+      unfolded <- unfold(symv)
+      res <- unfolded.map(unf => {
+        val (df, constr) = unf
+        val newheap = (_sh_spatial.modify(_.updated(sym, df)) `andThen` _sh_pure.modify(_ ++ constr))(heap)
+        if (childfields.contains(f)) for {
+          _ <- df.children.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+        } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(df)))(disown(newheap, ee2))
+        else if (reffields.contains(f)) for {
+          _ <- df.refs.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+        } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newheap)
+        else left(s"Field $f is neither a child nor a reference field")
+      }).toList.sequence[StringE, SHeap].map(_.toSet)
     } yield res
   }
 
@@ -104,13 +122,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                     SHeap(pre.heap.spatial + newspatial, pre.heap.qspatial, pre.heap.pure)))
         case LoadField(x, e, f) => for {
           sym <- evalExpr(pre.stack, e).flatMap(getSymbol)
-          er <- access(sym, f, pre.heap)
-        } yield Set(SMem(pre.stack + (x -> er), pre.heap))
+          ares <- access(sym, f, pre.heap)
+        } yield ares.map(p => SMem(pre.stack + (x -> p._1), p._2))
         case AssignField(e1, f, e2) => for {
           sym <- evalExpr(pre.stack, e1).flatMap(getSymbol)
           ee2 <- evalExpr(pre.stack, e2)
-          newheap <- update(sym, f, ee2, pre.heap)
-        } yield Set(SMem(pre.stack, newheap))
+          newheaps <- update(sym, f, ee2, pre.heap)
+        } yield newheaps.map(newheap => SMem(pre.stack, newheap))
         case If(cs@_*) => {
           val ecs    = cs.map(p => (evalBoolExpr(pre.stack, p._1), p._2))
           val newecs = ecs :+ (for {
@@ -274,6 +292,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private val childfields: Set[Fields] = defs.values.flatMap(_.children.map(_._1)).toSet
   private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.map(_._1)).toSet
+  private val subtypes: Map[Class, Set[Class]] = {
+    defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
+      cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))
+    ).trans
+  }
+
 
   {
     val commoncr = childfields intersect reffields

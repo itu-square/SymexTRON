@@ -6,17 +6,8 @@ import language.higherKinds
 
 case class Class(name: String) // To be defined later
 
-class ClassDefinition(val name: String, val children: Map[Fields, Class],
-                      val refs: Map[Fields, Class], val supers: Class*)
-
-object ClassDefinition {
-  private def seqListIso[A]: Iso[Seq[A], List[A]] = Iso[Seq[A], List[A]](_.toList)(_.toSeq)
-
-  val _cdef_name = GenLens[ClassDefinition](_.name)
-  val _cdef_children = GenLens[ClassDefinition](_.children)
-  val _cdef_refs = GenLens[ClassDefinition](_.refs)
-  val _cdef_supers = GenLens[ClassDefinition](_.supers) composeIso seqListIso
-}
+case class ClassDefinition(name: String, children: Map[Fields, Class],
+                           refs: Map[Fields, Class], supers: Class*)
 
 sealed trait BasicExpr
 case class Symbol(id: Symbols) extends BasicExpr
