@@ -25,22 +25,29 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private type StringE[B] = String \/ B
 
   def unfold(sd : SpatialDesc): String \/ Set[(ConcreteDesc, Prop)] = {
-    def all_children(c : Class) : Map[Fields, Class] = {
+    def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
-      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, Class]())(_ ++ _)
+      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
-    def all_references(c : Class) : Map[Fields, Class] = {
+    def all_references(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
-      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, Class]())(_ ++ _)
+      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
+    def freshSetfromCard(c : Cardinality) = {
+      c match {
+        case Single() => SetLit(Symbol(freshSym))
+        case Many() => SetSymbol(freshSym)
+      }
+    }
+
     sd match {
       case AbstractDesc(c, unowned) => for {
         defc <- defs.get(c).cata(right, left(s"Class definition of $c is unknown"))
         sts = subtypes(Class(defc.name))
       } yield for {
           st <- sts
-        } yield (ConcreteDesc(c, all_children(c).mapValues(_ => SetSymbol(freshSym)),
-                    all_references(c).mapValues(_ => SetSymbol(freshSym))), Set[BoolExpr]())
+        } yield (ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
+                    all_references(c).mapValues(v => freshSetfromCard(v._2))), Set[BoolExpr]())
       // TODO Actually add unonwed constraints
       case cd@ConcreteDesc(c, children, refs) => right(Set((cd, Set[BoolExpr]())))
     }

@@ -11,14 +11,15 @@ object RunningExample extends App {
     new ClassDefinition("Int", Map(), Map(), Class("Any"))
   )
   val sourceClassDefs = Set(
-    new ClassDefinition("Class", Map("attributes" -> Class("Attribute")), Map(), Class("Any")),
+    new ClassDefinition("Class", Map("attributes" -> (Class("Attribute"), Single())), Map(), Class("Any")),
     new ClassDefinition("Attribute", Map(), Map(), Class("Any"))
   )
   val targetClassDefs = Set(
-    new ClassDefinition("Table", Map("columns" -> Class("Column")), Map("id" -> Class("IdColumn")), Class("Any")),
+    new ClassDefinition("Table", Map("columns" -> (Class("Column"), Many())),
+      Map("id" -> (Class("IdColumn"), Single())), Class("Any")),
     new ClassDefinition("Column", Map(), Map(), Class("Any")),
     new ClassDefinition("IdColumn", Map(), Map(), Class("Column")),
-    new ClassDefinition("DataColumn", Map(), Map("type" -> Class("String")), Class("Column"))
+    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single())), Class("Column"))
   )
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = Set(SMem(Map("class" -> SetLit(Symbol(-1))),

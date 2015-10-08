@@ -6,8 +6,12 @@ import language.higherKinds
 
 case class Class(name: String) // To be defined later
 
-case class ClassDefinition(name: String, children: Map[Fields, Class],
-                           refs: Map[Fields, Class], supers: Class*)
+sealed trait Cardinality
+case class Single() extends Cardinality
+case class Many() extends Cardinality
+
+case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
+                           refs: Map[Fields, (Class, Cardinality)], supers: Class*)
 
 sealed trait BasicExpr
 case class Symbol(id: Symbols) extends BasicExpr
