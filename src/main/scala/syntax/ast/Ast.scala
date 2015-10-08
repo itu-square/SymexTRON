@@ -1,8 +1,9 @@
 package syntax.ast
 
-import monocle.Iso
+import monocle.{POptional, Lens, PLens, Iso}
 import monocle.macros.{GenIso, GenLens, GenPrism}
 import language.higherKinds
+import scalaz.\/
 
 case class Class(name: String) // To be defined later
 
@@ -39,13 +40,17 @@ case class MSet(e : SetExpr) extends MatchExpr
 case class Match(e : SetExpr, c : Class) extends MatchExpr
 case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
 
-sealed trait SpatialDesc
+sealed abstract class SpatialDesc
 case class AbstractDesc(c : Class, unowned : SetExpr) extends SpatialDesc
 case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
 
 object SpatialDesc {
   val _sd_abstract = GenPrism[SpatialDesc, AbstractDesc]
   val _sd_concrete = GenPrism[SpatialDesc, ConcreteDesc]
+  val _sd_c = Lens[SpatialDesc, Class]({ case ConcreteDesc(c, _, _) => c case AbstractDesc(c, _) => c })(newc => {
+    case ConcreteDesc(oldc, chld, refs) => ConcreteDesc(newc, chld, refs)
+    case AbstractDesc(oldc, unowned) => AbstractDesc(newc, unowned)
+  })
 }
 
 object AbstractDesc {

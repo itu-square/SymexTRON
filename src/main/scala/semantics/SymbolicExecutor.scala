@@ -4,25 +4,50 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
-import _root_.syntax.ast.ClassDefinition._
-import _root_.syntax.ast.ConcreteDesc._
-import _root_.syntax.ast.QSpatial._
-import _root_.syntax.ast.SHeap._
-import _root_.syntax.ast.SMem._
-import _root_.syntax.ast.SpatialDesc._
-import _root_.syntax.{ast, PrettyPrinter}
+import syntax.PrettyPrinter
+import syntax.ast.ConcreteDesc._
+import syntax.ast.QSpatial._
+import syntax.ast.SHeap._
+import syntax.ast.SMem._
+import syntax.ast.SpatialDesc._
 import helper._
-import monocle.Getter
+import semantics.Subst._
 import syntax.ast._
 
-import scalaz._, Scalaz._
+import scala.language.postfixOps
+import scalaz.Scalaz._
 import scalaz.\/.{left, right}
-import Subst._
-import language.postfixOps
+import scalaz._
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
+
+  def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.map {
+    case Symbol(id) => for {
+      symv <- heap.spatial.get(id).cata(right, left(s"Unknown symbol: $id"))
+      stc <- subtypes.get(c).cata(right, left(s"Unknown class: $c"))
+    } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(id)) else List()
+    case Var(name) => left(s"Unevaluated var $name")
+  }.sequence[StringE, List[BasicExpr]].map(l => SetLit(l.flatten : _*))
+
+  def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.map {
+    case e@Symbol(id) => for {
+      symv <- heap.spatial.get(id).cata(right, left(s"Unknown symbol: $id"))
+      cd <- _sd_concrete.getOption(symv).cata(right, left(s"Not a concrete value: $symv"))
+      res <- cd.children.values.toList.map({
+        case chldv: SetLit => descendants_or_self(chldv, heap)
+        case e => left(s"Not a concrete set: $e")
+      }).sequence[StringE, SetLit].map(l => l.flatMap(_.es))
+    } yield e :: res
+    case Var(name) => left(s"Unevaluated var $name")
+  }.sequence[StringE, List[BasicExpr]].map(l => SetLit(l.flatten :_*))
+
+  def match_star(set : SetLit, c : Class, heap : SHeap): String \/ SetLit =
+    for {
+      dcs <- descendants_or_self(set, heap)
+      m <- match_it(dcs, c, heap)
+    } yield m
 
   def unfold(sd : SpatialDesc): String \/ Set[(ConcreteDesc, Prop)] = {
     def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
