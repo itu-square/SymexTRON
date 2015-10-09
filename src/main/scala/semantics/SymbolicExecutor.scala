@@ -201,28 +201,27 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 (th, res) = esol
                 newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) =>
                               mem.subst(SetSymbol(sub._1), sub._2)) |> _sm_heap.modify(expand)
-                mres  = {
-                val mres : String \/ Set[(SetLit, SMem)] = m match {
+                mres  = m match {
                   case MSet(e) => Set((res, newpre)) |> right
                   case Match(e, c) => for {
                      heaps <- unfold_all(res, newpre.heap)
                      res <- heaps.toList.map(h => for {
                       matches <- match_it(res, c, h)
                      } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
-                  } yield res
+                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre))).toSet
                   case MatchStar(e, c) => for {
                     heaps <- concretise(res, newpre.heap)
                     res <- heaps.toList.map(h => for {
                       matches <- match_it(res, c, h)
                      } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
-                  } yield res
+                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre))).toSet
                 }
-                mres
-                 }
-              } yield mres.flatMap(mr => mr._1.es.toSet.foldLeftM[StringE, Set[SMem]](mr._2) {
-                (mems : Set[SMem], sym : BasicExpr) =>
-                  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
-              })).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
+              } yield for {
+                mr <- mres
+                res <- mr.map({ (syms : SetLit, mem : SMem) => syms.es.toSet.foldLeftM[StringE, Set[SMem]](Set(mem)) {
+                 (mems : Set[SMem], sym : BasicExpr) =>  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
+                } }.tupled).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
+              } yield res).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
         } yield res
         case Fix(e, sb) => {
           def fixEqCase(bmem: SMem): String \/ Set[SMem] = {
