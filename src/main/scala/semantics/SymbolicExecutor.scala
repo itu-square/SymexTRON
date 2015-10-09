@@ -4,6 +4,7 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
+import _root_.syntax.ast.MatchExpr._
 import syntax.PrettyPrinter
 import syntax.ast.ConcreteDesc._
 import syntax.ast.QSpatial._
@@ -49,7 +50,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       m <- match_it(dcs, c, heap)
     } yield m
 
-  def unfold(sd : SpatialDesc): String \/ Set[(ConcreteDesc, Prop)] = {
+  def unfold(sym : Symbols, sd : SpatialDesc, heap: SHeap): String \/ Set[(ConcreteDesc, SHeap)] = {
     def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
       defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
@@ -71,21 +72,35 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         sts = subtypes(Class(defc.name))
       } yield for {
           st <- sts
-        } yield (ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
-                    all_references(c).mapValues(v => freshSetfromCard(v._2))), Set[BoolExpr]())
+          cd = ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
+            all_references(c).mapValues(v => freshSetfromCard(v._2)))
+          constr = Set[BoolExpr]()
+        } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap))
       // TODO Actually add unonwed constraints
-      case cd@ConcreteDesc(c, children, refs) => right(Set((cd, Set[BoolExpr]())))
+      case cd@ConcreteDesc(c, children, refs) =>
+        right(Set((cd, _sh_spatial.modify(_.updated(sym, cd))(heap))))
     }
   }
 
-  //TODO Unfold fields when having abstract desc for access and update
+  def unfold_all(syms : SetLit, heap: SHeap): String \/ Set[SHeap] = {
+    syms.es.toList.foldLeftM[StringE, Set[SHeap]](Set(heap))((heaps: Set[SHeap], b : BasicExpr) =>
+      heaps.toList.map(h =>
+        for {
+          sym <- getSymbol(SetLit(b))
+          symv <- h.spatial.get(sym).cata(right, left(s"Unknown symbol $sym"))
+          newheaps <- unfold(sym, symv, h).map(_.map(_._2))
+        } yield newheaps).sequence[StringE, Set[SHeap]].map(_.toList.flatten.toSet)
+    )
+  }
+
+  def concretise(el: SetLit, heap: SHeap): String \/ Set[SHeap] = ???
+
   def access(sym: Symbols, f: Fields, heap: SHeap): String \/ Set[(SetExpr, SHeap)] = {
     for {
       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-      unfolded <- unfold(symv)
+      unfolded <- unfold(sym, symv, heap)
       res <- unfolded.map(unf => {
-        val (df, constr) = unf
-        val newheap = (_sh_spatial.modify(_.updated(sym, df)) `andThen` _sh_pure.modify(_ ++ constr))(heap)
+        val (df, newheap) = unf
         if (childfields.contains(f))
           for (chld <- df.children.get(f)) yield (chld, newheap)
         else if (reffields.contains(f))
@@ -108,10 +123,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ Set[SHeap] = {
     for {
       symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
-      unfolded <- unfold(symv)
+      unfolded <- unfold(sym, symv, heap)
       res <- unfolded.map(unf => {
-        val (df, constr) = unf
-        val newheap = (_sh_spatial.modify(_.updated(sym, df)) `andThen` _sh_pure.modify(_ ++ constr))(heap)
+        val (df, newheap) = unf
         if (childfields.contains(f)) for {
           _ <- df.children.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(df)))(disown(newheap, ee2))
@@ -123,8 +137,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield res
   }
 
-  def expand(pre: SMem) = {
-    val (newspatial, newqspatial) = pre.heap.qspatial.foldLeft((pre.heap.spatial, Set[QSpatial]())) {
+  def expand(heap: SHeap): SHeap = {
+    val (newspatial, newqspatial) = heap.qspatial.foldLeft((heap.spatial, Set[QSpatial]())) {
       (part : (Spatial[Symbols], Set[QSpatial]), qs : QSpatial) => qs.e match {
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
@@ -135,8 +149,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case _ => (part._1, part._2 + qs)
       }
     }
-    SMem(pre.stack, SHeap(newspatial, newqspatial, pre.heap.pure))
+    SHeap(newspatial, newqspatial, heap.pure)
   }
+
 
   def execute(pres : Set[SMem], c : Statement) : String \/ Set[SMem] = {
     pres.map[String \/ Set[SMem], Set[String \/ Set[SMem]]] { pre: SMem =>
@@ -177,31 +192,37 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           }
         case For(x, m, sb) =>  for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap
-            esols <- m match {
-              case MSet(e) =>
-               for {
-                ee <- evalExpr(pre.stack, e)
-                res <- mf.findSet(ee, beta)
-               } yield res
-              case Match(e, c) =>
-               for {
-                ee <- evalExpr(pre.stack, e)
-                res <- mf.findSet(ee, beta)
-               } yield res // TODO: Do actual matchin
-             case MatchStar(e, c) =>
-               for {
-                ee <- evalExpr(pre.stack, e)
-                res <- mf.findSet(ee, beta)
-               } yield res // TODO: Do actual matching
-            }
+            esols <- for {
+               ee <- evalExpr(pre.stack, _me_e.get(m))
+               res <- mf.findSet(ee, beta)
+             } yield res
             res <- (for {
                 esol: (Map[Symbols, SetLit], SetLit) <- esols.toSet
                 (th, res) = esol
-                newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) => mem.subst(SetSymbol(sub._1), sub._2))
-                newerpre = expand(newpre)
-              } yield res.es.toSet.foldLeftM[StringE, Set[SMem]](Set(newerpre)) { (mems : Set[SMem], sym : BasicExpr) =>
-                execute(mems.map(mem => SMem(mem.stack + (x -> SetLit(sym)), mem.heap)), sb)
-              }).toList.sequence.map(_.toSet.flatten)
+                newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) =>
+                              mem.subst(SetSymbol(sub._1), sub._2)) |> _sm_heap.modify(expand)
+                mres  = {
+                val mres : String \/ Set[(SetLit, SMem)] = m match {
+                  case MSet(e) => Set((res, newpre)) |> right
+                  case Match(e, c) => for {
+                     heaps <- unfold_all(res, newpre.heap)
+                     res <- heaps.toList.map(h => for {
+                      matches <- match_it(res, c, h)
+                     } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
+                  } yield res
+                  case MatchStar(e, c) => for {
+                    heaps <- concretise(res, newpre.heap)
+                    res <- heaps.toList.map(h => for {
+                      matches <- match_it(res, c, h)
+                     } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
+                  } yield res
+                }
+                mres
+                 }
+              } yield mres.flatMap(mr => mr._1.es.toSet.foldLeftM[StringE, Set[SMem]](mr._2) {
+                (mems : Set[SMem], sym : BasicExpr) =>
+                  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
+              })).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
         } yield res
         case Fix(e, sb) => {
           def fixEqCase(bmem: SMem): String \/ Set[SMem] = {
@@ -322,8 +343,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private val mf = new ModelFinder(symCounter, defs)
 
 
-  private val childfields: Set[Fields] = defs.values.flatMap(_.children.map(_._1)).toSet
-  private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.map(_._1)).toSet
+  private val childfields: Set[Fields] = defs.values.flatMap(_.children.keys).toSet
+  private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.keys).toSet
   private val subtypes: Map[Class, Set[Class]] = {
     defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
       cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))

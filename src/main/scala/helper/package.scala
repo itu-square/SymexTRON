@@ -22,7 +22,7 @@ package object helper {
       def transget(s : S) : Set[S] = {
         if (m.contains(s)) {
           val ms = m(s)
-          ms ++ ms.map(transget).flatten
+          ms ++ ms.flatMap(transget)
         }
         else Set()
       }

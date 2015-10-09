@@ -40,6 +40,18 @@ case class MSet(e : SetExpr) extends MatchExpr
 case class Match(e : SetExpr, c : Class) extends MatchExpr
 case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
 
+object MatchExpr {
+  val _me_e = Lens[MatchExpr, SetExpr]({
+      case MSet(e) => e
+      case Match(e, c) => e
+      case MatchStar(e, c) => e
+    })(newe => {
+      case MSet(e) => MSet(newe)
+      case Match(e, c) => Match(newe, c)
+      case MatchStar(e, c) => MatchStar(newe, c)
+    })
+}
+
 sealed abstract class SpatialDesc
 case class AbstractDesc(c : Class, unowned : SetExpr) extends SpatialDesc
 case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
