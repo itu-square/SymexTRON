@@ -25,20 +25,20 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private type StringE[B] = String \/ B
 
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.map {
-    case Symbol(id) => for {
-      symv <- heap.spatial.get(id).cata(right, left(s"Unknown symbol: $id"))
+    case Symbol(ident) => for {
+      symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
       stc <- subtypes.get(c).cata(right, left(s"Unknown class: $c"))
-    } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(id)) else List()
+    } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
     case Var(name) => left(s"Unevaluated var $name")
   }.sequence[StringE, List[BasicExpr]].map(l => SetLit(l.flatten : _*))
 
   def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.map {
-    case e@Symbol(id) => for {
-      symv <- heap.spatial.get(id).cata(right, left(s"Unknown symbol: $id"))
+    case e@Symbol(ident) => for {
+      symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
       cd <- _sd_concrete.getOption(symv).cata(right, left(s"Not a concrete value: $symv"))
       res <- cd.children.values.toList.map({
         case chldv: SetLit => descendants_or_self(chldv, heap)
-        case e => left(s"Not a concrete set: $e")
+        case e2 => left(s"Not a concrete set: $e2")
       }).sequence[StringE, SetLit].map(l => l.flatMap(_.es))
     } yield e :: res
     case Var(name) => left(s"Unevaluated var $name")
@@ -89,11 +89,39 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           sym <- getSymbol(SetLit(b))
           symv <- h.spatial.get(sym).cata(right, left(s"Unknown symbol $sym"))
           newheaps <- unfold(sym, symv, h).map(_.map(_._2))
-        } yield newheaps).sequence[StringE, Set[SHeap]].map(_.toList.flatten.toSet)
+        } yield newheaps).sequence[StringE, Set[SHeap]].map(_.flatten.toSet)
     )
   }
 
-  def concretise(el: SetLit, heap: SHeap): String \/ Set[SHeap] = ???
+  def concretise(el: SetLit, heap: SHeap): String \/ Set[SHeap] = {
+    def concretise_final(el: SetLit, heap: SHeap) = {
+      el.es.foldLeft(heap.some) { (h: Option[SHeap], b: BasicExpr) =>
+        for {
+          hh <- h
+          sym <- b match {
+            case Symbol(id) => id.some
+            case Var(name) => none
+          }
+          symv <- hh.spatial.get(sym)
+          cd <- _sd_concrete.getOption(symv)
+          defc <- defs.get(cd.c)
+          if defc.children.values.forall(_._2.isMany)
+        } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)
+      }
+    }
+    def concretise_helper(el: SetLit, heap: SHeap, depth: Int): String \/ Set[SHeap] = {
+      if (depth <= 0) concretise_final(el, heap).toSet.right
+      else {
+        for {
+          unfolded <- unfold_all(el, heap)
+          res <- for {
+            hh <- unfolded
+          }
+        }
+      }
+    }
+    concretise_helper(el, heap, delta)
+  }
 
   def access(sym: Symbols, f: Fields, heap: SHeap): String \/ Set[(SetExpr, SHeap)] = {
     for {
@@ -261,7 +289,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def getSymbol(e : SetExpr): String \/ Symbols = {
     e match {
-      case SetLit(Symbol(sym)) => right(sym)
+      case SetLit(Symbol(sym)) => sym.right
       case _ => left(s"${PrettyPrinter.pretty(e)} is not a symbol")
     }
   }

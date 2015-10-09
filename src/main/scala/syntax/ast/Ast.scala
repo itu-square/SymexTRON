@@ -7,9 +7,13 @@ import scalaz.\/
 
 case class Class(name: String) // To be defined later
 
-sealed trait Cardinality
-case class Single() extends Cardinality
-case class Many() extends Cardinality
+sealed trait Cardinality { def isMany: Boolean }
+case class Single() extends Cardinality {
+  def isMany = false
+}
+case class Many() extends Cardinality {
+  def isMany = true
+}
 
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
                            refs: Map[Fields, (Class, Cardinality)], supers: Class*)
