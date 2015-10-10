@@ -24,25 +24,25 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
 
-  def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.map {
+  def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
       stc <- subtypes.get(c).cata(right, left(s"Unknown class: $c"))
     } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
     case Var(name) => left(s"Unevaluated var $name")
-  }.sequence[StringE, List[BasicExpr]].map(l => SetLit(l.flatten : _*))
+  }.map(l => SetLit(l.flatten : _*))
 
-  def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.map {
+  def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case e@Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
       cd <- _sd_concrete.getOption(symv).cata(right, left(s"Not a concrete value: $symv"))
-      res <- cd.children.values.toList.map({
+      res <- cd.children.values.toList.traverseU({
         case chldv: SetLit => descendants_or_self(chldv, heap)
         case e2 => left(s"Not a concrete set: $e2")
-      }).sequence[StringE, SetLit].map(l => l.flatMap(_.es))
+      }).map(l => l.flatMap(_.es))
     } yield e :: res
     case Var(name) => left(s"Unevaluated var $name")
-  }.sequence[StringE, List[BasicExpr]].map(l => SetLit(l.flatten :_*))
+  }.map(l => SetLit(l.flatten :_*))
 
   def match_star(set : SetLit, c : Class, heap : SHeap): String \/ SetLit =
     for {
@@ -84,12 +84,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def unfold_all(syms : SetLit, heap: SHeap): String \/ Set[SHeap] = {
     syms.es.toList.foldLeftM[StringE, Set[SHeap]](Set(heap))((heaps: Set[SHeap], b : BasicExpr) =>
-      heaps.toList.map(h =>
+      heaps.traverseU(h =>
         for {
           sym <- getSymbol(SetLit(b))
           symv <- h.spatial.get(sym).cata(right, left(s"Unknown symbol $sym"))
           newheaps <- unfold(sym, symv, h).map(_.map(_._2))
-        } yield newheaps).sequence[StringE, Set[SHeap]].map(_.flatten.toSet)
+        } yield newheaps).map(_.flatten)
     )
   }
 
@@ -107,18 +107,27 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           defc <- defs.get(cd.c)
           if defc.children.values.forall(_._2.isMany)
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)
-      }
+      }.toSet
     }
+    // TODO Convert all SetLit to expression
     def concretise_helper(el: SetLit, heap: SHeap, depth: Int): String \/ Set[SHeap] = {
-      if (depth <= 0) concretise_final(el, heap).toSet.right
-      else {
-        for {
-          unfolded <- unfold_all(el, heap)
-          res <- for {
-            hh <- unfolded
-          }
-        }
-      }
+      if (depth <= 0) concretise_final(el, heap).right
+      else  for {
+        unfolded <- unfold_all(el, heap)
+        res <- unfolded.traverseU(hh => {
+          val childsyms = el.es.flatMap(e =>
+            e.asInstanceOf[Symbol].id.|>(hh.spatial.get)
+              .flatMap(_sd_concrete.getOption).map(_.children.values).get)
+          // Just join everything together
+          val joinede = childsyms.foldLeft(SetLit().asInstanceOf[SetExpr])(Union)
+          for {
+            joinedset_th <- mf.findSet(joinede, beta)
+            joinedset_heap = joinedset_th.map(kv => (hh.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))), kv._2))
+            concretise_further <- joinedset_heap.traverseU(
+              ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.flatten)
+          } yield concretise_final(el, hh) ++ concretise_further
+        })
+      } yield res.flatten
     }
     concretise_helper(el, heap, delta)
   }
@@ -134,7 +143,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         else if (reffields.contains(f))
           for (ref <- df.refs.get(f)) yield (ref, newheap)
         else none
-      }.cata(right, left(s"No value for field $f"))).toList.sequence[StringE, (SetExpr, SHeap)].map(_.toSet)
+      }.cata(right, left(s"No value for field $f"))).sequenceU
     } yield res
   }
 
@@ -161,7 +170,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           _ <- df.refs.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
         } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newheap)
         else left(s"Field $f is neither a child nor a reference field")
-      }).toList.sequence[StringE, SHeap].map(_.toSet)
+      }).sequenceU
     } yield res
   }
 
@@ -207,7 +216,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case If(cs@_*) => {
           val ecs    = cs.map(p => (evalBoolExpr(pre.stack, p._1), p._2))
           val newecs = ecs :+ (for {
-            other <- ecs.map(_._1).toList.sequence[StringE, BoolExpr]
+            other <- ecs.map(_._1).toList.sequenceU
           } yield And(other.map(Not) :_*) -> StmtSeq())
           (for {
             cstmt <- ecs
@@ -216,7 +225,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               eeb <- eb
               res <- execute(Set(SMem(pre.stack, SHeap(pre.heap.spatial, pre.heap.qspatial, pre.heap.pure + eeb))), s)
             } yield res
-          } yield posts).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
+          } yield posts).toSet.sequenceU.map(_.flatten)
           }
         case For(x, m, sb) =>  for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap
@@ -225,41 +234,40 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                res <- mf.findSet(ee, beta)
              } yield res
             res <- (for {
-                esol: (Map[Symbols, SetLit], SetLit) <- esols.toSet
+                esol <- esols.toSet[(Map[Symbols, SetLit], SetLit)]
                 (th, res) = esol
-                newpre = th.foldLeft(pre)((mem: SMem, sub: (Symbols, SetLit)) =>
-                              mem.subst(SetSymbol(sub._1), sub._2)) |> _sm_heap.modify(expand)
+                newpre = pre.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
                 mres  = m match {
                   case MSet(e) => Set((res, newpre)) |> right
                   case Match(e, c) => for {
                      heaps <- unfold_all(res, newpre.heap)
-                     res <- heaps.toList.map(h => for {
+                     res <- heaps.traverseU(h => for {
                       matches <- match_it(res, c, h)
-                     } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
-                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre))).toSet
+                     } yield (matches, h))
+                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre)))
                   case MatchStar(e, c) => for {
                     heaps <- concretise(res, newpre.heap)
-                    res <- heaps.toList.map(h => for {
+                    res <- heaps.traverseU(h => for {
                       matches <- match_it(res, c, h)
-                     } yield (matches, h)).sequence[StringE, (SetLit, SHeap)]
-                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre))).toSet
+                     } yield (matches, h))
+                  } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre)))
                 }
               } yield for {
                 mr <- mres
-                res <- mr.map({ (syms : SetLit, mem : SMem) => syms.es.toSet.foldLeftM[StringE, Set[SMem]](Set(mem)) {
+                res <- mr.traverseU({
+                (syms : SetLit, mem : SMem) => syms.es.toSet.foldLeftM[StringE, Set[SMem]](Set(mem)) {
                  (mems : Set[SMem], sym : BasicExpr) =>  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
-                } }.tupled).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
-              } yield res).toList.sequence[StringE, Set[SMem]].map(_.toSet.flatten)
+                } }.tupled).map(_.flatten)
+              } yield res).sequenceU.map(_.toSet.flatten)
         } yield res
         case Fix(e, sb) => {
           def fixEqCase(bmem: SMem): String \/ Set[SMem] = {
-            execute(Set(bmem), sb).rightMap(mems => mems.map(mem => for {
+            execute(Set(bmem), sb).flatMap(mems => mems.traverseU(mem => for {
               eebefore <- evalExpr(bmem.stack, e)
               eeafter <- evalExpr(mem.stack, e)
             } yield SMem(mem.stack,
                 SHeap(mem.heap.spatial, mem.heap.qspatial, mem.heap.pure + Eq(eebefore, eeafter)))
-            ).toList.sequence[StringE, SMem].map(_.toSet)
-            ).flatMap(identity)
+            ))
           }
           def fixNeqCase(bmem: SMem, k: Int): String \/ Set[SMem] = {
             for {
@@ -276,7 +284,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                   } yield mems1 ++ mems2
                 } yield amems
               } yield amems
-              res <- amems.toList.sequence[StringE, Set[SMem]].rightMap(_.toSet.flatten)
+              res <- amems.sequenceU.map(_.flatten)
             } yield res
           }
           fixNeqCase(pre, kappa)
@@ -307,7 +315,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       e match {
         case SetLit(es @ _*) =>
           for {
-            ees <- es.toList.traverse[StringE, BasicExpr](e => evalBasicExpr(s, e))
+            ees <- es.toList.traverseU(e => evalBasicExpr(s, e))
           } yield SetLit(ees : _*)
         case SetSymbol(ident) => right(SetSymbol(ident))
         case SetVar(name) =>
@@ -344,7 +352,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       } yield Not(ep)
     case And(ps@_*) =>
       for {
-        eps <- ps.map(evalBoolExpr(st, _)).toList.sequence[StringE, BoolExpr]
+        eps <- ps.map(evalBoolExpr(st, _)).toList.sequenceU
       } yield And(eps :_*)
     case SetMem(e1, e2) =>
       for {

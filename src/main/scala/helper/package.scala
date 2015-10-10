@@ -4,7 +4,9 @@ import scala.annotation.elidable
 import scala.annotation.elidable.ASSERTION
 import monocle.Getter
 
-import scalaz.{Monoid, Monad}
+import scalaz.Alpha.B
+import scalaz.Leibniz.===
+import scalaz.{Unapply, Applicative, Monoid, Monad}
 
 package object helper {
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
@@ -40,4 +42,17 @@ package object helper {
    */
   @elidable(ASSERTION)
   def impossible: Nothing = throw new AssertionError("Impossible case reached")
+
+  //TODO Implement these and use instead of List
+
+  implicit class SetExtensions[A](s : Set[A]) {
+    def sequenceU(implicit G: Unapply[Applicative, A]): G.M[Set[G.A]] = {
+      s.traverseU(identity)
+    }
+
+    def traverseU[GB](f : A => GB)(implicit G: Unapply[Applicative, GB]): G.M[Set[G.A]] = {
+      s.foldLeft(G.TC.pure(Set[G.A]()))((ss : G.M[Set[G.A]], el : A) =>
+         G.TC.lift2[Set[G.A], G.A, Set[G.A]](_ + _)(ss, G.apply(f(el))))
+    }
+  }
 }
