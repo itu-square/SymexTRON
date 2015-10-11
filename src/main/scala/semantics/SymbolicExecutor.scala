@@ -74,11 +74,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           st <- sts
           cd = ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
             all_references(c).mapValues(v => freshSetfromCard(v._2)))
-          constr = Set[BoolExpr]()
+          constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) => constr + Eq(ISect(chld._2, unowned), SetLit()))
         } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap))
       // TODO Actually add unonwed constraints
       case cd@ConcreteDesc(c, children, refs) =>
-        right(Set((cd, _sh_spatial.modify(_.updated(sym, cd))(heap))))
+        right(Set((cd, heap)))
     }
   }
 
@@ -111,7 +111,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
     // TODO Convert all SetLit to expression
     def concretise_helper(el: SetLit, heap: SHeap, depth: Int): String \/ Set[SHeap] = {
-      if (depth <= 0) concretise_final(el, heap).right
+      if (depth <= 0) {
+        concretise_final(el, heap).right
+      }
       else  for {
         unfolded <- unfold_all(el, heap)
         res <- unfolded.traverseU(hh => {
@@ -122,7 +124,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           val joinede = childsyms.foldLeft(SetLit().asInstanceOf[SetExpr])(Union)
           for {
             joinedset_th <- mf.findSet(joinede, beta)
-            joinedset_heap = joinedset_th.map(kv => (hh.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))), kv._2))
+            joinedset_heap = joinedset_th.map(kv =>
+              (hh.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))) |> expand, kv._2))
+            _ = joinedset_heap.foreach(p => println(s"jsh1 === ${PrettyPrinter.pretty(p._1)}, jsh2 === ${PrettyPrinter.pretty(p._2)}"))
             concretise_further <- joinedset_heap.traverseU(
               ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.flatten)
           } yield concretise_final(el, hh) ++ concretise_further
@@ -148,12 +152,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   }
 
   def disown(heap: SHeap, ee: SetExpr) : SHeap = {
-    def disownSD(desc: SpatialDesc): SpatialDesc = desc match {
-      case AbstractDesc(c, unowned) => AbstractDesc(c, Union(unowned, ee))
-      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(Diff(_, ee)), refs)
+    def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
+      case AbstractDesc(c, unowned) => _sh_spatial.modify(_.updated(sym, AbstractDesc(c, Union(unowned, ee))))
+      case ConcreteDesc(c, children, refs) => _sh_pure.modify(_ ++ (children.foldLeft(Set[BoolExpr]())(
+                                                                 (cstr : Prop, chld : (String, SetExpr)) => cstr + Eq(ISect(chld._2, ee), SetLit())))) 
     }
     // TODO consider types when disowning things
-    (_sh_spatial.modify(_.mapValues(disownSD)) `andThen`
+    (((h : SHeap) => h.spatial.foldLeft(identity[SHeap] _)((f : SHeap => SHeap, el : (Symbols, SpatialDesc)) =>
+        f `andThen` (disownSD _).tupled(el))(h)) `andThen`
       _sh_qspatial.modify(_.map(_qs_unowned.modify(Union(_ ,ee))))) (heap)
   }
 
@@ -233,11 +239,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                ee <- evalExpr(pre.stack, _me_e.get(m))
                res <- mf.findSet(ee, beta)
              } yield res
-            res <- (for {
-                esol <- esols.toSet[(Map[Symbols, SetLit], SetLit)]
-                (th, res) = esol
-                newpre = pre.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
-                mres  = m match {
+            res <- esols.traverseU(esol => {
+                val (th, res) = esol
+                val newpre = pre.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
+                println(s"th === $th")
+                println(s"res === ${PrettyPrinter.pretty(res)}")
+                println(s"newpre === ${PrettyPrinter.pretty(newpre)}")
+                val mres  = m match {
                   case MSet(e) => Set((res, newpre)) |> right
                   case Match(e, c) => for {
                      heaps <- unfold_all(res, newpre.heap)
@@ -252,13 +260,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                      } yield (matches, h))
                   } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre)))
                 }
-              } yield for {
+               for {
                 mr <- mres
+                _ = mr.foreach(kv => { println(s"matched === ${PrettyPrinter.pretty(kv._1)}"); println(s"ih === ${PrettyPrinter.pretty(kv._2)}") })
                 res <- mr.traverseU({
                 (syms : SetLit, mem : SMem) => syms.es.toSet.foldLeftM[StringE, Set[SMem]](Set(mem)) {
                  (mems : Set[SMem], sym : BasicExpr) =>  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
-                } }.tupled).map(_.flatten)
-              } yield res).sequenceU.map(_.toSet.flatten)
+                }}.tupled).map(_.flatten)
+              } yield res
+              }).map(_.flatten)
         } yield res
         case Fix(e, sb) => {
           def fixEqCase(bmem: SMem): String \/ Set[SMem] = {
@@ -380,7 +390,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private val childfields: Set[Fields] = defs.values.flatMap(_.children.keys).toSet
   private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.keys).toSet
-  private val subtypes: Map[Class, Set[Class]] = {
+  private val subtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
     defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
       cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))
     ).trans

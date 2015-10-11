@@ -80,8 +80,8 @@ object PrettyPrinter {
     s"✪ (el ∈ ${pretty(qspatial.e)}) el <: ${qspatial.c.name} ⟨${pretty(qspatial.unowned)}⟩"
 
   def pretty(heap : SHeap): String =
-    sep(s"${pretty(heap.spatial)}", "★",
-      sep(s"${heap.qspatial.map(pretty).mkString(" ★ ")}}", "∧", s"(${pretty(heap.pure)})"))
+    sep(sep(s"${pretty(heap.spatial)}", "★",
+      s"${heap.qspatial.map(pretty).mkString(" ★ ")}"), "∧", s"(${pretty(heap.pure)})")
 
   def pretty(mem : SMem): String =
     sep(s"${pretty(mem.stack)}", ";", s"${pretty(mem.heap)}")
