@@ -12,7 +12,7 @@ object RunningExample extends App {
   )
   val sourceClassDefs = Set(
     new ClassDefinition("Class", Map("attributes" -> (Class("Attribute"), Single())), Map(), Class("Any")),
-    new ClassDefinition("Attribute", Map(), Map(), Class("Any"))
+    new ClassDefinition("Attribute", Map(), Map("type" -> (Class("String"), Single())), Class("Any"))
   )
   val targetClassDefs = Set(
     new ClassDefinition("Table", Map("columns" -> (Class("Column"), Many())),

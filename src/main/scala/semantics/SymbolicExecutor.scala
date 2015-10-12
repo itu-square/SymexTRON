@@ -27,7 +27,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
-      stc <- subtypes.get(c).cata(right, left(s"Unknown class: $c"))
+      stc <- subtypes.get(c).cata(cs => right(cs + c), left(s"Unknown class: $c"))
     } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
     case Var(name) => left(s"Unevaluated var $name")
   }.map(l => SetLit(l.flatten : _*))
@@ -57,7 +57,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
     def all_references(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
-      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
+      defc.refs ++ defc.supers.map(all_references).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
     def freshSetfromCard(c : Cardinality) = {
       c match {
@@ -69,7 +69,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     sd match {
       case AbstractDesc(c, unowned) => for {
         defc <- defs.get(c).cata(right, left(s"Class definition of $c is unknown"))
-        sts = subtypes(Class(defc.name))
+        sts = subtypes(Class(defc.name)) + (Class(defc.name)) //Include self in subtyping
       } yield for {
           st <- sts
           cd = ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
@@ -83,14 +83,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   }
 
   def unfold_all(syms : SetLit, heap: SHeap): String \/ Set[SHeap] = {
-    syms.es.toList.foldLeftM[StringE, Set[SHeap]](Set(heap))((heaps: Set[SHeap], b : BasicExpr) =>
+    syms.es.toList.foldLeftM[StringE, Set[SHeap]](Set(heap))((heaps: Set[SHeap], b : BasicExpr) => {
       heaps.traverseU(h =>
         for {
           sym <- getSymbol(SetLit(b))
           symv <- h.spatial.get(sym).cata(right, left(s"Unknown symbol $sym"))
           newheaps <- unfold(sym, symv, h).map(_.map(_._2))
         } yield newheaps).map(_.flatten)
-    )
+                                                             })
   }
 
   def concretise(el: SetLit, heap: SHeap): String \/ Set[SHeap] = {
@@ -126,7 +126,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             joinedset_th <- mf.findSet(joinede, beta)
             joinedset_heap = joinedset_th.map(kv =>
               (hh.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))) |> expand, kv._2))
-            _ = joinedset_heap.foreach(p => println(s"jsh1 === ${PrettyPrinter.pretty(p._1)}, jsh2 === ${PrettyPrinter.pretty(p._2)}"))
             concretise_further <- joinedset_heap.traverseU(
               ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.flatten)
           } yield concretise_final(el, hh) ++ concretise_further
@@ -242,9 +241,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             res <- esols.traverseU(esol => {
                 val (th, res) = esol
                 val newpre = pre.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
-                println(s"th === $th")
-                println(s"res === ${PrettyPrinter.pretty(res)}")
-                println(s"newpre === ${PrettyPrinter.pretty(newpre)}")
                 val mres  = m match {
                   case MSet(e) => Set((res, newpre)) |> right
                   case Match(e, c) => for {
@@ -256,13 +252,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                   case MatchStar(e, c) => for {
                     heaps <- concretise(res, newpre.heap)
                     res <- heaps.traverseU(h => for {
-                      matches <- match_it(res, c, h)
+                      matches <- match_star(res, c, h)
                      } yield (matches, h))
                   } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre)))
                 }
                for {
                 mr <- mres
-                _ = mr.foreach(kv => { println(s"matched === ${PrettyPrinter.pretty(kv._1)}"); println(s"ih === ${PrettyPrinter.pretty(kv._2)}") })
                 res <- mr.traverseU({
                 (syms : SetLit, mem : SMem) => syms.es.toSet.foldLeftM[StringE, Set[SMem]](Set(mem)) {
                  (mems : Set[SMem], sym : BasicExpr) =>  execute(mems.map(_sm_stack.modify(_ + (x -> SetLit(sym)))), sb)
@@ -334,15 +329,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case Diff(e1, e2) => for {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
-        } yield Diff(e1, e2)
+        } yield Diff(ee1, ee2)
         case Union(e1, e2) => for {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
-        } yield Union(e1, e2)
+        } yield Union(ee1, ee2)
         case ISect(e1, e2) => for {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
-        } yield ISect(e1, e2)
+        } yield ISect(ee1, ee2)
       }
     }
   
