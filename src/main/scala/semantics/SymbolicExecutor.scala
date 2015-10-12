@@ -59,10 +59,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       val defc = defs(c)
       defc.refs ++ defc.supers.map(all_references).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
-    def freshSetfromCard(c : Cardinality) = {
+    def freshSetfromCard(c : Cardinality) : List[SetExpr] = {
       c match {
-        case Single() => SetLit(Symbol(freshSym))
-        case Many() => SetSymbol(freshSym)
+        case Single() => List(SetLit(Symbol(freshSym)))
+        case Many() => List(SetSymbol(freshSym))
+        case Opt() => List(SetLit(), SetLit(Symbol(freshSym)))
       }
     }
 
@@ -72,8 +73,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         sts = subtypes(Class(defc.name)) + (Class(defc.name)) //Include self in subtyping
       } yield for {
           st <- sts
-          cd = ConcreteDesc(c, all_children(c).mapValues(v => freshSetfromCard(v._2)),
-            all_references(c).mapValues(v => freshSetfromCard(v._2)))
+          chlds <- all_children(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
+          refs <- all_references(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
+          cd = ConcreteDesc(c, chlds, refs)
           constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) => constr + Eq(ISect(chld._2, unowned), SetLit()))
         } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap))
       // TODO Actually add unonwed constraints
@@ -105,7 +107,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           symv <- hh.spatial.get(sym)
           cd <- _sd_concrete.getOption(symv)
           defc <- defs.get(cd.c)
-          if defc.children.values.forall(_._2.isMany)
+          if defc.children.values.forall(_._2.isOptional)
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)
       }.toSet
     }
