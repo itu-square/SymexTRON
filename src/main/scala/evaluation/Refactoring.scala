@@ -153,5 +153,42 @@ object Refactoring {
    , AssignField(SetLit(Var("sclass")), "methods", SetVar("new_sclass_methods"))
   )
 
+  // Assumes that methods that have the same name as the delegate are delegated methods and that field is private
+  // class: Class, field : Field
+  val replaceDelegationWithInheritance : Statement = StmtSeq(
+      LoadField("class_fields", SetLit(Var("class")), "fields")
+    , LoadField("field_type", SetLit(Var("field")), "type")
+    , AssignField(SetLit(Var("class")), "super", SetLit(Var("field_type")))
+    // Remove all delegated methods
+    , LoadField("field_type_methods", SetLit(Var("field_type")), "methods")
+    , LoadField("class_methods", SetLit(Var("class")), "methods")
+    , AssignVar("class_new_methods", SetLit())
+    , For("ftm", MSet(SetVar("field_type_methods")), StmtSeq(
+        For("cm", MSet(SetVar("class_methods")), StmtSeq(
+              LoadField("ftm_name", SetLit(Var("ftm")), "name")
+            , LoadField("cm_name", SetLit(Var("cm")), "name")
+            , If(Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name")))) -> StmtSeq(
+                AssignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Var("cm"))))
+              ))
+          ))
+      ))
+    , AssignField(SetLit(Var("class")), "methods", SetVar("class_new_methods"))
+    // Replace other delegations with calls to the object itself
+    , For("mcexpr", MatchStar(SetLit(Var("class")), Class("MethodCallExpr")), StmtSeq(
+          LoadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
+        , If(ClassMem(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")) -> StmtSeq(
+              LoadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
+            , LoadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
+            , LoadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
+            , LoadField("field_name", SetLit(Var("field")), "name")
+            , If(And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
+                     Eq(SetLit(Var("class")), SetLit(Var("mcexpr_target_target_type")))) -> StmtSeq(
+                         AssignField(SetLit(Var("mcexpr")), "target", SetLit(Var("mcexpr_target_target")))
+                       ))
+          ))
+      ))
+    // Remove the delegate field
+    , AssignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))
+    )
 
 }
