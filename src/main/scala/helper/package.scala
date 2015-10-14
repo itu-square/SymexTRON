@@ -4,9 +4,9 @@ import scala.annotation.elidable
 import scala.annotation.elidable.ASSERTION
 import monocle.Getter
 
-import scalaz.Alpha.B
 import scalaz.Leibniz.===
-import scalaz.{Unapply, Applicative, Monoid, Monad}
+import scalaz.{Unapply, Functor, Applicative, Monoid, Monad}
+import scalaz.stream.Process
 
 package object helper {
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
@@ -54,5 +54,10 @@ package object helper {
       s.foldLeft(G.TC.pure(Set[G.A]()))((ss : G.M[Set[G.A]], el : A) =>
          G.TC.lift2[Set[G.A], G.A, Set[G.A]](_ + _)(ss, G.apply(f(el))))
     }
+  }
+
+  implicit def processMonad[F[_]]: Monad[({ type l[a] = Process[F, a] })#l] = new Monad[({ type l[a] = Process[F, a] })#l] {
+    def point[A](a: => A): Process[F, A] = Process.emit(a)
+    def bind[A, B](fa : Process[F, A])(f : A => Process[F, B]): Process[F, B] = fa.flatMap(f)
   }
 }

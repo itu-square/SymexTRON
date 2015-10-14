@@ -2,18 +2,21 @@ package semantics
 
 import java.util
 
-import helper.Ref
 import kodkod.ast._
 import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
 import kodkod.instance.{Bounds, TupleSet, Universe}
+
 import syntax.ast._
+import helper._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scalaz.\/._
 import scalaz._, Scalaz._
-import helper._
+import scalaz.concurrent.Task
+import scalaz.stream._
+
+
 
 class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map()) {
   private type StringE[T] = String \/ T
@@ -87,8 +90,8 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     case ClassMem(e1, s) => ???
     case SetMem(e1, e2) => for {
         _ <- e1 match {
-          case Var(name) => left(s"Error: unevaluated variable: $name")
-          case _ => right(())
+          case Var(name) => s"Error: unevaluated variable: $name".left
+          case _ => ().right
         }
         ee2 <- evalSetExpr(e2, th)
         (rs2, is2, f2, r2, th2) = ee2
@@ -103,7 +106,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th)
-    case And() => right(Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th)
+    case And() => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
     case And(b,bs@_*) =>
       for {
         eb <- evalBoolExpr(b, th)
@@ -142,23 +145,23 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       val s = freshSet
       val formula = {
         val ss = Variable.unary("ss")
-        if (es.isEmpty) right(ss.join(syms) eq Expression.NONE forAll (ss oneOf s))
+        if (es.isEmpty) (ss.join(syms) eq Expression.NONE forAll (ss oneOf s)).right
         else {
           val sym = Variable.unary("sym")
           val ees:  String \/ List[Formula] = es.map {
-            case Symbol(ident) => right(sym.join(name) eq IntConstant.constant(ident).toExpression)
-            case Var(x) => left(s"Error: unevaluated variable: $name")
+            case Symbol(ident) => (sym.join(name) eq IntConstant.constant(ident).toExpression).right
+            case Var(x) => (s"Error: unevaluated variable: $name").left
           }.toList.sequence[StringE, Formula]
-          ees.fold(left, ees => right {
+          ees.fold(_.left, ees => {
             val ee1 :: ees1 = ees
             (ss.join(syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf Symbols))) forAll (ss oneOf s)
-          })
+          }.right)
         }
       }
-      formula.fold[String \/ EvalRes[Relation]](left, formula => right {
+      formula.fold[String \/ EvalRes[Relation]](_.left, formula => {
         val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
         (Set(s), symbols.toSet, formula, s, th)
-      })
+      }.right)
 
     case Union(e1, e2) =>
       evalBinarySetExpr(e1, _ union _, e2, th)
@@ -167,12 +170,12 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     case ISect(e1, e2) =>
       evalBinarySetExpr(e1, _ intersection _, e2, th)
     case SetSymbol(ident) =>
-      if (th.contains(ident)) right[String, EvalRes[Relation]](Set(), Set(), Formula.TRUE, th(ident), th)
+      if (th.contains(ident)) (Set[Relation](), Set[Integer](), Formula.TRUE, th(ident), th).right[String]
       else {
         val s = freshSet
-        right[String, EvalRes[Relation]](Set(s), Set(), Formula.TRUE, s, th + (ident -> s))
+        (Set[Relation](s), Set[Integer](), Formula.TRUE, s, th + (ident -> s)).right[String]
       }
-    case SetVar(nm) => left(s"Error: unevaluated variable: $nm")
+    case SetVar(nm) => s"Error: unevaluated variable: $nm".left
   }
 
   def evalBinarySetExpr(e1: SetExpr, op: (Expression, Expression) => Expression, e2: SetExpr,
@@ -192,7 +195,7 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def findSet(e : SetExpr, minSymbols : Int): String \/ Set[(Map[Symbols, SetLit], SetLit)] = {
+  def findSet(e : SetExpr, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
       val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
@@ -201,27 +204,26 @@ class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map
       SetLit(rsymids.toList.map(Symbol): _*)
     }
     e match {
-      case lit: SetLit => right(Set((Map[Symbols, SetLit](), lit)))
+      case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
       case _ =>
         val solver = new Solver()
         val ee = evalSetExpr(e)
-        val res = ee.fold[String \/ Set[(Map[Symbols, SetLit], SetLit)]](left, { t => right
-          {
-            val (rs, is, fs, r, th) = t
-            solver.options.setSolver(SATFactory.DefaultSAT4J)
-            solver.options.setSymmetryBreaking(20)
-            val formula = this.constraints and fs
-            val bounds = this.bounds(rs, is, minSymbols)
-            for {
-              sol <- solver.solveAll(formula, bounds).asScala.toSet
+        Process(ee).flatMap(t => (for {
+            tt <- t
+            (rs, is, fs, r, th) = tt
+            _ = solver.options.setSolver(SATFactory.DefaultSAT4J)
+            _ = solver.options.setSymmetryBreaking(20)
+            formula = this.constraints and fs
+            bounds = this.bounds(rs, is, minSymbols)
+            res = for {
+              sol <- io.iterator(Task(solver.solveAll(formula, bounds).asScala))
               if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
               instance = sol.instance
               rels = instance.relationTuples.asScala
             } yield {
               (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
             }
-          }})
-        res.fold(left, it => if (it.size > 0) right(it) else left(s"Error, no solution found"))
+          } yield res).sequenceU)
     }
   }
 

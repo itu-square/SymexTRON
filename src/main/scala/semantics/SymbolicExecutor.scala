@@ -4,7 +4,7 @@ package semantics
 Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
  */
 
-import _root_.syntax.ast.MatchExpr._
+import syntax.ast.MatchExpr._
 import syntax.PrettyPrinter
 import syntax.ast.ConcreteDesc._
 import syntax.ast.QSpatial._
@@ -16,9 +16,8 @@ import semantics.Subst._
 import syntax.ast._
 
 import scala.language.postfixOps
-import scalaz.Scalaz._
-import scalaz.\/.{left, right}
-import scalaz._
+import scalaz._, Scalaz._
+import scalaz.stream._
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
@@ -26,22 +25,22 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case Symbol(ident) => for {
-      symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
-      stc <- subtypes.get(c).cata(cs => right(cs + c), left(s"Unknown class: $c"))
+      symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
+      stc <- subtypes.get(c).cata(cs => (cs + c).right, s"Unknown class: $c".left)
     } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
-    case Var(name) => left(s"Unevaluated var $name")
+    case Var(name) => s"Unevaluated var $name".left
   }.map(l => SetLit(l.flatten : _*))
 
   def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case e@Symbol(ident) => for {
-      symv <- heap.spatial.get(ident).cata(right, left(s"Unknown symbol: $ident"))
-      cd <- _sd_concrete.getOption(symv).cata(right, left(s"Not a concrete value: $symv"))
+      symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
+      cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: $symv".left)
       res <- cd.children.values.toList.traverseU({
         case chldv: SetLit => descendants_or_self(chldv, heap)
-        case e2 => left(s"Not a concrete set: $e2")
+        case e2 => s"Not a concrete set: $e2".left
       }).map(l => l.flatMap(_.es))
     } yield e :: res
-    case Var(name) => left(s"Unevaluated var $name")
+    case Var(name) => s"Unevaluated var $name".left
   }.map(l => SetLit(l.flatten :_*))
 
   def match_star(set : SetLit, c : Class, heap : SHeap): String \/ SetLit =
@@ -50,7 +49,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       m <- match_it(dcs, c, heap)
     } yield m
 
-  def unfold(sym : Symbols, sd : SpatialDesc, heap: SHeap): String \/ Set[(ConcreteDesc, SHeap)] = {
+  def unfold(sym : Symbols, sd : SpatialDesc, heap: SHeap): Process0[String \/ (ConcreteDesc, SHeap)] = {
     def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
       defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
@@ -68,19 +67,26 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
 
     sd match {
-      case AbstractDesc(c, unowned) => for {
-        defc <- defs.get(c).cata(right, left(s"Class definition of $c is unknown"))
-        sts = subtypes(Class(defc.name)) + (Class(defc.name)) //Include self in subtyping
+      case AbstractDesc(c, unowned) =>
+        for {
+           defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
+           sts = subtypes(Class(defc.name)) + Class(defc.name)
+        } yield ???
+        /*
+
+        for {
+        defc <- defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)
+        sts =  //Include self in subtyping
       } yield for {
-          st <- sts
+          st <- Process(sts.toList :_*)
           chlds <- all_children(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
           refs <- all_references(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
           cd = ConcreteDesc(c, chlds, refs)
           constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) => constr + Eq(ISect(chld._2, unowned), SetLit()))
         } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap))
+         */
       // TODO Actually add unonwed constraints
-      case cd@ConcreteDesc(c, children, refs) =>
-        right(Set((cd, heap)))
+      case cd@ConcreteDesc(c, children, refs) => Process((cd, heap).right)
     }
   }
 
@@ -89,7 +95,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       heaps.traverseU(h =>
         for {
           sym <- getSymbol(SetLit(b))
-          symv <- h.spatial.get(sym).cata(right, left(s"Unknown symbol $sym"))
+          symv <- h.spatial.get(sym).cata(_.right, s"Unknown symbol $sym".left)
           newheaps <- unfold(sym, symv, h).map(_.map(_._2))
         } yield newheaps).map(_.flatten)
                                                              })
@@ -139,7 +145,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def access(sym: Symbols, f: Fields, heap: SHeap): String \/ Set[(SetExpr, SHeap)] = {
     for {
-      symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
+      symv <- heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left)
       unfolded <- unfold(sym, symv, heap)
       res <- unfolded.map(unf => {
         val (df, newheap) = unf
@@ -148,7 +154,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         else if (reffields.contains(f))
           for (ref <- df.refs.get(f)) yield (ref, newheap)
         else none
-      }.cata(right, left(s"No value for field $f"))).sequenceU
+      }.cata(_.right, s"No value for field $f".left)).sequenceU
     } yield res
   }
 
@@ -166,17 +172,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ Set[SHeap] = {
     for {
-      symv <- heap.spatial.get(sym).cata(right, left(s"Error, unknown symbol $sym"))
+      symv <- heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left)
       unfolded <- unfold(sym, symv, heap)
       res <- unfolded.map(unf => {
         val (df, newheap) = unf
         if (childfields.contains(f)) for {
-          _ <- df.children.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+          _ <- df.children.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(df)))(disown(newheap, ee2))
         else if (reffields.contains(f)) for {
-          _ <- df.refs.get(f).cata(right, left(s"Error, field $f not allocated for symbol $sym"))
+          _ <- df.refs.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newheap)
-        else left(s"Field $f is neither a child nor a reference field")
+        else s"Field $f is neither a child nor a reference field".left
       }).sequenceU
     } yield res
   }
@@ -205,7 +211,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           ee <- evalExpr(pre.stack, e)
         } yield Set(SMem(pre.stack + (x -> ee), pre.heap))
         case New(x, c) => for {
-          cdef <- defs.get(c).cata(right, left(s"Unknown class: $c"))
+          cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
           xsym = freshSym
           newspatial =
               xsym -> ConcreteDesc(c, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
@@ -244,7 +250,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 val (th, res) = esol
                 val newpre = pre.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
                 val mres  = m match {
-                  case MSet(e) => Set((res, newpre)) |> right
+                  case MSet(e) => Set((res, newpre)).right
                   case Match(e, c) => for {
                      heaps <- unfold_all(res, newpre.heap)
                      res <- heaps.traverseU(h => for {
@@ -297,7 +303,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           fixNeqCase(pre, kappa)
         }
       }
-    }.foldLeft(right[String, Set[SMem]](Set())) { (acc, el) =>
+    }.foldLeft((Set[SMem]()).right[String]) { (acc, el) =>
       for (acc_ <- acc; el_ <- el) yield acc_ ++ el_
     }
   }
@@ -305,17 +311,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def getSymbol(e : SetExpr): String \/ Symbols = {
     e match {
       case SetLit(Symbol(sym)) => sym.right
-      case _ => left(s"${PrettyPrinter.pretty(e)} is not a symbol")
+      case _ => s"${PrettyPrinter.pretty(e)} is not a symbol".left
     }
   }
 
   def evalBasicExpr(s: SStack, e: BasicExpr): String \/ BasicExpr = e match {
-    case Symbol(id) => right(Symbol(id))
+    case Symbol(id) => Symbol(id).right
     case Var(name) =>
-      s.get(name).fold[String \/ BasicExpr](left(s"Error while evaluating expression $e")) {
-            case SetLit(evalue) => right(evalue)
-            case ee => left(s"Not a basic expression: $ee")
-          }
+      s.get(name).cata({
+            case SetLit(evalue) => evalue.right
+            case ee => s"Not a basic expression: $ee".left
+        }, s"Error while evaluating expression $e".left) 
   }
 
   def evalExpr(s : SStack, e : SetExpr) : String \/ SetExpr = {
@@ -324,10 +330,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           for {
             ees <- es.toList.traverseU(e => evalBasicExpr(s, e))
           } yield SetLit(ees : _*)
-        case SetSymbol(ident) => right(SetSymbol(ident))
+        case SetSymbol(ident) => SetSymbol(ident).right
         case SetVar(name) =>
-          // Scalas type inference is really primitive...
-          s.get(name).fold[String \/ SetExpr](left(s"Error while evaluating expression $e"))(right)
+          s.get(name).cata(_.right, s"Error while evaluating expression $e".left)
         case Diff(e1, e2) => for {
           ee1 <- evalExpr(s, e1)
           ee2 <- evalExpr(s, e2)
