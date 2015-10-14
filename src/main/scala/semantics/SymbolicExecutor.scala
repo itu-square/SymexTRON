@@ -1,8 +1,6 @@
 package semantics
 
-/*
-Based on "Symbolic Execution with Separation Logic" by Berdine et al. (2005)
- */
+import scala.language.postfixOps
 
 import syntax.ast.MatchExpr._
 import syntax.PrettyPrinter
@@ -15,13 +13,17 @@ import helper._
 import semantics.Subst._
 import syntax.ast._
 
-import scala.language.postfixOps
 import scalaz._, Scalaz._
 import scalaz.stream._
+import scalaz.concurrent.Task
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
   private type StringE[B] = String \/ B
+  private type TProcess[A] = Process[Task, A]
+  private val pmn = helper.processMonad[Nothing]
+  private val pmt = helper.processMonad[Task]
+
 
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case Symbol(ident) => for {
@@ -70,40 +72,35 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       case AbstractDesc(c, unowned) =>
         for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
-           sts = subtypes(Class(defc.name)) + Class(defc.name)
-        } yield ???
-        /*
-
-        for {
-        defc <- defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)
-        sts =  //Include self in subtyping
-      } yield for {
-          st <- Process(sts.toList :_*)
-          chlds <- all_children(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
-          refs <- all_references(c).mapValues(v => freshSetfromCard(v._2)).sequenceU
-          cd = ConcreteDesc(c, chlds, refs)
-          constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) => constr + Eq(ISect(chld._2, unowned), SetLit()))
-        } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap))
-         */
-      // TODO Actually add unonwed constraints
+           // Type inference is a bit limited for higher-kinded types
+           sts <- defc.traverse(dc => Process((subtypes(Class(dc.name)) + Class(dc.name)).toList : _*))(pmn)
+           cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap)](st => for {
+                     chlds <- Process(all_children(st).mapValues(v => freshSetfromCard(v._2)).sequenceU :_*)
+                     refs  <- Process(all_references(st).mapValues(v => freshSetfromCard(v._2)).sequenceU :_*)
+                     cd = ConcreteDesc(st, chlds, refs)
+                     constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) =>
+                       constr + Eq(ISect(chld._2, unowned), SetLit()))
+                   } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap)))(pmn)
+        } yield cdc
       case cd@ConcreteDesc(c, children, refs) => Process((cd, heap).right)
     }
   }
 
-  def unfold_all(syms : SetLit, heap: SHeap): String \/ Set[SHeap] = {
-    syms.es.toList.foldLeftM[StringE, Set[SHeap]](Set(heap))((heaps: Set[SHeap], b : BasicExpr) => {
-      heaps.traverseU(h =>
-        for {
-          sym <- getSymbol(SetLit(b))
-          symv <- h.spatial.get(sym).cata(_.right, s"Unknown symbol $sym".left)
-          newheaps <- unfold(sym, symv, h).map(_.map(_._2))
-        } yield newheaps).map(_.flatten)
-                                                             })
+  def unfold_all(syms : SetLit, heap: SHeap): Process0[String \/ SHeap] = {
+    syms.es.toList.foldLeft[Process0[String \/ SHeap]](Process(heap.right))((heaps: Process0[String \/ SHeap], b : BasicExpr) => 
+      for {
+        he <- heaps
+        newheaps <- he.flatMap(h => (for {
+           sym <- getSymbol(SetLit(b))
+           symv <- h.spatial.get(sym).cata(_.right, s"Unknown symbol $sym".left)
+           newheaps = unfold(sym, symv, h)
+        } yield newheaps)).traverse(identity)(pmn).map(_.flatMap(identity).map(_._2))
+      } yield newheaps)
   }
 
-  def concretise(el: SetLit, heap: SHeap): String \/ Set[SHeap] = {
-    def concretise_final(el: SetLit, heap: SHeap) = {
-      el.es.foldLeft(heap.some) { (h: Option[SHeap], b: BasicExpr) =>
+  def concretise(el: SetLit, heap: SHeap): Process[Task, String \/ SHeap] = {
+    def concretise_final(el: SetLit, heap: SHeap): Process0[SHeap] = {
+      Process((el.es.foldLeft(heap.some) { (h: Option[SHeap], b: BasicExpr) =>
         for {
           hh <- h
           sym <- b match {
@@ -115,47 +112,49 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           defc <- defs.get(cd.c)
           if defc.children.values.forall(_._2.isOptional)
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)
-      }.toSet
+      }).toSeq : _*)
     }
     // TODO Convert all SetLit to expression
-    def concretise_helper(el: SetLit, heap: SHeap, depth: Int): String \/ Set[SHeap] = {
+    def concretise_helper(el: SetLit, heap: SHeap, depth: Int): Process[Task, String \/ SHeap] = {
       if (depth <= 0) {
-        concretise_final(el, heap).right
+        concretise_final(el, heap).map(_.right)
       }
-      else  for {
+      else for {
         unfolded <- unfold_all(el, heap)
-        res <- unfolded.traverseU(hh => {
+        res <- unfolded.traverse[TProcess, String, String \/ SHeap](h => {
           val childsyms = el.es.flatMap(e =>
-            e.asInstanceOf[Symbol].id.|>(hh.spatial.get)
+            e.asInstanceOf[Symbol].id.|>(h.spatial.get)
               .flatMap(_sd_concrete.getOption).map(_.children.values).get)
           // Just join everything together
           val joinede = childsyms.foldLeft(SetLit().asInstanceOf[SetExpr])(Union)
           for {
             joinedset_th <- mf.findSet(joinede, beta)
             joinedset_heap = joinedset_th.map(kv =>
-              (hh.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))) |> expand, kv._2))
-            concretise_further <- joinedset_heap.traverseU(
-              ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.flatten)
-          } yield concretise_final(el, hh) ++ concretise_further
-        })
-      } yield res.flatten
+              (h.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))) |> expand, kv._2))
+            cfinal = concretise_final(el, h).map(_.right)
+            cfurther = joinedset_heap.traverse[TProcess, String, String \/ SHeap](
+              ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.flatMap(identity))
+            concretised <- cfinal ++ cfurther
+          } yield concretised
+        })(pmt).map(_.flatMap(identity))
+      } yield res
     }
     concretise_helper(el, heap, delta)
   }
 
-  def access(sym: Symbols, f: Fields, heap: SHeap): String \/ Set[(SetExpr, SHeap)] = {
+  def access(sym: Symbols, f: Fields, heap: SHeap): Process0[String \/ (SetExpr, SHeap)] = {
     for {
-      symv <- heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left)
-      unfolded <- unfold(sym, symv, heap)
-      res <- unfolded.map(unf => {
+      symv <- Process(heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
+      unfolded <- symv.traverse(desc => unfold(sym, desc, heap))(pmn).map(_.flatMap(identity))
+      res = unfolded.traverseU(unf => {
         val (df, newheap) = unf
         if (childfields.contains(f))
           for (chld <- df.children.get(f)) yield (chld, newheap)
         else if (reffields.contains(f))
           for (ref <- df.refs.get(f)) yield (ref, newheap)
         else none
-      }.cata(_.right, s"No value for field $f".left)).sequenceU
-    } yield res
+      }.cata(_.right, s"No value for field $f".left))
+    } yield res.flatMap(identity)
   }
 
   def disown(heap: SHeap, ee: SetExpr) : SHeap = {
@@ -170,11 +169,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       _sh_qspatial.modify(_.map(_qs_unowned.modify(Union(_ ,ee))))) (heap)
   }
 
-  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): String \/ Set[SHeap] = {
+  def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): Process0[String \/ SHeap] = {
     for {
-      symv <- heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left)
-      unfolded <- unfold(sym, symv, heap)
-      res <- unfolded.map(unf => {
+      symv <- Process(heap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
+      unfolded <- symv.traverse(desc => unfold(sym, desc, heap))(pmn).map(_.flatMap(identity))
+      res = unfolded.traverseU(unf => {
         val (df, newheap) = unf
         if (childfields.contains(f)) for {
           _ <- df.children.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
@@ -183,8 +182,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           _ <- df.refs.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newheap)
         else s"Field $f is neither a child nor a reference field".left
-      }).sequenceU
-    } yield res
+      })
+    } yield res.flatMap(identity)
   }
 
   def expand(heap: SHeap): SHeap = {
@@ -202,8 +201,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     SHeap(newspatial, newqspatial, heap.pure)
   }
 
-
-  def execute(pres : Set[SMem], c : Statement) : String \/ Set[SMem] = {
+  def execute(pres : Process[Task, String \/ SMem], c : Statement) : Process[Task, String \/ SMem] = {
     pres.map[String \/ Set[SMem], Set[String \/ Set[SMem]]] { pre: SMem =>
       c match {
         case StmtSeq(ss@_*) => ss.toList.foldLeftM[StringE, Set[SMem]](Set(pre))(execute)
@@ -397,7 +395,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))
     ).trans
   }
-
 
   {
     val commoncr = childfields intersect reffields
