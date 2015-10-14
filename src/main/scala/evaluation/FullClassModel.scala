@@ -1,3 +1,5 @@
+package evaluation
+
 import syntax.ast._
 
 object FullClassModel {
@@ -54,4 +56,6 @@ object FullClassModel {
   )
 
   val allDefs = stdClassDefs ++ classDefs
+
+  val allDefsWithKeys = allDefs.map(d => Class(d.name) -> d).toMap
 }

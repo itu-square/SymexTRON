@@ -1,3 +1,5 @@
+package evaluation
+
 import syntax.ast._
 
 object Refactoring {
@@ -18,7 +20,7 @@ object Refactoring {
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
   val renameField: Statement = StmtSeq(
     LoadField("class_fields", SetLit(Var("class")), "fields")
-  , AssignField(SetLit(Var("class")), "class_fields", Union(Diff(SetVar("class_fields"), SetLit(Var("old_field"))), SetLit(Var("new_field"))))
+  , AssignField(SetLit(Var("class")), "fields", Union(Diff(SetVar("class_fields"), SetLit(Var("old_field"))), SetLit(Var("new_field"))))
   , For("faexpr", MatchStar(SetLit(Var("package")), Class("FieldAccessExpr")), StmtSeq(
             LoadField("faexpr_field_name", SetLit(Var("faexpr")), "field_name")
           , LoadField("old_field_name", SetLit(Var("old_field")), "name")

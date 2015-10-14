@@ -25,3 +25,7 @@ libraryDependencies ++= Seq(
   "com.github.julien-truffaut"  %%  "monocle-state"   % monocleLibraryVersion,
   "com.github.julien-truffaut"  %%  "monocle-law"     % monocleLibraryVersion % "test"
 )
+
+libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
+
+fork in Test := true

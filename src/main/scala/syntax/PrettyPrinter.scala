@@ -15,7 +15,7 @@ object PrettyPrinter {
       if (j < 0) j + l else j
     }
     val i = ident / l
-    s"${symbs(j)}${if (i <= 0) "" else s"'$i"}"
+    s"${symbs(j)}${if (ident >= 0) (if (i == 0) "" else s"`$i") else "´"}"
   }
 
   def pretty(e : BasicExpr): String = {
