@@ -3,6 +3,8 @@ package examples
 import semantics.SymbolicExecutor
 import syntax.PrettyPrinter
 import syntax.ast._
+import scalaz._, Scalaz._, scalaz.stream._
+import scalaz.concurrent.Task
 
 object RunningExample extends App {
   val baseClassDefs = Set(
@@ -22,10 +24,10 @@ object RunningExample extends App {
     new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single())), Class("Column"))
   )
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
-  val pre = Set(SMem(Map("class" -> SetLit(Symbol(-1))),
+  val pre = SMem(Map("class" -> SetLit(Symbol(-1))),
                      SHeap(Map(-1 -> ConcreteDesc(Class("Class"), Map("attributes" -> SetSymbol(-2)), Map())),
                            Set(QSpatial(SetSymbol(-2), Class("Attribute"), SetLit())),
-                           Set())))
+                           Set()))
   val prog = StmtSeq(
     New("table", Class("Table")),
     New("idcol", Class("IdColumn")),
@@ -40,6 +42,7 @@ object RunningExample extends App {
     ))
   )
   val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap)
-  println(s"Resulting memory: ${scc.execute(pre, prog).fold(identity, mems =>
-    mems.map(PrettyPrinter.pretty).mkString("\n"))}")
+  val task: Task[Unit] = scc.execute(Process(pre.right), prog).map(path =>
+     Task(println(s"Resulting memory: ${path.fold(identity, mem => PrettyPrinter.pretty(mem)).mkString("\n")}"))).run
+  task.run
 }

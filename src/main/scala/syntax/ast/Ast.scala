@@ -116,4 +116,3 @@ case class If(cs : (BoolExpr, Statement)*) extends Statement
 case class For(x: Vars, m: MatchExpr, sb: Statement)
   extends Statement
 case class Fix(e : SetExpr, sb: Statement) extends Statement
-

@@ -8,6 +8,9 @@ import scalaz.Leibniz.===
 import scalaz.{Unapply, Functor, Applicative, Monoid, Monad}
 import scalaz.stream.Process
 
+sealed trait BlackHole
+case class HoleError() extends Error
+
 package object helper {
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
     def adjust[B1 >: Set[V]](key: K)(f : B1 => B1) = m updated (key, f (m getOrElse(key, Set())))
@@ -42,6 +45,10 @@ package object helper {
    */
   @elidable(ASSERTION)
   def impossible: Nothing = throw new AssertionError("Impossible case reached")
+
+
+  def hole[T]: T = throw new HoleError()
+  def blackHole(hole : BlackHole) : Nothing = throw new HoleError()
 
   //TODO Implement these and use instead of List
 

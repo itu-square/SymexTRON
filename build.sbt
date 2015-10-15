@@ -29,3 +29,5 @@ libraryDependencies ++= Seq(
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
 fork in Test := true
+
+triggeredMessage := Watched.clearWhenTriggered
