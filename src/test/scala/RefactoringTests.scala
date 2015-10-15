@@ -2,6 +2,7 @@ import org.scalatest._
 import syntax.ast._
 import semantics._
 import evaluation._
+import scalaz._, Scalaz._, scalaz.stream._
 
 class RefactoringTests extends FlatSpec with Matchers {
   val symex = new SymbolicExecutor(FullClassModel.allDefsWithKeys, kappa = 2, beta = 5, delta = 7)
@@ -35,7 +36,8 @@ class RefactoringTests extends FlatSpec with Matchers {
                               QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
                               QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
                           Set())
-    val inputMem = Set(SMem(inputStack, inputHeap))
-    symex.execute(inputMem, Refactoring.renameField) should matchPattern { case Right(_) => }
+    val inputMem = Process(SMem(inputStack, inputHeap).right)
+    val p = symex.execute(inputMem, Refactoring.renameField).exists(_.isRight).runLast.map(_.get)
+    p.run shouldBe true
   }
 }
