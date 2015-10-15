@@ -60,11 +60,21 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       val defc = defs(c)
       defc.refs ++ defc.supers.map(all_references).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
-    def freshSetfromCard(c : Cardinality) : List[SetExpr] = {
-      c match {
-        case Single() => List(SetLit(Symbol(freshSym)))
-        case Many() => List(SetSymbol(freshSym))
-        case Opt() => List(SetLit(), SetLit(Symbol(freshSym)))
+    def freshSet(cl : Class, card : Cardinality, unowned : SetExpr) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
+      card match {
+        case Single() => {
+          val sym = freshSym
+          List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl, unowned)), Set[QSpatial]()))
+        }
+        case Many() => {
+          val sym = freshSym
+          List((SetSymbol(sym), Map[Symbols, SpatialDesc](), Set(QSpatial(SetSymbol(sym), cl, unowned))))
+        }
+        case Opt() => {
+          val sym = freshSym
+          List((SetLit(), Map(), Set())
+            , (SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl, unowned)), Set[QSpatial]()))
+        }
       }
     }
 
@@ -75,12 +85,18 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
            // Type inference is a bit limited for higher-kinded types
            sts <- defc.traverse(dc => Process((subtypes(Class(dc.name)) + Class(dc.name)).toList : _*))(pmn)
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap)](st => for {
-                     chlds <- Process(all_children(st).mapValues(v => freshSetfromCard(v._2)).sequenceU :_*)
-                     refs  <- Process(all_references(st).mapValues(v => freshSetfromCard(v._2)).sequenceU :_*)
+                     cs <- Process(all_children(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
+                     rs  <- Process(all_references(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
+                     chlds = cs.mapValues(_._1)
+                     refs  = rs.mapValues(_._1)
+                     all = cs.values.toList ++ rs.values.toList
+                     (_, newspatials, newqspatials) = all.unzip3(identity)
+                     newspatial = newspatials.foldLeft(Map[Symbols, SpatialDesc]())(_ ++ _)
+                     newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
                      cd = ConcreteDesc(st, chlds, refs)
                      constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) =>
                        constr + Eq(ISect(chld._2, unowned), SetLit()))
-                   } yield (cd, (_sh_spatial.modify(_.updated(sym, cd)) `andThen` _sh_pure.modify(_ ++ constr))(heap)))(pmn)
+                   } yield (cd, (_sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial) `andThen` _sh_pure.modify(_ ++ constr))(heap)))(pmn)
         } yield cdc
       case cd@ConcreteDesc(c, children, refs) => Process((cd, heap).right)
     }
