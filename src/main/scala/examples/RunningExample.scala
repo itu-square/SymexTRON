@@ -5,6 +5,7 @@ import syntax.PrettyPrinter
 import syntax.ast._
 import scalaz._, Scalaz._, scalaz.stream._
 import scalaz.concurrent.Task
+import helper._
 
 object RunningExample extends App {
   val baseClassDefs = Set(
@@ -43,6 +44,6 @@ object RunningExample extends App {
   )
   val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap)
   val task: Task[Unit] = scc.execute(Process(pre.right), prog).map(path =>
-     Task(println(s"Resulting memory: ${path.fold(identity, mem => PrettyPrinter.pretty(mem)).mkString("\n")}"))).run
+    s"Resulting memory: ${path.fold(identity, mem => PrettyPrinter.pretty(mem))}").to(io.stdOutLines).run
   task.run
 }

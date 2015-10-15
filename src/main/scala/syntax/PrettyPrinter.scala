@@ -30,26 +30,26 @@ object PrettyPrinter {
       case SetSymbol(ident) => prettySymb(ident).toUpperCase
       case SetVar(name) => name
       case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
-      case Union(e1, e2) => s"${pretty(e1)} ∪ ${pretty(e2)}"
-      case Diff(e1, e2) => s"${pretty(e1)} ∖ ${pretty(e2)}"
-      case ISect(e1, e2) => s"${pretty(e1)} ∩ ${pretty(e2)}"
+      case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
+      case Diff(e1, e2) => s"(${pretty(e1)} ∖ ${pretty(e2)})"
+      case ISect(e1, e2) => s"(${pretty(e1)} ∩ ${pretty(e2)})"
     }
   }
 
   def pretty(sp: BoolExpr): String = sp match {
-    case Eq(e1, e2) => s"${pretty(e1)} = ${pretty(e2)}"
-    case ClassMem(e1, s) => s"${pretty(e1)} : ${s.name}"
-    case SetMem(e1, e2) => s"${pretty(e1)} ∈ ${pretty(e2)}"
-    case SetSub(e1, e2) => s"${pretty(e1)} ⊂ ${pretty(e2)}"
-    case SetSubEq(e1, e2) => s"${pretty(e1)} ⊆ ${pretty(e2)}"
+    case Eq(e1, e2) => s"(${pretty(e1)} = ${pretty(e2)})"
+    case ClassMem(e1, s) => s"(${pretty(e1)} : ${s.name})"
+    case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
+    case SetSub(e1, e2) => s"(${pretty(e1)} ⊂ ${pretty(e2)})"
+    case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
     case And() => "true"
     case And(e, es@_*) => es.foldLeft(pretty(e)) { (s1 : String, b : BoolExpr) => sep(s1, "∧", pretty(b)) }
     case Not(p) => p match {
-      case Eq(e1, e2) => s"${pretty(e1)} ≠ ${pretty(e2)}"
+      case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
-      case SetMem(e1, e2) => s"${pretty(e1)} ∉ ${pretty(e2)}"
-      case SetSub(e1, e2) => s"${pretty(e1)} ⊄ ${pretty(e2)}"
-      case SetSubEq(e1, e2) => s"${pretty(e1)} ⊈ ${pretty(e2)}"
+      case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
+      case SetSub(e1, e2) => s"(${pretty(e1)} ⊄ ${pretty(e2)})"
+      case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
       case And() => "false"
       case And(e, es@_*) if (e +: es) forall (_.isInstanceOf[Not])
          => es.foldLeft(pretty(e)) { (s1 : String, b : BoolExpr) => sep(s1, "∨", pretty(b)) }
