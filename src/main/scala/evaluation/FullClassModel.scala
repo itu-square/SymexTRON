@@ -14,7 +14,7 @@ object FullClassModel {
     , new ClassDefinition("Class",
                           Map("fields" -> ((Class("Field"), Many())),
                               "methods" -> ((Class("Method"), Many()))),
-       Map("super" -> ((Class("Class"), Opt()))), Class("Any")) 
+       Map("super" -> ((Class("Class"), Opt())), "name" -> ((Class("String"), Single()))), Class("Any")) 
    , new ClassDefinition("Field", Map[Fields, (Class, Cardinality)](),
                          Map("name" -> ((Class("String"), Single())),
                              "type" -> ((Class("Class"), Single()))), Class("Any"))

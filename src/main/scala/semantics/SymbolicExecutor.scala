@@ -37,7 +37,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     case e@Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
       cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: $symv".left)
-      res <- cd.children.values.toList.traverseU({
+      res <- cd.children.values.toList.map(s => SetNormalizer.normalize(heap.pure).apply(s).get).traverseU({
         case chldv: SetLit => descendants_or_self(chldv, heap)
         case e2 => s"Not a concrete set: $e2".left
       }).map(l => l.flatMap(_.es))

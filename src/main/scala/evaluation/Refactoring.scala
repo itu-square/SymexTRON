@@ -17,6 +17,38 @@ object Refactoring {
     ))
    )
 
+  val renameFieldInput: SMem = {
+        val packageId        = -1
+        val classId          = -2
+        val oldFieldId       = -3
+        val newFieldId       = -4
+        val packageClassesId = -5
+        val classFieldsId    = -6
+        val classMethodsId   = -7
+        val classNameId      = -8
+        val classSuperId     = -9
+
+        val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
+                             "old_field" -> SetLit(Symbol(oldFieldId)), "new_field" -> SetLit(Symbol(newFieldId)))
+        val inputHeap = SHeap(Map(packageId ->
+                                    ConcreteDesc(Class("Package"),
+                                                 Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
+                                                 Map[Fields, SetExpr]()),
+                                  classId ->
+                                    ConcreteDesc(Class("Class"),
+                                                 Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))),
+                                                     "methods" -> SetSymbol(classMethodsId))
+                                                , Map("name" -> SetLit(Symbol(classNameId)),
+                                                      "super" -> SetSymbol(classSuperId))),
+                                   oldFieldId -> AbstractDesc(Class("Field"), SetLit()),
+                                   newFieldId -> AbstractDesc(Class("Field"), SetLit())),
+                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit()),
+                                  QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                              Set())
+        SMem(inputStack, inputHeap)
+  }
+
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
   val renameField: Statement = StmtSeq(
     LoadField("class_fields", SetLit(Var("class")), "fields")
@@ -36,11 +68,43 @@ object Refactoring {
       ))
   )
 
+  val renameMethodInput: SMem = {
+        val packageId        = -1
+        val classId          = -2
+        val oldMethodId      = -3
+        val newMethodId      = -4
+        val packageClassesId = -5
+        val classFieldsId    = -6
+        val classMethodsId   = -7
+        val classNameId      = -8
+        val classSuperId     = -9
+
+        val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
+                             "old_method" -> SetLit(Symbol(oldMethodId)), "new_method" -> SetLit(Symbol(newMethodId)))
+        val inputHeap = SHeap(Map(packageId ->
+                                    ConcreteDesc(Class("Package"),
+                                                 Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
+                                                 Map[Fields, SetExpr]()),
+                                  classId ->
+                                    ConcreteDesc(Class("Class"),
+                                                 Map("fields" -> SetSymbol(classFieldsId),
+                                                     "methods" -> Union(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
+                                                , Map("name" -> SetLit(Symbol(classNameId)),
+                                                      "super" -> SetSymbol(classSuperId))),
+                                   oldMethodId -> AbstractDesc(Class("Field"), SetLit()),
+                                   newMethodId -> AbstractDesc(Class("Field"), SetLit())),
+                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit()),
+                                  QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                              Set())
+        SMem(inputStack, inputHeap)
+  }
+
   // Input:: package: Package, class: Class, old_method : Method, new_method : Method
   //Assumes overloading is not allowed (but overriding is), things are semantically checked, and that the transformation is applicable
   val renameMethod: Statement  = StmtSeq(
      LoadField("class_methods", SetLit(Var("class")), "methods")
-   , AssignField(SetLit(Var("class")), "class_methods", Union(Diff(SetVar("class_methods"), SetLit(Var("old_method"))), SetLit(Var("new_method"))))
+   , AssignField(SetLit(Var("class")), "methods", Union(Diff(SetVar("class_methods"), SetLit(Var("old_method"))), SetLit(Var("new_method"))))
    , For("oclass", MatchStar(SetLit(Var("package")), Class("Class")), StmtSeq(
            macro__get__supers(SetLit(Var("oclass")), "supers")
          , If(SetMem(Var("class"), SetVar("supers")) -> StmtSeq(
@@ -69,13 +133,34 @@ object Refactoring {
             ))
         ))
    )
+   val extractSuperclassInput: SMem = {
+         val packageId        = -1
+         val class1Id         = -2
+         val class2Id         = -3
+         val scnameId         = -4
+         val packageClassesId = -5
+
+         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class1" -> SetLit(Symbol(class1Id)),
+                              "class2" -> SetLit(Symbol(class2Id)), "sc_name" -> SetLit(Symbol(scnameId)))
+         val inputHeap = SHeap(Map(packageId ->
+                                     ConcreteDesc(Class("Package"),
+                                                  Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
+                                                  Map[Fields, SetExpr]()),
+                                    class1Id -> AbstractDesc(Class("Class"), SetLit()),
+                                    class2Id -> AbstractDesc(Class("Class"), SetLit())),
+                               Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit())),
+                               Set())
+         SMem(inputStack, inputHeap)
+   }
 
   // Input:: class1 : Class, class2 : Class, sc_name : String
   val extractSuperclass: Statement = StmtSeq(
       New("sclass", Class("Class"))
+    , LoadField("package_classes", SetLit(Var("package")), "classes")
+    , AssignField(SetLit(Var("package")), "classes", Union(SetVar("package_classes"), SetLit(Var("sclass"))))
     , AssignField(SetLit(Var("class1")), "super", SetLit(Var("sclass")))
     , AssignField(SetLit(Var("class2")), "super", SetLit(Var("sclass")))
-    , AssignField(SetLit(Var("sclass")), "name", SetLit(Var("scname")))
+    , AssignField(SetLit(Var("sclass")), "name", SetLit(Var("sc_name")))
     // Pull up relevant fields
     , AssignVar("new_sclass_fields", SetLit())
     , AssignVar("new_class1_fields", SetLit())
@@ -155,6 +240,29 @@ object Refactoring {
    , AssignField(SetLit(Var("sclass")), "methods", SetVar("new_sclass_methods"))
   )
 
+  val replaceDelegationWithInheritanceInput: SMem = {
+        val classId          = -1
+        val fieldId          = -2
+        val classFieldsId    = -3
+        val classMethodsId   = -4
+        val classNameId      = -5
+        val classSuperId     = -6
+
+        val inputStack = Map("class" -> SetLit(Symbol(classId)),
+                             "field" -> SetLit(Symbol(fieldId)))
+        val inputHeap = SHeap(Map(classId ->
+                                    ConcreteDesc(Class("Class"),
+                                                 Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(fieldId))),
+                                                     "methods" -> SetSymbol(classMethodsId))
+                                                , Map("name" -> SetLit(Symbol(classNameId)),
+                                                      "super" -> SetSymbol(classSuperId))),
+                                   fieldId -> AbstractDesc(Class("Field"), SetLit())),
+                              Set(QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                              Set())
+        SMem(inputStack, inputHeap)
+  }
+
   // Assumes that methods that have the same name as the delegate are delegated methods and that field is private
   // class: Class, field : Field
   val replaceDelegationWithInheritance : Statement = StmtSeq(
@@ -192,5 +300,31 @@ object Refactoring {
     // Remove the delegate field
     , AssignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))
     )
+
+    def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement, p: scalaz.\/[String, SMem] => Boolean = (_ => true)): Unit = {
+      import syntax.PrettyPrinter
+      import semantics._
+      import scalaz._, Scalaz._, scalaz.stream._
+      import scalaz.concurrent.Task
+
+      val symex = new SymbolicExecutor(FullClassModel.allDefsWithKeys, kappa = 2, beta = 5, delta = 7)
+      val task: Task[Unit] = symex.execute(Process(initialMems : _*).map(_.right), refactoring).filter(p).map(path => path.fold(identity, mem => {
+        val nmem: SMem = SetNormalizer.normalize(mem.heap.pure)(mem).cata(_.asInstanceOf[SMem], mem)
+        s"Resulting memory: ${PrettyPrinter.pretty(nmem)}"})).to(io.stdOutLines).run
+      println("-" * 20)
+      println(s"Starting execution of $name")
+      println("-" * 20)
+      task.run
+      println("-" * 20)
+      println(s"Finished execution of $name")
+      println("-" * 20)
+    }
+
+    def main(args : Array[String]): Unit = {
+      //executeRefactoring("Rename-Field", List(renameFieldInput), renameField, _.isRight)
+      //executeRefactoring("Rename-Method", List(renameMethodInput), renameMethod, _.isRight)
+      //executeRefactoring("Extract-Super-Class", List(extractSuperclassInput), extractSuperclass, _.isRight)
+      executeRefactoring("Replace-Delegation-with-Inheritance", List(replaceDelegationWithInheritanceInput), replaceDelegationWithInheritance)
+    }
 
 }

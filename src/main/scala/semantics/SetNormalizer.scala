@@ -7,7 +7,7 @@ import syntax.ast._
 object SetNormalizer {
   //Use non-deterministic definitions
   // TODO: Improve membership resolution
-  def normalize(props : Prop) : Strategy = repeat("normalize", rule[SetExpr] {
+  def normalize(props : Prop) : Strategy = innermost("normalize", rule[SetExpr] {
     case Union(e1, e2) if e1 == e2 => e1
   } + rule[SetExpr] {
     case ISect(e1, e2) if e1 == e2 => e1
@@ -34,7 +34,7 @@ object SetNormalizer {
     case ISect(SetLit(a), e) if props.contains(Not(SetMem(a, e))) => SetLit()
   } + rule[SetExpr] {
     case Diff(e, SetLit(a)) if props.contains(Not(SetMem(a, e))) => e
-  } + strategy[SetExpr] {
+  }  + strategy[SetExpr] {
     case Union(e1, e2) => {
       val a = props.map(p => p match {
         case SetMem(a, e1_) if e1 == e1_  && props.contains(SetMem(a, e2))
@@ -47,7 +47,12 @@ object SetNormalizer {
       }
     }
   } + rule[SetExpr] {
-    case SetLit(a1, a2, as @ _*) => Union(SetLit(a1), SetLit((a2 +: as) : _*))
+    // TODO Consider equalities in the props as well
+    case Union(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as ++ bs).toSet.toList : _*)
+  } + rule[SetExpr] {
+    case Diff(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as.toSet diff bs.toSet).toList :_*)
+  } + rule[SetExpr] {
+    case ISect(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as.toSet intersect bs.toSet).toList :_*)
   } + rule[SetExpr] {
     case ISect(Union(e1, e2), e3) => Union(ISect(e1, e3), ISect(e2, e3))
     case ISect(e1, Union(e2, e3)) => Union(ISect(e1, e2), ISect(e1, e3))
