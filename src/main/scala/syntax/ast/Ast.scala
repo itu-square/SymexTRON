@@ -106,6 +106,23 @@ object SMem {
   val _sm_heap = GenLens[SMem](_.heap)
 }
 
+case class CHeap(typeenv: Map[Instances, Class],
+                 childenv: Map[Instances, Map[Fields, Set[Instances]]],
+                 refenv: Map[Instances, Map[Fields, Set[Instances]]])
+
+object CHeap {
+  val _ch_typeenv  = GenLens[CHeap](_.typeenv)
+  val _ch_childenv = GenLens[CHeap](_.childenv)
+  val _ch_refenv   = GenLens[CHeap](_.refenv)
+}
+
+case class CMem(stack: CStack, heap: CHeap)
+
+object CMem {
+  val _cm_stack = GenLens[CMem](_.stack)
+  val _cm_heap  = GenLens[CMem](_.heap)
+}
+
 sealed trait Statement
 case class StmtSeq(ss : Statement*) extends Statement
 case class AssignVar(x : Vars, e : SetExpr) extends Statement

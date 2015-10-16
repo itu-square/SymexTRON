@@ -39,6 +39,18 @@ package object helper {
     def get_*(s : S)(implicit m: Monad[M]): M[S] = m.bind(g.get(s))(g.get_*)
   }
 
+  implicit class RichIterable[A](it : Iterable[A]) {
+    def single: Option[A] = {
+      val iter = it.iterator
+      if (iter.hasNext) {
+        val r = iter.next()
+        if (iter.hasNext) {
+          None
+        } else Some(r)
+      } else None
+    }
+  }
+
   /**
    * An expression that fails if ever reached
    * @return no value, since it will always fail if called

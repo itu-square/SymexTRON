@@ -25,10 +25,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private val pmt = helper.processMonad[Task]
 
 
+  //TODO Convert use of SetLit to use of Process0[Symbols] and results to Process0[String \/ Symbols]
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
     case Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
-      stc <- subtypes.get(c).cata(cs => (cs + c).right, s"Unknown class: $c".left)
+      stc <- defs.subtypesOrSelf.get(c).cata(cs => cs.right, s"Unknown class: $c".left)
     } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
     case Var(name) => s"Unevaluated var $name".left
   }.map(l => SetLit(l.join : _*))
@@ -83,7 +84,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
            // Type inference is a bit limited for higher-kinded types
-           sts <- defc.traverse(dc => Process((subtypes(Class(dc.name)) + Class(dc.name)).toList : _*))(pmn)
+           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList : _*))(pmn)
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap)](st => for {
                      cs <- Process(all_children(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
                      rs  <- Process(all_references(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
@@ -164,9 +165,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       unfolded <- symv.traverse(desc => unfold(sym, desc, heap))(pmn).map(_.join)
       res = unfolded.traverseU(unf => {
         val (df, newheap) = unf
-        if (childfields.contains(f))
+        if (defs.childfields.contains(f))
           for (chld <- df.children.get(f)) yield (chld, newheap)
-        else if (reffields.contains(f))
+        else if (defs.reffields.contains(f))
           for (ref <- df.refs.get(f)) yield (ref, newheap)
         else none
       }.cata(_.right, s"No value for field $f".left))
@@ -191,10 +192,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       unfolded <- symv.traverse(desc => unfold(sym, desc, heap))(pmn).map(_.join)
       res = unfolded.traverseU(unf => {
         val (df, newheap) = unf
-        if (childfields.contains(f)) for {
+        if (defs.childfields.contains(f)) for {
           _ <- df.children.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(df)))(disown(newheap, ee2))
-        else if (reffields.contains(f)) for {
+        else if (defs.reffields.contains(f)) for {
           _ <- df.refs.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newheap)
         else s"Field $f is neither a child nor a reference field".left
@@ -411,17 +412,4 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private val mf = new ModelFinder(symCounter, defs)
 
-
-  private val childfields: Set[Fields] = defs.values.flatMap(_.children.keys).toSet
-  private val reffields: Set[Fields]   = defs.values.flatMap(_.refs.keys).toSet
-  private val subtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
-    defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
-      cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))
-    ).trans
-  }
-
-  {
-    val commoncr = childfields intersect reffields
-    assert(commoncr.isEmpty, s"There are overlapping names used for fields and references: ${commoncr.mkString(", ")}")
-  }
 }
