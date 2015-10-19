@@ -79,4 +79,16 @@ package object helper {
     def point[A](a: => A): Process[F, A] = Process.emit(a)
     def bind[A, B](fa : Process[F, A])(f : A => Process[F, B]): Process[F, B] = fa.flatMap(f)
   }
+
+  implicit class UnFunction1[A,B,C](f : (A, B) => C) {
+    def un(b : B)(a : A): C = f (a, b)
+  }
+
+  implicit class UnFunction2[A,B,C,D](f : (A, B, C) => D) {
+    def un(b : B, c : C)(a : A): D = f (a, b, c)
+  }
+
+  implicit class UnFunction3[A,B,C,D,E](f : (A, B, C, D) => E) {
+    def un(b : B, c : C, d : D)(a : A): E = f(a, b, c, d)
+  }
 }
