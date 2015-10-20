@@ -16,6 +16,8 @@ libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.8"
 
 libraryDependencies += "com.googlecode.kiama" %% "kiama" % "1.8.0"
 
+libraryDependencies += "org.scala-stm" %% "scala-stm" % "0.7"
+
 val monocleLibraryVersion = "1.2.0-M1"
 
 libraryDependencies ++= Seq(

@@ -2,8 +2,11 @@ package syntax.ast
 
 import monocle.{POptional, Lens, PLens, Iso}
 import monocle.macros.{GenIso, GenLens, GenPrism}
+import monocle.std.tuple2._
+import monocle.function.Field2._
 import language.higherKinds
-import scalaz.\/
+import scalaz._, Scalaz._
+import helper.Counter
 
 case class Class(name: String) // To be defined later
 
@@ -124,12 +127,75 @@ object CMem {
 }
 
 sealed trait Statement
-case class StmtSeq(ss : Statement*) extends Statement
-case class AssignVar(x : Vars, e : SetExpr) extends Statement
-case class LoadField(x : Vars, e : SetExpr, f : Fields) extends Statement
-case class New(x : Vars, c : Class) extends Statement
-case class AssignField(e1 : SetExpr, f : Fields, e2 : SetExpr) extends Statement
-case class If(cs : (BoolExpr, Statement)*) extends Statement
-case class For(x: Vars, m: MatchExpr, sb: Statement)
+case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
   extends Statement
-case class Fix(e : SetExpr, sb: Statement) extends Statement
+case class AssignVar(metaInf: Statement.MetaInf, x : Vars, e : SetExpr)
+  extends Statement
+case class LoadField(metaInf: Statement.MetaInf, x : Vars, e : SetExpr, f : Fields)
+  extends Statement
+case class New(metaInf: Statement.MetaInf, x : Vars, c : Class)
+  extends Statement
+case class AssignField(metaInf: Statement.MetaInf, e1 : SetExpr, f : Fields, e2 : SetExpr)
+  extends Statement
+case class If(metaInf: Statement.MetaInf, cs : (BoolExpr, Statement)*)
+  extends Statement
+case class For(metaInf: Statement.MetaInf, x: Vars, m: MatchExpr, sb: Statement)
+  extends Statement
+case class Fix(metaInf: Statement.MetaInf, e : SetExpr, sb: Statement)
+  extends Statement
+
+object Statement {
+  sealed trait MetaInf
+  case class MI(uid: Integer) extends MetaInf
+  case class NoMI() extends MetaInf
+
+  val _stmt_metaInf = Lens[Statement, MetaInf]({
+        case StmtSeq(minf, _*) => minf
+        case AssignVar(minf, _, _) => minf
+        case LoadField(minf, _, _, _) => minf
+        case New(minf, _, _) => minf
+        case AssignField(minf, _, _, _) => minf
+        case If(minf, _*) => minf
+        case For(minf, _, _, _) => minf
+        case Fix(minf, _, _) => minf
+  })(nminf => {
+        case StmtSeq(_, ss@_*) => StmtSeq(nminf, ss:_*) // copy doesn't work on list arguments apparently
+        case s: AssignVar => s.copy(metaInf = nminf)
+        case s: LoadField => s.copy(metaInf = nminf)
+        case s: New => s.copy(metaInf = nminf)
+        case s: AssignField => s.copy(metaInf = nminf)
+        case If(_, cs@_*) => If(nminf, cs:_*) // copy doesn't work on list arguments apparently
+        case s: For => s.copy(metaInf = nminf)
+        case s: Fix => s.copy(metaInf = nminf)
+    })
+
+  private val _stmt_mi = _stmt_metaInf composePrism GenPrism[MetaInf, MI]
+  val _stmt_uid = _stmt_mi composeLens GenLens[MI](_.uid)
+
+  def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI(), ss :_*)
+  def assignVar(x : Vars, e : SetExpr) : Statement = AssignVar(NoMI(), x, e)
+  def loadField(x : Vars, e : SetExpr, f : Fields) : Statement = LoadField(NoMI(), x, e, f)
+  def `new`(x : Vars, c : Class) : Statement = New(NoMI(), x, c)
+  def assignField(e1 : SetExpr, f : Fields, e2 : SetExpr) : Statement = AssignField(NoMI(), e1, f, e2)
+  def `if`(css : (BoolExpr, Statement)*) : Statement = If(NoMI(), css :_*)
+  def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI(), x, m, s)
+  def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI(), e, s)
+
+  def annotateUid(s : Statement) : Statement = {
+    val counter = Counter(0)
+    def annotateUidH(s : Statement) : Statement = {
+      val sMInf = MI(counter.++)
+      s match {
+        case StmtSeq(_, ss@_*) => StmtSeq(sMInf, ss.map(annotateUidH) :_*)
+        case AssignVar(_, x, e) => AssignVar(sMInf, x, e)
+        case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
+        case New(_, x, c) => New(sMInf, x, c)
+        case AssignField(_, e1, f, e2) => AssignField(sMInf, e1, f, e2)
+        case If(_, cs@_*) => If(sMInf, cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
+        case For(_, x, m, sb) => For(sMInf, x, m, sb)
+        case Fix(_, e, sb) => Fix(sMInf, e, sb)
+      }
+    }
+    annotateUidH(s)
+  }
+}

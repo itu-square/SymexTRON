@@ -18,7 +18,7 @@ import scalaz.stream._
 
 
 
-class ModelFinder(symcounter : Ref[Int], defs: Map[Class, ClassDefinition] = Map()) {
+class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map()) {
   private type StringE[T] = String \/ T
   private type EvalRes[T] = (Set[Relation], Set[Integer], Formula, T, Map[Symbols, Relation])
 

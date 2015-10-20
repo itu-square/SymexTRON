@@ -221,12 +221,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def execute(pres : Process[Task, String \/ SMem], c : Statement) : Process[Task, String \/ SMem] = {
     pres.flatMap { (pre: String \/ SMem) =>
       c match {
-        case StmtSeq(ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre))(execute)
-        case AssignVar(x, e) => Process(for {
+        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre))(execute)
+        case AssignVar(_,x, e) => Process(for {
           mem <- pre
           ee <- evalExpr(mem.stack, e)
         } yield _sm_stack.modify(_ + (x -> ee))(mem))
-        case New(x, c) => Process(for {
+        case New(_, x, c) => Process(for {
           mem <- pre
           cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
           xsym = freshSym
@@ -234,12 +234,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               xsym -> ConcreteDesc(c, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
         } yield (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) `andThen`
                       (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(mem))
-        case LoadField(x, e, f) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
+        case LoadField(_, x, e, f) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
           sym <- Process(evalExpr(mem.stack, e).flatMap(getSymbol))
           ares <- sym.traverse[TProcess, String, String \/ (SetExpr, SHeap)](s =>
                   access(s, f, mem.heap))(pmt).map(_.join)
         } yield ares.map(p => SMem(mem.stack + (x -> p._1), p._2)))(pmt).map(_.join)
-        case AssignField(e1, f, e2) => pre.traverse[TProcess, String, String \/ SMem](mem =>
+        case AssignField(_, e1, f, e2) => pre.traverse[TProcess, String, String \/ SMem](mem =>
           evalExpr(mem.stack, e1).flatMap(getSymbol).traverse[TProcess, String, String \/ SMem](sym =>
               evalExpr(mem.stack, e2).traverse[TProcess, String, String \/ SMem](ee2 =>
                     for {
@@ -248,11 +248,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               )(pmt).map(_.join)
           )(pmt).map(_.join)
         )(pmt).map(_.join)
-        case If(cs@_*) => pre.traverse[TProcess, String, String \/ SMem]( mem => {
+        case If(_, cs@_*) => pre.traverse[TProcess, String, String \/ SMem]( mem => {
           val ecs    = cs.map(p => evalBoolExpr(mem.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield (And(other.map(Not) :_*).asInstanceOf[BoolExpr] -> StmtSeq())
+          } yield (And(other.map(Not) :_*).asInstanceOf[BoolExpr] -> StmtSeq(Statement.NoMI())) // TODO: Think about metainformation here
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs
@@ -263,7 +263,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             }).map(_.join)
           } yield posts
           }).map(_.join)
-        case For(x, m, sb) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
+        case For(_, x, m, sb) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references
             esolr <- evalExpr(mem.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, SetLit], SetLit)](ee =>
                mf.findSet(ee, beta)).map(_.join)
@@ -300,7 +300,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 } yield res
               })(pmt).map(_.join)
         } yield res)(pmt).map(_.join)
-        case Fix(e, sb) => {
+        case Fix(_, e, sb) => {
           def fixEqCase(bmem: SMem): Process[Task, String \/ SMem] = {
             for {
               sbr <- execute(Process(bmem.right), sb)

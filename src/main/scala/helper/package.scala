@@ -7,6 +7,7 @@ import monocle.Getter
 import scalaz.Leibniz.===
 import scalaz.{Unapply, Functor, Applicative, Monoid, Monad}
 import scalaz.stream.Process
+import scala.concurrent.stm._
 
 sealed trait BlackHole
 case class HoleError() extends Error
@@ -90,5 +91,12 @@ package object helper {
 
   implicit class UnFunction3[A,B,C,D,E](f : (A, B, C, D) => E) {
     def un(b : B, c : C, d : D)(a : A): E = f(a, b, c, d)
+  }
+
+  implicit class TMapExtensions[A,B](m : TMap[A,B]) {
+    def updateValue(k : A, f : B => B) = atomic { implicit txn =>
+      val oldVr = m.get(k)
+      oldVr.foreach(oldV => m.update(k, f(oldV)))
+    }
   }
 }
