@@ -48,8 +48,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], val prog: Statement) {
       os2 <- evalExpr(e2, mem.stack)
       h2 <- update(o, f, os2, mem.heap)
     } yield mem |> _cm_heap.set(h2)) |> Process.emit
-    case If(_, cs @ _*) => {
-      val elseB = (And(cs.map(_._1).map(not): _*), StmtSeq(Statement.NoMI()))
+    case If(_, ds, cs @ _*) => {
+      val elseB = (And(cs.map(_._1).map(not): _*), ds)
       val cs2 = cs :+ elseB
       for {
         gs <- Process.emitAll(cs2)

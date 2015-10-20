@@ -137,7 +137,7 @@ case class New(metaInf: Statement.MetaInf, x : Vars, c : Class)
   extends Statement
 case class AssignField(metaInf: Statement.MetaInf, e1 : SetExpr, f : Fields, e2 : SetExpr)
   extends Statement
-case class If(metaInf: Statement.MetaInf, cs : (BoolExpr, Statement)*)
+case class If(metaInf: Statement.MetaInf, ds: Statement, cs : (BoolExpr, Statement)*)
   extends Statement
 case class For(metaInf: Statement.MetaInf, x: Vars, m: MatchExpr, sb: Statement)
   extends Statement
@@ -155,7 +155,7 @@ object Statement {
         case LoadField(minf, _, _, _) => minf
         case New(minf, _, _) => minf
         case AssignField(minf, _, _, _) => minf
-        case If(minf, _*) => minf
+        case If(minf, _, _*) => minf
         case For(minf, _, _, _) => minf
         case Fix(minf, _, _) => minf
   })(nminf => {
@@ -164,7 +164,7 @@ object Statement {
         case s: LoadField => s.copy(metaInf = nminf)
         case s: New => s.copy(metaInf = nminf)
         case s: AssignField => s.copy(metaInf = nminf)
-        case If(_, cs@_*) => If(nminf, cs:_*) // copy doesn't work on list arguments apparently
+        case If(_, ds, cs@_*) => If(nminf, ds, cs:_*) // copy doesn't work on list arguments apparently
         case s: For => s.copy(metaInf = nminf)
         case s: Fix => s.copy(metaInf = nminf)
     })
@@ -177,7 +177,7 @@ object Statement {
   def loadField(x : Vars, e : SetExpr, f : Fields) : Statement = LoadField(NoMI(), x, e, f)
   def `new`(x : Vars, c : Class) : Statement = New(NoMI(), x, c)
   def assignField(e1 : SetExpr, f : Fields, e2 : SetExpr) : Statement = AssignField(NoMI(), e1, f, e2)
-  def `if`(css : (BoolExpr, Statement)*) : Statement = If(NoMI(), css :_*)
+  def `if`(ds : Statement, css : (BoolExpr, Statement)*) : Statement = If(NoMI(), ds, css :_*)
   def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI(), x, m, s)
   def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI(), e, s)
 
@@ -191,7 +191,7 @@ object Statement {
         case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
         case New(_, x, c) => New(sMInf, x, c)
         case AssignField(_, e1, f, e2) => AssignField(sMInf, e1, f, e2)
-        case If(_, cs@_*) => If(sMInf, cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
+        case If(_, ds, cs@_*) => If(sMInf, ds, cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
         case For(_, x, m, sb) => For(sMInf, x, m, sb)
         case Fix(_, e, sb) => Fix(sMInf, e, sb)
       }

@@ -248,11 +248,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               )(pmt).map(_.join)
           )(pmt).map(_.join)
         )(pmt).map(_.join)
-        case If(_, cs@_*) => pre.traverse[TProcess, String, String \/ SMem]( mem => {
+        case If(_, ds, cs@_*) => pre.traverse[TProcess, String, String \/ SMem]( mem => {
           val ecs    = cs.map(p => evalBoolExpr(mem.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield (And(other.map(Not) :_*).asInstanceOf[BoolExpr] -> StmtSeq(Statement.NoMI())) // TODO: Think about metainformation here
+          } yield (And(other.map(Not) :_*).asInstanceOf[BoolExpr] -> ds)
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs

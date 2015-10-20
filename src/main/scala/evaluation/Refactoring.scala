@@ -10,7 +10,7 @@ object Refactoring {
       assignVar("__cclass", SetLit(Var("oclass")))
     , assignVar(supers, SetLit())
     , fix(SetVar("__cclass"), stmtSeq(
-            `if`(Not(Eq(SetVar("__cclass"), SetLit())) -> stmtSeq(
+            `if`(stmtSeq(), Not(Eq(SetVar("__cclass"), SetLit())) -> stmtSeq(
                  loadField("__cclass_super", SetLit(Var("__cclass")), "super")
                    , assignVar(supers, Union(SetVar(supers), SetVar("__cclass_super")))
                    , assignVar("__cclass", SetVar("__cclass_super"))
@@ -61,7 +61,7 @@ object Refactoring {
           , loadField("faexpr_target_type", SetLit(Var("faexpr_target")), "type")
           , macro__get__supers(SetLit(Var("faexpr_target_type")), "faet_supers")
           , assignVar("faet_supers_or_self", Union(SetVar("faet_supers"), SetLit(Var("faexpr_target_type"))))
-          , `if`(And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
+          , `if`(stmtSeq(), And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
                    SetMem(Var("class"), SetVar("faet_supers_or_self"))) -> stmtSeq(
                  loadField("new_field_name", SetLit(Var("new_field")), "name")
                , assignField(SetLit(Var("faexpr")), "name", SetLit(Var("new_field_name")))
@@ -108,12 +108,12 @@ object Refactoring {
    , assignField(SetLit(Var("class")), "methods", Union(Diff(SetVar("class_methods"), SetLit(Var("old_method"))), SetLit(Var("new_method"))))
    , `for`("oclass", MatchStar(SetLit(Var("package")), Class("Class")), stmtSeq(
            macro__get__supers(SetLit(Var("oclass")), "supers")
-         , `if`(SetMem(Var("class"), SetVar("supers")) -> stmtSeq(
+         , `if`(stmtSeq(), SetMem(Var("class"), SetVar("supers")) -> stmtSeq(
                  loadField("oclass_methods", SetLit(Var("oclass")), "methods")
                 , `for`("m", MSet(SetVar("oclass_methods")), stmtSeq(
                           loadField("m_name", SetLit(Var("m")), "name")
                         , loadField("old_method_name", SetLit(Var("old_method")), "name")
-                        , `if`(Eq(SetVar("m_name"), SetVar("old_method_name")) -> stmtSeq(
+                        , `if`(stmtSeq(), Eq(SetVar("m_name"), SetVar("old_method_name")) -> stmtSeq(
                                loadField("new_method_name", SetLit(Var("new_method")), "name")
                              , assignField(SetLit(Var("m")), "name", SetLit(Var("new_method_name")))
                             ))
@@ -127,7 +127,7 @@ object Refactoring {
         , loadField("mcexpr_target_type", SetLit(Var("mcexpr_target")), "type")
         , macro__get__supers(SetLit(Var("mcexpr_target_type")), "mcet_supers")
         , assignVar("mcet_supers_or_self", Union(SetVar("mcet_supers"), SetLit(Var("mcexpr_target_type"))))
-        , `if`(And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
+        , `if`(stmtSeq(), And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
                 SetMem(Var("class"), SetVar("mcet_supers_or_self"))) -> stmtSeq(
                   loadField("new_method_name", SetLit(Var("new_method")), "name")
                 , assignField(SetLit(Var("mcexpr")), "name", SetLit(Var("new_method_name")))
@@ -172,16 +172,15 @@ object Refactoring {
             `for`("c2f", MSet(SetVar("class2_fields")), stmtSeq(
                      loadField("c1f_name", SetLit(Var("c1f")), "name")
                    , loadField("c2f_name", SetLit(Var("c2f")), "name")
-                   , `if`(Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name"))) -> stmtSeq(
+                   , `if`(stmtSeq(
+                            assignVar("new_class1_fields", Union(SetVar("new_class1_fields"), SetLit(Var("c1f"))))
+                          , assignVar("new_class2_fields", Union(SetVar("new_class2_fields"), SetLit(Var("c2f"))))
+                         ), Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name"))) -> stmtSeq(
                           `new`("scf", Class("Field"))
                          , assignField(SetLit(Var("scf")), "name", SetLit(Var("c1f_name")))
                          , loadField("c1f_type", SetLit(Var("c1f")), "type")
                          , assignField(SetLit(Var("scf")), "type", SetLit(Var("c1f_type")))
                          , assignVar("new_sclass_fields", Union(SetVar("new_sclass_fields"), SetLit(Var("scf"))))
-                        )
-                        , Not(Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name")))) -> stmtSeq(
-                             assignVar("new_class1_fields", Union(SetVar("new_class1_fields"), SetLit(Var("c1f"))))
-                           , assignVar("new_class2_fields", Union(SetVar("new_class2_fields"), SetLit(Var("c2f"))))
                         ))
                 ))
          ))
@@ -198,14 +197,17 @@ object Refactoring {
         `for`("c2m", MSet(SetVar("class2_methods")), stmtSeq(
                   loadField("c1m_name", SetLit(Var("c1m")), "name")
                 , loadField("c2m_name", SetLit(Var("c2m")), "name")
-                , `if`(Eq(SetLit(Var("c1m_name")), SetLit(Var("c2m_name"))) -> stmtSeq(
+                , `if`(stmtSeq(
+                        assignVar("new_class1_methods", Union(SetVar("new_class1_methods"), SetLit(Var("c1m"))))
+                      , assignVar("new_class2_methods", Union(SetVar("new_class2_methods"), SetLit(Var("c2m"))))),
+                      Eq(SetLit(Var("c1m_name")), SetLit(Var("c2m_name"))) -> stmtSeq(
                         `new`("scm", Class("Field"))
                         , assignField(SetLit(Var("scm")), "name", SetLit(Var("c1m_name")))
                         , loadField("c1m_type", SetLit(Var("c1m")), "type")
                         , assignField(SetLit(Var("scm")), "type", SetLit(Var("c1m_type")))
                         , loadField("c1m_params", SetLit(Var("c1m")), "params")
                           // Copy parameter list
-                        , `if`(Not(Eq(SetLit(Var("c1m_params")), SetLit())) -> stmtSeq(
+                        , `if`(stmtSeq(), Not(Eq(SetLit(Var("c1m_params")), SetLit())) -> stmtSeq(
                                 `new`("scm_params", Class("Param"))
                               , loadField("c1m_params_name", SetLit(Var("c1m_params")), "name")
                               , assignField(SetLit(Var("scm_params")), "name", SetLit(Var("c1m_params_name")))
@@ -214,7 +216,7 @@ object Refactoring {
                               , assignVar("scmp_curr", SetLit(Var("scm_params")))
                               , loadField("c1mp_next", SetLit(Var("c1m_params")), "next")
                               , `fix`(SetVar("c1mp_next"),
-                                  `if`(Not(Eq(SetVar("c1mp_next"), SetLit())) -> stmtSeq(
+                                  `if`(stmtSeq(), Not(Eq(SetVar("c1mp_next"), SetLit())) -> stmtSeq(
                                       `new`("scmp_next", Class("Param"))
                                     , loadField("c1mp_next_name", SetLit(Var("c1mp_next")), "name")
                                     , assignField(SetLit(Var("scmp_next")), "name", SetLit(Var("c1mp_next_name")))
@@ -229,10 +231,6 @@ object Refactoring {
                               , assignField(SetLit(Var("scm")), "params", SetLit(Var("scm_params")))
                             ))
                         , assignVar("new_sclass_methods", Union(SetVar("new_sclass_methods"), SetLit(Var("scm"))))
-                    )
-                    , Not(Eq(SetLit(Var("c1m_name")), SetLit(Var("c2m_name")))) -> stmtSeq(
-                          assignVar("new_class1_methods", Union(SetVar("new_class1_methods"), SetLit(Var("c1m"))))
-                        , assignVar("new_class2_methods", Union(SetVar("new_class2_methods"), SetLit(Var("c2m"))))
                     ))
             ))
         ))
@@ -278,7 +276,7 @@ object Refactoring {
         `for`("cm", MSet(SetVar("class_methods")), stmtSeq(
               loadField("ftm_name", SetLit(Var("ftm")), "name")
             , loadField("cm_name", SetLit(Var("cm")), "name")
-            , `if`(Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name")))) -> stmtSeq(
+            , `if`(stmtSeq(), Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name")))) -> stmtSeq(
                 assignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Var("cm"))))
               ))
           ))
@@ -287,12 +285,12 @@ object Refactoring {
     // Replace other delegations with calls to the object itself
     , `for`("mcexpr", MatchStar(SetLit(Var("class")), Class("MethodCallExpr")), stmtSeq(
           loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
-        , `if`(ClassMem(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")) -> stmtSeq(
+        , `if`(stmtSeq(), ClassMem(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")) -> stmtSeq(
               loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
             , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
             , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
             , loadField("field_name", SetLit(Var("field")), "name")
-            , `if`(And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
+            , `if`(stmtSeq(), And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
                      Eq(SetLit(Var("class")), SetLit(Var("mcexpr_target_target_type")))) -> stmtSeq(
                          assignField(SetLit(Var("mcexpr")), "target", SetLit(Var("mcexpr_target_target")))
                        ))
