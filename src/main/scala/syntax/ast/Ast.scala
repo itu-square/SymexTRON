@@ -126,6 +126,8 @@ object CMem {
   val _cm_heap  = GenLens[CMem](_.heap)
 }
 
+case class BranchPoint(stmt_uid: Integer, branch_number: Integer)
+
 sealed trait Statement
 case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
   extends Statement
@@ -181,7 +183,7 @@ object Statement {
   def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI(), x, m, s)
   def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI(), e, s)
 
-  def annotateUid(s : Statement) : Statement = {
+  def annotateUids(s : Statement) : Statement = {
     val counter = Counter(0)
     def annotateUidH(s : Statement) : Statement = {
       val sMInf = MI(counter.++)
@@ -197,5 +199,20 @@ object Statement {
       }
     }
     annotateUidH(s)
+  }
+
+  def branches(s : Statement) : Map[Integer, List[BranchPoint]] = {
+    val uid = _stmt_uid.getOption(s).get
+    s match {
+      case If(_, ds, cs@_*) => Map(uid ->
+              (BranchPoint(uid, 0) :: cs.toList.zipWithIndex.map(p => BranchPoint(uid, p._2 + 1)))) ++
+                 cs.map(p => branches(p._2)).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
+      case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 2) yield BranchPoint(uid, i)).toList) ++
+                                  branches(sb)
+      case Fix(_, _, sb) => Map(uid -> (for (i <- 0 to 2) yield BranchPoint(uid, i)).toList) ++
+                                  branches(sb)
+      case StmtSeq(_, ss@_*) => ss.map(branches _).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
+      case _ => Map(uid -> List())
+    }
   }
 }

@@ -11,76 +11,95 @@ import scalaz.stream._, scalaz.concurrent.Task
 import scala.concurrent.stm._
 import helper._
 
-class ConcreteExecutor(defs: Map[Class, ClassDefinition], val prog: Statement) {
+class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
+  val prog = Statement.annotateUids(_prog)
+
+  val progBranches = Statement.branches(prog)
+
+  private val _stmtCoverage = TMap.empty[Integer, Boolean]
+  private val _branchCoverage = TMap.empty[BranchPoint, Boolean]
+
+  def stmtCoverage = Map(_stmtCoverage.single.toSeq: _*)
+  def branchCoverage = Map(_branchCoverage.single.toSeq: _*)
+
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
-  private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = s match {
-    case StmtSeq(_, ss @_*) =>
-      ss.toList.foldLeft[Process[Task, String \/ CMem]](Process.emit(mem.right)) {
-        (pmem, s) =>
-          for {
-            memr <- pmem
-            res <- memr.traverseU(mem => executeStmt(mem, s)).map(_.join)
-          } yield res
-      }
-    case AssignVar(_, x, e) => (for {
-      os <- evalExpr(e, mem.stack)
-    } yield _cm_stack.modify(_.updated(x, os))(mem)) |> Process.emit
-    case LoadField(_, x, e, f) => (for {
-      os <- evalExpr(e, mem.stack)
-      o <- os.single.cata(_.right, s"Not a single object $os".left)
-      os2 <- access(o, f, mem.heap)
-    } yield _cm_stack.modify(_.updated(x, os2))(mem)) |> Process.emit
-    case New(_, x, c) => (for {
-      defc <- defs.get(c).cata(_.right, s"Unknown class $c".left)
-      o = freshInstance
-      ocs = defc.children.mapValues(_ => Set[Instances]())
-      ors = defc.refs.mapValues(_ => Set[Instances]())
-    } yield (_cm_stack.modify(_.updated(x, Set(o))) `andThen`
-      _cm_heap.modify(
-        _ch_typeenv.modify(_.updated(o, c)) `andThen`
-          _ch_childenv.modify(_.updated(o, ocs)) `andThen`
-          _ch_refenv.modify(_.updated(o, ors))
-      ))(mem)) |> Process.emit
-    case AssignField(_, e1, f, e2) => (for {
-      os <- evalExpr(e1, mem.stack)
-      o <- os.single.cata(_.right, s"Not a single object $os".left)
-      os2 <- evalExpr(e2, mem.stack)
-      h2 <- update(o, f, os2, mem.heap)
-    } yield mem |> _cm_heap.set(h2)) |> Process.emit
-    case If(_, ds, cs @ _*) => {
-      val elseB = (And(cs.map(_._1).map(not): _*), ds)
-      val cs2 = cs :+ elseB
-      for {
-        gs <- Process.emitAll(cs2)
-        gr = evalBoolExpr(gs._1, mem.stack, mem.heap)
-        res <- gr.traverseU(g => if (g) executeStmt(mem, gs._2)
-        else Process.empty).map(_.join)
-      } yield res
+  private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
+    atomic { implicit txn =>
+      val uid = Statement._stmt_uid.getOption(s).get
+      _stmtCoverage.put(uid, true)
     }
-    case For(_, x, m, sb) => for {
-      osr <- evalMatchExpr(m, mem.stack, mem.heap) |> Process.emit
-      res <- osr.traverseU(os =>
-        os.foldLeft[Process[Task, String \/ CMem]](
-          Process.emit(mem.right)
-        ) { (pmem, o) =>
-            pmem.flatMap(_.traverseU(mem =>
-              executeStmt(mem |>
-                _cm_stack.modify(_.updated(x, Set(o))), sb)).map(_.join))
-          }).map(_.join)
-    } yield res
-    case Fix(_, e, sb) => {
-      def fix(mem: CMem): Process[Task, String \/ CMem] = for {
-        nmemr <- executeStmt(mem, sb)
-        res <- nmemr.flatMap(nmem => for {
-          eeb <- evalExpr(e, mem.stack)
-          eea <- evalExpr(e, nmem.stack)
-        } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
-          if (eeb == eea) Process.emit(nmem.right)
-          else fix(nmem)
-        }.tupled).map(_.join)
+    s match {
+      case StmtSeq(_, ss @ _*) => {
+        ss.toList.foldLeft[Process[Task, String \/ CMem]](Process.emit(mem.right)) {
+          (pmem, s) =>
+            for {
+              memr <- pmem
+              res <- memr.traverseU(mem => executeStmt(mem, s)).map(_.join)
+            } yield res
+        }
+      }
+      case AssignVar(_, x, e) => {
+        (for {
+          os <- evalExpr(e, mem.stack)
+        } yield _cm_stack.modify(_.updated(x, os))(mem)) |> Process.emit
+      }
+      case LoadField(_, x, e, f) => (for {
+        os <- evalExpr(e, mem.stack)
+        o <- os.single.cata(_.right, s"Not a single object $os".left)
+        os2 <- access(o, f, mem.heap)
+      } yield _cm_stack.modify(_.updated(x, os2))(mem)) |> Process.emit
+      case New(_, x, c) => (for {
+        defc <- defs.get(c).cata(_.right, s"Unknown class $c".left)
+        o = freshInstance
+        ocs = defc.children.mapValues(_ => Set[Instances]())
+        ors = defc.refs.mapValues(_ => Set[Instances]())
+      } yield (_cm_stack.modify(_.updated(x, Set(o))) `andThen`
+        _cm_heap.modify(
+          _ch_typeenv.modify(_.updated(o, c)) `andThen`
+            _ch_childenv.modify(_.updated(o, ocs)) `andThen`
+            _ch_refenv.modify(_.updated(o, ors))
+        ))(mem)) |> Process.emit
+      case AssignField(_, e1, f, e2) => (for {
+        os <- evalExpr(e1, mem.stack)
+        o <- os.single.cata(_.right, s"Not a single object $os".left)
+        os2 <- evalExpr(e2, mem.stack)
+        h2 <- update(o, f, os2, mem.heap)
+      } yield mem |> _cm_heap.set(h2)) |> Process.emit
+      case If(_, ds, cs @ _*) => {
+        val elseB = (And(cs.map(_._1).map(not): _*), ds)
+        val cs2 = cs :+ elseB
+        for {
+          gs <- Process.emitAll(cs2)
+          gr = evalBoolExpr(gs._1, mem.stack, mem.heap)
+          res <- gr.traverseU(g => if (g) executeStmt(mem, gs._2)
+          else Process.empty).map(_.join)
+        } yield res
+      }
+      case For(_, x, m, sb) => for {
+        osr <- evalMatchExpr(m, mem.stack, mem.heap) |> Process.emit
+        res <- osr.traverseU(os =>
+          os.foldLeft[Process[Task, String \/ CMem]](
+            Process.emit(mem.right)
+          ) { (pmem, o) =>
+              pmem.flatMap(_.traverseU(mem =>
+                executeStmt(mem |>
+                  _cm_stack.modify(_.updated(x, Set(o))), sb)).map(_.join))
+            }).map(_.join)
       } yield res
-      fix(mem)
+      case Fix(_, e, sb) => {
+        def fix(mem: CMem): Process[Task, String \/ CMem] = for {
+          nmemr <- executeStmt(mem, sb)
+          res <- nmemr.flatMap(nmem => for {
+            eeb <- evalExpr(e, mem.stack)
+            eea <- evalExpr(e, nmem.stack)
+          } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
+            if (eeb == eea) Process.emit(nmem.right)
+            else fix(nmem)
+          }.tupled).map(_.join)
+        } yield res
+        fix(mem)
+      }
     }
   }
 
@@ -119,8 +138,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], val prog: Statement) {
     case Symbol(id) => "Unexpected symbol in concrete expression".left
     case Var(name) => stack.get(name).cata(
       res =>
-      if (res.size == 1) res.head.right
-      else s"$name contains a set of instances".left,
+        if (res.size == 1) res.head.right
+        else s"$name contains a set of instances".left,
       s"Unknown variable $name".left
     )
   }
