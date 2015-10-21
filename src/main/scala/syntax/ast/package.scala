@@ -30,7 +30,7 @@ package object ast {
       subtypes.map(((c : Class, sts : Set[Class]) => (c, sts + c)).tupled)
 
     {
-      val commoncr = defs.childfields intersect defs.reffields
+      val commoncr = childfields intersect reffields
       assert(commoncr.isEmpty, s"There are overlapping names used for fields and references: ${commoncr.mkString(", ")}")
     }
   }
