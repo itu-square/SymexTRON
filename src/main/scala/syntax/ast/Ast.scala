@@ -207,9 +207,10 @@ object Statement {
       case If(_, ds, cs@_*) => Map(uid ->
               (BranchPoint(uid, 0) :: cs.toList.zipWithIndex.map(p => BranchPoint(uid, p._2 + 1)))) ++
                  cs.map(p => branches(p._2)).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
-      case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 2) yield BranchPoint(uid, i)).toList) ++
+      // TODO Figure out which branch metric should be used for loops
+      case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)
-      case Fix(_, _, sb) => Map(uid -> (for (i <- 0 to 2) yield BranchPoint(uid, i)).toList) ++
+      case Fix(_, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)
       case StmtSeq(_, ss@_*) => ss.map(branches _).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
       case _ => Map(uid -> List())

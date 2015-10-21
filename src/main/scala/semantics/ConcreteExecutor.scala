@@ -25,8 +25,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
   private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
+    val uid = Statement._stmt_uid.getOption(s).get
     atomic { implicit txn =>
-      val uid = Statement._stmt_uid.getOption(s).get
       _stmtCoverage.put(uid, true)
     }
     s match {
@@ -68,24 +68,31 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       } yield mem |> _cm_heap.set(h2)) |> Process.emit
       case If(_, ds, cs @ _*) => {
         val elseB = (And(cs.map(_._1).map(not): _*), ds)
-        val cs2 = cs :+ elseB
+        val cs2 = elseB +: cs
         for {
-          gs <- Process.emitAll(cs2)
+          gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
           gr = evalBoolExpr(gs._1, mem.stack, mem.heap)
-          res <- gr.traverseU(g => if (g) executeStmt(mem, gs._2)
-          else Process.empty).map(_.join)
+          res <- gr.traverseU(g => if (g) {
+            _branchCoverage.updateValue(BranchPoint(uid, gs._3), _ => true)
+            executeStmt(mem, gs._2)
+          } else Process.empty).map(_.join)
         } yield res
       }
       case For(_, x, m, sb) => for {
         osr <- evalMatchExpr(m, mem.stack, mem.heap) |> Process.emit
-        res <- osr.traverseU(os =>
+        res <- osr.traverseU(os => {
+          if (os.size == 0)
+            _branchCoverage.updateValue(BranchPoint(uid, 0), _ => true)
+          else
+            _branchCoverage.updateValue(BranchPoint(uid, 1), _ => true)
           os.foldLeft[Process[Task, String \/ CMem]](
             Process.emit(mem.right)
           ) { (pmem, o) =>
               pmem.flatMap(_.traverseU(mem =>
                 executeStmt(mem |>
                   _cm_stack.modify(_.updated(x, Set(o))), sb)).map(_.join))
-            }).map(_.join)
+            }
+        }).map(_.join)
       } yield res
       case Fix(_, e, sb) => {
         def fix(mem: CMem): Process[Task, String \/ CMem] = for {
@@ -94,8 +101,13 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
             eeb <- evalExpr(e, mem.stack)
             eea <- evalExpr(e, nmem.stack)
           } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
-            if (eeb == eea) Process.emit(nmem.right)
-            else fix(nmem)
+            if (eeb == eea) {
+              _branchCoverage.updateValue(BranchPoint(uid, 0), _ => true)
+              Process.emit(nmem.right)
+            } else {
+              _branchCoverage.updateValue(BranchPoint(uid, 1), _ => true)
+              fix(nmem)
+            }
           }.tupled).map(_.join)
         } yield res
         fix(mem)
