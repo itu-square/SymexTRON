@@ -4,7 +4,7 @@ resolvers += Resolver.sonatypeRepo("releases")
 
 name := "VeriTRAN"
 
-version := "1.0"
+version := "0.3"
 
 scalaVersion := "2.11.7"
 
@@ -29,6 +29,8 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
+
+libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
 
 fork in Test := true
 
