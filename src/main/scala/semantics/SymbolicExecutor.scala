@@ -252,7 +252,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           val ecs    = cs.map(p => evalBoolExpr(mem.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield (And(other.map(Not) :_*).asInstanceOf[BoolExpr] -> ds)
+          } yield other.map(not).foldLeft[BoolExpr](True())(And(_,_)) -> ds
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs
@@ -385,10 +385,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       for {
         ep <- evalBoolExpr(st, p)
       } yield Not(ep)
-    case And(ps@_*) =>
+    case True() => True().right
+    case And(p1, p2) =>
       for {
-        eps <- ps.map(evalBoolExpr(st, _)).toList.sequenceU
-      } yield And(eps :_*)
+        ep1 <- evalBoolExpr(st, p1)
+        ep2 <- evalBoolExpr(st, p2)
+      } yield And(ep1, ep2)
     case SetMem(e1, e2) =>
       for {
         ee1 <- evalBasicExpr(st, e1)

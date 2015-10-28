@@ -2,6 +2,8 @@ package syntax
 
 import syntax.ast._
 import com.codecommit.gll._
+import com.codecommit.gll.ast._
+import Filters._
 
 object Parser extends RegexParsers {
 
@@ -17,7 +19,7 @@ object Parser extends RegexParsers {
     | (pSetExpr <~ pISectOp) ~ pSetExpr ^^ { ISect(_,_) }
     | (pSetExpr <~ pDiffOp)  ~ pSetExpr ^^ { Diff(_,_) }
     | "(" ~> pSetExpr <~ ")"
-  )
+  ) filter prec(Diff, ISect, Union)
 
   lazy val pUnionOp: Parser[String] = "union" | "∪"
   lazy val pISectOp: Parser[String] = "intersect" | "∩"
@@ -32,7 +34,7 @@ object Parser extends RegexParsers {
     | (pBoolExpr <~ pAndOp)     ~ pBoolExpr ^^ { And(_,_) }
     | (pBoolExpr <~ pOrOp)      ~ pBoolExpr ^^ { (b1, b2) => Not(And(Not(b1),Not(b2))) }
     | pNotOp ~> pBoolExpr                   ^^ { Not(_) }
-    | "true" ^^^ { And() }
+    | "true" ^^^ { True() }
     | "(" ~> pBoolExpr <~ ")"
   )
 
@@ -52,19 +54,19 @@ object Parser extends RegexParsers {
   )
 
   lazy val pVar: Parser[String] = (
-    """[a-z][a-z0-9]*""".r
+    """[a-z][_a-z0-9]*""".r
   )
 
   lazy val pField: Parser[String] = (
-    """[a-z][a-z0-9]*""".r
+    """[a-z][_a-zA-Z0-9]*""".r
   )
 
   lazy val pSetVar: Parser[String] = (
-    """[A-Z][A-Z0-9]*""".r
+    """[A-Z][_A-Z0-9]*""".r
   )
 
   lazy val pClass: Parser[Class] = (
-    """[A-Z][a-zA-Z]*""".r ^^ { Class(_) }
+    """[A-Z][_a-zA-Z0-9]*""".r ^^ { Class(_) }
   )
 
   lazy val pStatement: Parser[Statement] = (

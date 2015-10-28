@@ -61,7 +61,8 @@ object Subst {
         SetMem(e1, ee2)
       case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
-      case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
+      case True() => True()
+      case And(p1, p2) => And(p1.subst(x, e), p2.subst(x, e))
       case Not(pp) => Not(pp.subst(x,e))
     }
 
@@ -73,7 +74,8 @@ object Subst {
         SetMem(e1, ee2)
       case SetSub(e1, e2) => SetSub(e1.subst(x, e), e2.subst(x, e))
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
-      case And(ps@_*) => And(ps.map(_.subst(x, e)) : _*)
+      case True() => True()
+      case And(p1, p2) => And(p1.subst(x, e), p2.subst(x, e))
       case Not(pp) => Not(pp.subst(x,e))
     }
   }

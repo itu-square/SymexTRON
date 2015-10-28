@@ -42,18 +42,18 @@ object PrettyPrinter {
     case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
     case SetSub(e1, e2) => s"(${pretty(e1)} ⊂ ${pretty(e2)})"
     case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
-    case And() => "true"
-    case And(e, es@_*) => es.foldLeft(pretty(e)) { (s1 : String, b : BoolExpr) => sep(s1, "∧", pretty(b)) }
+    case True() => "true"
+    case And(e1, e2) => s"(${pretty(e1)} ∧ ${pretty(e2)})"
     case Not(p) => p match {
       case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
       case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
       case SetSub(e1, e2) => s"(${pretty(e1)} ⊄ ${pretty(e2)})"
       case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
-      case And() => "false"
-      case And(e, es@_*) if (e +: es) forall (_.isInstanceOf[Not])
-         => es.foldLeft(pretty(e)) { (s1 : String, b : BoolExpr) => sep(s1, "∨", pretty(b)) }
-      case And(e, es@_*) => s"¬(${es.foldLeft(pretty(e)) { (s1 : String, b : BoolExpr) => sep(s1, "∧", pretty(b)) }})"
+      case True() => "false"
+      case And(e1 : Not, e2 : Not)
+         => s"(${pretty(e1)} ∨ ${pretty(e2)})"
+      case And(e1, e2) => s"¬(${pretty(e1)} ∧ ${pretty(e2)})"
       case Not(p) => s"${pretty(p)}"
     }
   }

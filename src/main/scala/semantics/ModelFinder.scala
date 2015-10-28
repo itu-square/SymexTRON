@@ -106,23 +106,18 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th)
-    case And() => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
-    case And(b,bs@_*) =>
+    case True() => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
+    case And(b1,b2) =>
       for {
-        eb <- evalBoolExpr(b, th)
-        ebs <- bs.toList.foldLeftM[StringE, EvalRes[Formula]](eb) { (er: EvalRes[Formula], b1: BoolExpr) =>
-          val (rss, iss, fs, rs, ths) = er
-          for {
-            eb1 <- evalBoolExpr(b1, ths)
-            (rs1, is1, fs1, r1, th1) = eb1
-          } yield (rss union rs1, iss union is1, fs and fs1, rs and r1, th1)
-        }
-      } yield ebs
+        eb1 <- evalBoolExpr(b1, th)
+        (rs1, is1, fs1, r1, th1) = eb1
+        eb2 <- evalBoolExpr(b2, th1)
+        (rs2, is2, fs2, r2, th2) = eb2
+      } yield (rs1 union rs2, is1 union is2, fs1 and fs2, r1 and r2, th2)
     case Not(b) => for {
         eb <- evalBoolExpr(b, th)
-        (rs1, is1, f1, b, th1) = eb
-      } yield (rs1, is1, f1, b.not, th1)
-      // TODO Think about local variable shadowing
+        (rs1, is1, f1, r, th1) = eb
+      } yield (rs1, is1, f1, r.not, th1)
   }
 
   def evalBinaryBoolExpr(e1: SetExpr, op: (Expression, Expression) => Formula, e2: SetExpr,

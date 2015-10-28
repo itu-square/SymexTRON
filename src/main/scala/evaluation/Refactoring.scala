@@ -1,22 +1,27 @@
 package evaluation
 
+import syntax._
 import syntax.ast._
 import Statement._
 
 object Refactoring {
 
 
-  def macro__get__supers(c : SetExpr, supers: Vars): Statement = stmtSeq(
-      assignVar("__cclass", SetLit(Var("oclass")))
-    , assignVar(supers, SetLit())
-    , fix(SetVar("__cclass"), stmtSeq(
-            `if`(stmtSeq(), Not(Eq(SetVar("__cclass"), SetLit())) -> stmtSeq(
-                 loadField("__cclass_super", SetLit(Var("__cclass")), "super")
-                   , assignVar(supers, Union(SetVar(supers), SetVar("__cclass_super")))
-                   , assignVar("__cclass", SetVar("__cclass_super"))
-            ))
-    ))
-   )
+  def macro__get__supers(c : String, supers: Vars): Statement = Parser.pStatement(
+    s"""[
+       CCLASS := $c;
+       $supers := {};
+       fix CCLASS do [
+          if
+          | !(CCLASS = {}) -> [ CCLASS_SUPER := CCLASS.super;
+                                $supers := $supers union CCLASS_SUPER;
+                                CCLASS := CLASS_SUPER ]
+          else []
+       ]
+    ] """).head match {
+    case com.codecommit.gll.Success(r, _) => r
+    case com.codecommit.gll.Failure(d, _) => throw new Exception(s"Parse error: $d")
+  }
 
   val renameFieldInput: SMem = {
         val packageId        = -1
@@ -51,7 +56,7 @@ object Refactoring {
   }
 
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
-  val renameField: Statement = stmtSeq(
+  val renameFieldAst: Statement = stmtSeq(
     loadField("class_fields", SetLit(Var("class")), "fields")
   , assignField(SetLit(Var("class")), "fields", Union(Diff(SetVar("class_fields"), SetLit(Var("old_field"))), SetLit(Var("new_field"))))
   , `for`("faexpr", MatchStar(SetLit(Var("package")), Class("FieldAccessExpr")), stmtSeq(
@@ -59,8 +64,8 @@ object Refactoring {
           , loadField("old_field_name", SetLit(Var("old_field")), "name")
           , loadField("faexpr_target", SetLit(Var("faexpr")), "target")
           , loadField("faexpr_target_type", SetLit(Var("faexpr_target")), "type")
-          , macro__get__supers(SetLit(Var("faexpr_target_type")), "faet_supers")
-          , assignVar("faet_supers_or_self", Union(SetVar("faet_supers"), SetLit(Var("faexpr_target_type"))))
+          , macro__get__supers("faexpr_target_type", "FAET_SUPERS")
+          , assignVar("faet_supers_or_self", Union(SetVar("FAET_SUPERS"), SetLit(Var("faexpr_target_type"))))
           , `if`(stmtSeq(), And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
                    SetMem(Var("class"), SetVar("faet_supers_or_self"))) -> stmtSeq(
                  loadField("new_field_name", SetLit(Var("new_field")), "name")
@@ -103,12 +108,12 @@ object Refactoring {
 
   // Input:: package: Package, class: Class, old_method : Method, new_method : Method
   //Assumes overloading is not allowed (but overriding is), things are semantically checked, and that the transformation is applicable
-  val renameMethod: Statement  = stmtSeq(
+  val renameMethodAst: Statement  = stmtSeq(
      loadField("class_methods", SetLit(Var("class")), "methods")
    , assignField(SetLit(Var("class")), "methods", Union(Diff(SetVar("class_methods"), SetLit(Var("old_method"))), SetLit(Var("new_method"))))
    , `for`("oclass", MatchStar(SetLit(Var("package")), Class("Class")), stmtSeq(
-           macro__get__supers(SetLit(Var("oclass")), "supers")
-         , `if`(stmtSeq(), SetMem(Var("class"), SetVar("supers")) -> stmtSeq(
+           macro__get__supers("oclass", "SUPERS")
+         , `if`(stmtSeq(), SetMem(Var("class"), SetVar("SUPERS")) -> stmtSeq(
                  loadField("oclass_methods", SetLit(Var("oclass")), "methods")
                 , `for`("m", MSet(SetVar("oclass_methods")), stmtSeq(
                           loadField("m_name", SetLit(Var("m")), "name")
@@ -125,8 +130,8 @@ object Refactoring {
         , loadField("old_method_name", SetLit(Var("old_method")), "name")
         , loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
         , loadField("mcexpr_target_type", SetLit(Var("mcexpr_target")), "type")
-        , macro__get__supers(SetLit(Var("mcexpr_target_type")), "mcet_supers")
-        , assignVar("mcet_supers_or_self", Union(SetVar("mcet_supers"), SetLit(Var("mcexpr_target_type"))))
+        , macro__get__supers("mcexpr_target_type", "MCET_SUPERS")
+        , assignVar("mcet_supers_or_self", Union(SetVar("MCET_SUPERS"), SetLit(Var("mcexpr_target_type"))))
         , `if`(stmtSeq(), And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
                 SetMem(Var("class"), SetVar("mcet_supers_or_self"))) -> stmtSeq(
                   loadField("new_method_name", SetLit(Var("new_method")), "name")
@@ -155,7 +160,7 @@ object Refactoring {
    }
 
   // Input:: class1 : Class, class2 : Class, sc_name : String
-  val extractSuperclass: Statement = stmtSeq(
+  val extractSuperclassAst: Statement = stmtSeq(
       `new`("sclass", Class("Class"))
     , loadField("package_classes", SetLit(Var("package")), "classes")
     , assignField(SetLit(Var("package")), "classes", Union(SetVar("package_classes"), SetLit(Var("sclass"))))
@@ -264,7 +269,7 @@ object Refactoring {
 
   // Assumes that methods that have the same name as the delegate are delegated methods and that field is private
   // class: Class, field : Field
-  val replaceDelegationWithInheritance : Statement = stmtSeq(
+  val replaceDelegationWithInheritanceAst : Statement = stmtSeq(
       loadField("class_fields", SetLit(Var("class")), "fields")
     , loadField("field_type", SetLit(Var("field")), "type")
     , assignField(SetLit(Var("class")), "super", SetLit(Var("field_type")))
@@ -320,10 +325,10 @@ object Refactoring {
     }
 
     def main(args : Array[String]): Unit = {
-      //executeRefactoring("Rename-Field", List(renameFieldInput), renameField, _.isRight)
+      //executeRefactoring("Rename-Field", List(renameFieldInput), renameFieldAst, _.isRight)
       //executeRefactoring("Rename-Method", List(renameMethodInput), renameMethod, _.isRight)
-      //executeRefactoring("Extract-Super-Class", List(extractSuperclassInput), extractSuperclass, _.isRight)
-      executeRefactoring("Replace-Delegation-with-Inheritance", List(replaceDelegationWithInheritanceInput), replaceDelegationWithInheritance)
+      //executeRefactoring("Extract-Super-Class", List(extractSuperclassInput), extractSuperclassAst, _.isRight)
+      executeRefactoring("Replace-Delegation-with-Inheritance", List(replaceDelegationWithInheritanceInput), replaceDelegationWithInheritanceAst)
     }
 
 }

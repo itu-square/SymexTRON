@@ -5,10 +5,32 @@ import monocle.macros.{GenIso, GenLens, GenPrism}
 import monocle.std.tuple2._
 import monocle.function.Field2._
 import language.higherKinds
-import scalaz._, Scalaz._
+import scalaz.{Node => _, _}, Scalaz._
 import helper.Counter
+import com.codecommit.gll.ast._
 
-case class Class(name: String) // To be defined later
+trait NAryNode extends com.codecommit.gll.ast.Node {
+  import com.codecommit.gll.ast._
+
+  def startSym: Option[scala.Symbol]
+  def endSym:   Option[scala.Symbol]
+  def sepSym:   Option[scala.Symbol]
+
+  override def form: FormSpec = {
+    assert(!children.isEmpty || !startSym.isEmpty, "startSym required when there are no children")
+    assert(!(startSym.isEmpty && endSym.isEmpty && sepSym.isEmpty), "at least one of startSym, endSym or sepSym is required")
+    if (children.isEmpty) {
+      val sf = startSym.get
+      endSym.fold[FormSpec](sf)(sf ~ _)
+    } else {
+      val cf = children.tail.foldLeft[FormSpec](children.head)((fs, n) => fs ~ sepSym.fold[FormSpec](n)(_ ~ n))
+      val ef = endSym.fold[FormSpec](cf)(cf ~ _)
+      startSym.fold[FormSpec](ef)(_ ~ ef)
+    }
+  }
+}
+
+case class Class(name: String) extends LeafNode // To be defined later
 
 sealed trait Cardinality { def isOptional: Boolean }
 case class Single() extends Cardinality {
@@ -24,26 +46,76 @@ case class Opt() extends Cardinality {
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
                            refs: Map[Fields, (Class, Cardinality)], supers: Class*)
 
-sealed trait BasicExpr
-case class Symbol(id: Symbols) extends BasicExpr
-case class Var(name: Vars) extends BasicExpr
+sealed trait BasicExpr extends Node
+case class Symbol(id: Symbols) extends BasicExpr with LeafNode
+case class Var(name: Vars) extends BasicExpr with LeafNode
 
-sealed trait SetExpr
-case class SetLit(es: BasicExpr*) extends SetExpr
-case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr
-case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr
-case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr
-case class SetVar(name: Vars) extends SetExpr
-case class SetSymbol(id: Symbols) extends SetExpr
+sealed trait SetExpr extends Node
+case class SetLit(es: BasicExpr*) extends SetExpr with NAryNode {
+  override val children = es.toList
+  override val startSym = 'sl_start.some
+  override val endSym   = 'sl_end.some
+  override val sepSym   = 'sl_sep.some
+}
+case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+  override val assocLeft = true
+  override val left  = e1
+  override val right = e2
+  override val sym   = 'union
+}
+case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = e1
+  override val right     = e2
+  override val sym       = 'diff
+}
+case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = e1
+  override val right     = e2
+  override val sym       = 'isect
+}
+case class SetVar(name: Vars) extends SetExpr with LeafNode
+case class SetSymbol(id: Symbols) extends SetExpr with LeafNode
 
-sealed trait BoolExpr
-case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr
-case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr
-case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr
-case class SetSub(e1: SetExpr, e2: SetExpr) extends BoolExpr
-case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr
-case class And(bs: BoolExpr*) extends BoolExpr
-case class Not(b: BoolExpr) extends BoolExpr
+sealed trait BoolExpr extends Node
+case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr with LeafNode
+case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr with BinaryNode {
+  override val assocLeft = false
+  override val left      = e1
+  override val right     = s
+  override val sym       = 'classmem
+}
+case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = e1
+  override val right     = e2
+  override val sym       = 'setmem
+}
+case class SetSub(e1: SetExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = e1
+  override val right     = e2
+  override val sym       = 'setsub
+}
+case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = e1
+  override val right     = e2
+  override val sym       = 'setsubeq
+}
+case class And(b1: BoolExpr, b2: BoolExpr) extends BoolExpr with BinaryNode {
+  override val assocLeft = true
+  override val left      = b1
+  override val right     = b2
+  override val sym       = 'and
+}
+case class True() extends BoolExpr with LeafNode
+case class Not(b: BoolExpr) extends BoolExpr with UnaryNode {
+  override val isPrefix = true
+  override val child    = b
+  override val sym      = 'not
+}
 
 sealed trait MatchExpr
 case class MSet(e : SetExpr) extends MatchExpr

@@ -67,7 +67,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         h2 <- update(o, f, os2, mem.heap)
       } yield mem |> _cm_heap.set(h2)) |> Process.emit
       case If(_, ds, cs @ _*) => {
-        val elseB = (And(cs.map(_._1).map(not): _*), ds)
+        val elseB = (cs.map(_._1).map(not).foldLeft[BoolExpr](True())(And(_,_)) , ds)
         val cs2 = elseB +: cs
         for {
           gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
@@ -196,8 +196,11 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
     } yield os1 subsetOf os2
-    case And(bs @ _*) =>
-      bs.toSet.traverseU(b => evalBoolExpr(b, stack, heap)).map(_.fold(true)(_ && _))
+    case True() => true.right
+    case And(b1, b2) => for {
+      bb1 <- evalBoolExpr(b1, stack, heap)
+      bb2 <- evalBoolExpr(b2, stack, heap)
+    } yield bb1 && bb2
     case Not(b) => for {
       bb <- evalBoolExpr(b, stack, heap)
     } yield !bb
