@@ -188,10 +188,6 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       o <- evalBasicExpr(be1, stack)
       os <- evalExpr(e2, stack)
     } yield os.contains(o)
-    case SetSub(e1, e2) => for {
-      os1 <- evalExpr(e1, stack)
-      os2 <- evalExpr(e2, stack)
-    } yield (os1 subsetOf os2) && (os1 != os2)
     case SetSubEq(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)

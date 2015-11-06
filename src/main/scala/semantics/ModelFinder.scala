@@ -104,7 +104,6 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
           }) implies (sym in x.join(syms)) forAll ((sym oneOf Symbols) and (x oneOf r2))
         }
       } yield (rs2, is2, formula and f2, formula, th2)
-    case SetSub(e1, e2) => evalBinaryBoolExpr(e1, (p1, p2) => (p1 in p2) and (p1 eq p2).not, e2, th)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th)
     case True() => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
     case And(b1,b2) =>

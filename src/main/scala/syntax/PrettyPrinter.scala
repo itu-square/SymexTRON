@@ -40,7 +40,6 @@ object PrettyPrinter {
     case Eq(e1, e2) => s"(${pretty(e1)} = ${pretty(e2)})"
     case ClassMem(e1, s) => s"(${pretty(e1)} : ${s.name})"
     case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
-    case SetSub(e1, e2) => s"(${pretty(e1)} ⊂ ${pretty(e2)})"
     case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
     case True() => "true"
     case And(e1, e2) => s"(${pretty(e1)} ∧ ${pretty(e2)})"
@@ -48,7 +47,6 @@ object PrettyPrinter {
       case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
       case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
-      case SetSub(e1, e2) => s"(${pretty(e1)} ⊄ ${pretty(e2)})"
       case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
       case True() => "false"
       case And(e1 : Not, e2 : Not)

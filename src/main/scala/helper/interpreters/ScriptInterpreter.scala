@@ -27,7 +27,7 @@ class ScriptInterpreter private (private val interpreter: ProcessInterpreter) {
 
   def getModel: Option[List[SExpr]] = interpreter.eval(GetModel()) match {
     case GetModelResponseSuccess(r) => r.some
-    case r => print(r); none
+    case _ => none
   }
 
   def free() {

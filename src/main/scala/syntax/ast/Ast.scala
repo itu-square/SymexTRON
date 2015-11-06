@@ -92,12 +92,6 @@ case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
   override val right     = e2
   override val sym       = 'setmem
 }
-case class SetSub(e1: SetExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
-  override val assocLeft = true
-  override val left      = e1
-  override val right     = e2
-  override val sym       = 'setsub
-}
 case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
   override val assocLeft = true
   override val left      = e1

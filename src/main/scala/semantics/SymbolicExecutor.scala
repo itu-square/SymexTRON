@@ -396,11 +396,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         ee1 <- evalBasicExpr(st, e1)
         ee2 <- evalExpr(st, e2)
       } yield SetMem(ee1, ee2)
-    case SetSub(e1, e2) =>
-      for {
-        ee1 <- evalExpr(st, e1)
-        ee2 <- evalExpr(st, e2)
-      } yield SetSub(ee1, ee2)
     case SetSubEq(e1, e2) =>
       for {
         ee1 <- evalExpr(st, e1)
