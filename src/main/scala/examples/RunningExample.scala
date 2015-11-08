@@ -45,6 +45,6 @@ object RunningExample extends App {
   )
   val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap)
   val task: Task[Unit] = scc.execute(Process(pre.right), prog).map(path =>
-    s"Resulting memory: ${path.fold(identity, mem => PrettyPrinter.pretty(mem))}").to(io.stdOutLines).run
+     path.fold(identity, mem => s"Resulting memory: ${PrettyPrinter.pretty(mem)}")).to(io.stdOutLines).run
   task.run
 }

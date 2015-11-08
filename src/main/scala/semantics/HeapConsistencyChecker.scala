@@ -25,7 +25,7 @@ object HeapConsistencyChecker {
        bs.map(Assert(_) : Command) ++ epilogue)
       val res = interpreter.interpret(scr)
       interpreter.satStatus(res).fold(false) {
-          case SatStatus => interpreter.getModel.fold(println("no model"))(print); true
+          case SatStatus => true
           case s => false
       }
     } finally {
@@ -47,6 +47,7 @@ object HeapConsistencyChecker {
   }
 
   def evalSetExpr(th: SymbolMap, e: syntax.ast.SetExpr): (SymbolMap, Term) = e match {
+    case syntax.ast.SetLit() => (th, EmptySet(SetSort(IntSort())))
     case syntax.ast.SetLit(es@_*) => {
       val (thr, esres) = es.foldLeft((th, Seq[Term]()))((st, e) => {
         val (th1, eres) = evalBasicExpr(st._1, e)

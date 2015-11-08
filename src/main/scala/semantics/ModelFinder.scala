@@ -202,6 +202,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       case _ =>
         val solver = new Solver()
         val ee = evalSetExpr(e)
+        // TODO Add relevant constraints from heap
         Process(ee).flatMap(t => (for {
             tt <- t
             (rs, is, fs, r, th) = tt

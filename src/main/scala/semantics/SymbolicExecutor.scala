@@ -220,7 +220,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def execute(pres : Process[Task, String \/ SMem], c : Statement) : Process[Task, String \/ SMem] = {
     pres.flatMap { (pre: String \/ SMem) =>
-      c match {
+      if (pre.fold(_ => false, mem => !HeapConsistencyChecker.isConsistent(mem.heap))) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.toOption.get.heap)}".left)
+      else c match {
         case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre))(execute)
         case AssignVar(_,x, e) => Process(for {
           mem <- pre
