@@ -16,6 +16,9 @@ import syntax.ast._
 import scalaz._, Scalaz._
 import scalaz.stream._
 import scalaz.concurrent.Task
+import monocle.syntax._
+import monocle.function._
+import monocle.std.tuple2._
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
@@ -61,33 +64,33 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       val defc = defs(c)
       defc.refs ++ defc.supers.map(all_references).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
     }
-    def freshSet(cl : Class, card : Cardinality, unowned : SetExpr) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
+    def freshSet(cl : Class, card : Cardinality) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
       card match {
         case Single() => {
           val sym = freshSym
-          List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl, unowned)), Set[QSpatial]()))
+          List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
         }
         case Many() => {
           val sym = freshSym
-          List((SetSymbol(sym), Map[Symbols, SpatialDesc](), Set(QSpatial(SetSymbol(sym), cl, unowned))))
+          List((SetSymbol(cl, sym), Map[Symbols, SpatialDesc](), Set(QSpatial(SetSymbol(cl, sym), cl))))
         }
         case Opt() => {
           val sym = freshSym
           List((SetLit(), Map(), Set())
-            , (SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl, unowned)), Set[QSpatial]()))
+            , (SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
         }
       }
     }
 
     sd match {
-      case AbstractDesc(c, unowned) =>
+      case AbstractDesc(c) =>
         for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
            // Type inference is a bit limited for higher-kinded types
            sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList : _*))(pmn)
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap)](st => for {
-                     cs <- Process(all_children(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
-                     rs  <- Process(all_references(st).mapValues(v => freshSet(v._1, v._2, unowned)).sequenceU :_*)
+                     cs <- Process(all_children(st).mapValues(v => freshSet(v._1, v._2)).sequenceU :_*)
+                     rs  <- Process(all_references(st).mapValues(v => freshSet(v._1, v._2)).sequenceU :_*)
                      chlds = cs.mapValues(_._1)
                      refs  = rs.mapValues(_._1)
                      all = cs.values.toList ++ rs.values.toList
@@ -95,9 +98,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                      newspatial = newspatials.foldLeft(Map[Symbols, SpatialDesc]())(_ ++ _)
                      newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
                      cd = ConcreteDesc(st, chlds, refs)
-                     constr = cd.children.foldLeft(Set[BoolExpr]())((constr : Prop, chld : (Fields, SetExpr)) =>
-                       constr + Eq(ISect(chld._2, unowned), SetLit()))
-                   } yield (cd, (_sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial) `andThen` _sh_pure.modify(_ ++ constr))(heap)))(pmn)
+                   } yield (cd, (_sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial))(heap)))(pmn)
         } yield cdc
       case cd@ConcreteDesc(c, children, refs) => Process((cd, heap).right)
     }
@@ -109,7 +110,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         he <- heaps
         newheaps <- he.flatMap(h => (for {
            sym <- getSymbol(SetLit(b))
-           symv <- h.spatial.get(sym).cata(_.right, s"Unknown symbol $sym".left)
+           _ = println(PrettyPrinter.pretty(h))
+           symv <- h.spatial.get(sym).cata(_.right, s"Unknown symbol: ${PrettyPrinter.pretty(Symbol(sym))}".left)
            newheaps = unfold(sym, symv, h)
         } yield newheaps)).traverse(identity)(pmn).map(_.join.map(_._2))
       } yield newheaps)
@@ -147,7 +149,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           for {
             joinedset_th <- mf.findSet(joinede, beta)
             joinedset_heap = joinedset_th.map(kv =>
-              (h.subst_all(kv._1.map(p => (SetSymbol(p._1), p._2))) |> expand, kv._2))
+              (h.subst_all(kv._1) |> expand, kv._2))
             cfinal = concretise_final(el, h).map(_.right)
             cfurther = joinedset_heap.traverse[TProcess, String, String \/ SHeap](
               ((hhh : SHeap, els : SetLit) => concretise_helper(els, hhh, depth - 1)).tupled).map(_.join)
@@ -176,14 +178,33 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def disown(heap: SHeap, ee: SetExpr) : SHeap = {
     def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
-      case AbstractDesc(c, unowned) => _sh_spatial.modify(_.updated(sym, AbstractDesc(c, Union(unowned, ee))))
-      case ConcreteDesc(c, children, refs) => _sh_pure.modify(_ ++ (children.foldLeft(Set[BoolExpr]())(
-                                                                 (cstr : Prop, chld : (String, SetExpr)) => cstr + Eq(ISect(chld._2, ee), SetLit()))))
+      case cd@ConcreteDesc(c, children, refs) => {
+        val (newchildren, newconstrs) =
+          children.foldLeft((Map[String, SetExpr](), Set[BoolExpr]()))(
+            (st, chld) => {
+              val preve = chld._2
+              //TODO Handle safely and find more precise type by infering on preve
+              val ssym = SetSymbol(defs.fieldType(c, chld._1).get, freshSym)
+              val cstrs =
+                   Set(SetSubEq(ssym, preve), Eq(ISect(ssym, ee), SetLit()))
+              st.applyLens(first).modify(_.updated(chld._1, ssym))
+                .applyLens(second).modify(_ ++ cstrs)
+            }
+          )
+        _sh_pure.modify(_ ++ newconstrs) `andThen`
+              _sh_spatial.modify(_.updated(sym,
+                   cd.applyLens(_cd_children).set(newchildren)))
+      }
+      case _ => identity
     }
+
+    // desc match {
+    //   case ConcreteDesc(c, children, refs) => _sh_pure.modify(_ ++ (children.foldLeft(Set[BoolExpr]())(
+    //                                                              (cstr : Prop, chld : (String, SetExpr)) => cstr + Eq(ISect(chld._2, ee), SetLit()))))
+    // }
     // TODO consider types when disowning things
     (((h : SHeap) => h.spatial.foldLeft(identity[SHeap] _)((f : SHeap => SHeap, el : (Symbols, SpatialDesc)) =>
-        f `andThen` (disownSD _).tupled(el))(h)) `andThen`
-      _sh_qspatial.modify(_.map(_qs_unowned.modify(Union(_ ,ee))))) (heap)
+        f `andThen` (disownSD _).tupled(el))(h))) (heap)
   }
 
   def update(sym: Symbols, f: Fields, ee2: SetExpr, heap: SHeap): Process0[String \/ SHeap] = {
@@ -209,7 +230,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
           val expanded: Map[Symbols, SpatialDesc] =
-            as.map(_.asInstanceOf[Symbol]).map(_.id -> _sd_abstract.reverseGet(AbstractDesc(qs.c, qs.unowned))).toMap
+            as.map(_.asInstanceOf[Symbol]).map(_.id -> _sd_abstract.reverseGet(AbstractDesc(qs.c))).toMap
           // TODO: Consider a good way to merge things
           (part._1 ++ expanded, part._2)
         case _ => (part._1, part._2 + qs)
@@ -270,7 +291,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                mf.findSet(ee, beta)).map(_.join)
             res <- esolr.traverse[TProcess, String, String \/ SMem](esol => {
                 val (th, ees) = esol
-                val newpre = mem.subst_all(th.map(kv => (SetSymbol(kv._1), kv._2))) |> _sm_heap.modify(expand)
+                val newpre = mem.subst_all(th) |> _sm_heap.modify(expand)
                 for {
                   mres  <- m match {
                     case MSet(e) => Process((ees, newpre).right)
@@ -354,7 +375,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           for {
             ees <- es.toList.traverseU(e => evalBasicExpr(s, e))
           } yield SetLit(ees : _*)
-        case SetSymbol(ident) => SetSymbol(ident).right
+        case ssym : SetSymbol => ssym.right
         case SetVar(name) =>
           s.get(name).cata(_.right, s"Error while evaluating expression $e".left)
         case Diff(e1, e2) => for {

@@ -76,7 +76,7 @@ case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
   override val sym       = 'isect
 }
 case class SetVar(name: Vars) extends SetExpr with LeafNode
-case class SetSymbol(id: Symbols) extends SetExpr with LeafNode
+case class SetSymbol(c : Class, id: Symbols) extends SetExpr with LeafNode
 
 sealed trait BoolExpr extends Node
 case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr with LeafNode
@@ -129,21 +129,20 @@ object MatchExpr {
 }
 
 sealed abstract class SpatialDesc
-case class AbstractDesc(c : Class, unowned : SetExpr) extends SpatialDesc
+case class AbstractDesc(c : Class) extends SpatialDesc
 case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
 
 object SpatialDesc {
   val _sd_abstract = GenPrism[SpatialDesc, AbstractDesc]
   val _sd_concrete = GenPrism[SpatialDesc, ConcreteDesc]
-  val _sd_c = Lens[SpatialDesc, Class]({ case ConcreteDesc(c, _, _) => c case AbstractDesc(c, _) => c })(newc => {
+  val _sd_c = Lens[SpatialDesc, Class]({ case ConcreteDesc(c, _, _) => c case AbstractDesc(c) => c })(newc => {
     case ConcreteDesc(oldc, chld, refs) => ConcreteDesc(newc, chld, refs)
-    case AbstractDesc(oldc, unowned) => AbstractDesc(newc, unowned)
+    case AbstractDesc(oldc) => AbstractDesc(newc)
   })
 }
 
 object AbstractDesc {
   val _ad_c = GenLens[AbstractDesc](_.c)
-  val _ad_unowned = GenLens[AbstractDesc](_.unowned)
 }
 
 object ConcreteDesc {
@@ -152,12 +151,11 @@ object ConcreteDesc {
   val _cd_refs = GenLens[ConcreteDesc](_.refs)
 }
 
-case class QSpatial(e : SetExpr, c : Class, unowned : SetExpr)
+case class QSpatial(e : SetExpr, c : Class)
 
 object QSpatial {
   val _qs_e = GenLens[QSpatial](_.e)
   val _qs_c = GenLens[QSpatial](_.c)
-  val _qs_unowned = GenLens[QSpatial](_.unowned)
 }
 
 case class SHeap(spatial: Spatial[Symbols], qspatial: Set[QSpatial], pure : Prop)

@@ -28,7 +28,7 @@ object RunningExample extends App {
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = SMem(Map("class" -> SetLit(Symbol(-1))),
                      SHeap(Map(-1 -> ConcreteDesc(Class("Class"), Map("attributes" -> SetSymbol(-2)), Map())),
-                           Set(QSpatial(SetSymbol(-2), Class("Attribute"), SetLit())),
+                           Set(QSpatial(SetSymbol(-2), Class("Attribute"))),
                            Set()))
   val prog = stmtSeq(
     `new`("table", Class("Table")),

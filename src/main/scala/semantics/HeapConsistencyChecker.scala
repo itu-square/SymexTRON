@@ -12,17 +12,23 @@ object HeapConsistencyChecker {
 
   type SymbolMap = Map[syntax.ast.Symbols, (SSymbol, Sort)]
 
+  private val prelogue =
+      List(SetOption(ProduceModels(true)), SetLogic(NonStandardLogic(SSymbol("AUFLIRAFS"))))
+
+  private val epilogue = List(CheckSat())
+
+  private def makeScript(subscripts: List[Command]*) =
+    Script(prelogue ++ subscripts.fold(List())(_ ++ _) ++ epilogue)
+
   def isConsistent(heap : syntax.ast.SHeap): Boolean = {
     var interpreter: ScriptInterpreter = null
     try {
       interpreter = ScriptInterpreter(CVC4Interpreter.buildDefault)
-      val prelogue =
-          List(SetOption(ProduceModels(true)), SetLogic(NonStandardLogic(SSymbol("AUFLIRAFS"))))
-      val epilogue = List(CheckSat())
       val (th, bs) = evalProp(Map(), heap.pure)
-      val scr = Script(prelogue ++
-      th.values.toList.map(sym => DeclareFun(sym._1, Seq(), sym._2) : Command) ++
-       bs.map(Assert(_) : Command) ++ epilogue)
+      val symsDecl = th.values.toList.map(sym =>
+                      DeclareFun(sym._1, Seq(), sym._2) : Command)
+      val pureConstraints = bs.map(Assert(_) : Command)
+      val scr = makeScript(symsDecl, pureConstraints)
       val res = interpreter.interpret(scr)
       interpreter.satStatus(res).fold(false) {
           case SatStatus => true

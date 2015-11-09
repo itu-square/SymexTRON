@@ -27,7 +27,7 @@ object PrettyPrinter {
 
   def pretty(e : SetExpr): String = {
     e match {
-      case SetSymbol(ident) => prettySymb(ident).toUpperCase
+      case SetSymbol(c,ident) => s"${prettySymb(ident).toUpperCase} ⟨${c.name}⟩"
       case SetVar(name) => name
       case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
       case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
@@ -59,7 +59,7 @@ object PrettyPrinter {
   def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
 
   def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case AbstractDesc(c, unowned) => s"${pretty(Symbol(sym))} <: ${c.name} ⟨${pretty(unowned)}⟩"
+    case AbstractDesc(c) => s"inst⟨${c.name}⟩ ${pretty(Symbol(sym))}"
     case ConcreteDesc(c, children, refs) => sep(s"${pretty(Symbol(sym))} : ${c.name}", "★",
                                             sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
                                                 s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
@@ -75,7 +75,7 @@ object PrettyPrinter {
     s"$v.$f $sep ${pretty(e)}"
 
   def pretty(qspatial : QSpatial): String =
-    s"✪ (el ∈ ${pretty(qspatial.e)}) el <: ${qspatial.c.name} ⟨${pretty(qspatial.unowned)}⟩"
+    s"inst⟨${qspatial.c.name}⟩ ${pretty(qspatial.e)}"
 
   def pretty(heap : SHeap): String =
     sep(sep(s"${pretty(heap.spatial)}", "★",

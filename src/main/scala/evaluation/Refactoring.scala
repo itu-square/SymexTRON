@@ -46,11 +46,11 @@ object Refactoring {
                                                      "methods" -> SetSymbol(classMethodsId))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol(classSuperId))),
-                                   oldFieldId -> AbstractDesc(Class("Field"), SetLit()),
-                                   newFieldId -> AbstractDesc(Class("Field"), SetLit())),
-                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit()),
-                                  QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                                   oldFieldId -> AbstractDesc(Class("Field")),
+                                   newFieldId -> AbstractDesc(Class("Field"))),
+                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class")),
+                                  QSpatial(SetSymbol(classFieldsId), Class("Field")),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
                               Set())
         SMem(inputStack, inputHeap)
   }
@@ -97,11 +97,11 @@ object Refactoring {
                                                      "methods" -> Union(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol(classSuperId))),
-                                   oldMethodId -> AbstractDesc(Class("Field"), SetLit()),
-                                   newMethodId -> AbstractDesc(Class("Field"), SetLit())),
-                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit()),
-                                  QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                                   oldMethodId -> AbstractDesc(Class("Method")),
+                                   newMethodId -> AbstractDesc(Class("Method"))),
+                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class")),
+                                  QSpatial(SetSymbol(classFieldsId), Class("Field")),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
                               Set())
         SMem(inputStack, inputHeap)
   }
@@ -152,9 +152,9 @@ object Refactoring {
                                      ConcreteDesc(Class("Package"),
                                                   Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
                                                   Map[Fields, SetExpr]()),
-                                    class1Id -> AbstractDesc(Class("Class"), SetLit()),
-                                    class2Id -> AbstractDesc(Class("Class"), SetLit())),
-                               Set(QSpatial(SetSymbol(packageClassesId), Class("Class"), SetLit())),
+                                    class1Id -> AbstractDesc(Class("Class")),
+                                    class2Id -> AbstractDesc(Class("Class"))),
+                               Set(QSpatial(SetSymbol(packageClassesId), Class("Class"))),
                                Set())
          SMem(inputStack, inputHeap)
    }
@@ -260,9 +260,9 @@ object Refactoring {
                                                      "methods" -> SetSymbol(classMethodsId))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol(classSuperId))),
-                                   fieldId -> AbstractDesc(Class("Field"), SetLit())),
-                              Set(QSpatial(SetSymbol(classFieldsId), Class("Field"), SetLit()),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"), SetLit())),
+                                   fieldId -> AbstractDesc(Class("Field"))),
+                              Set(QSpatial(SetSymbol(classFieldsId), Class("Field")),
+                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
                               Set())
         SMem(inputStack, inputHeap)
   }
