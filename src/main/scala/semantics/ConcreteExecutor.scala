@@ -24,6 +24,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
 
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
+  //TODO Check for type and ownership constraints
   private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
     val uid = Statement._stmt_uid.getOption(s).get
     atomic { implicit txn =>
@@ -67,7 +68,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         h2 <- update(o, f, os2, mem.heap)
       } yield mem |> _cm_heap.set(h2)) |> Process.emit
       case If(_, ds, cs @ _*) => {
-        val elseB = (cs.map(_._1).map(not).foldLeft[BoolExpr](True())(And(_,_)) , ds)
+        val elseB = (cs.map(_._1).map(not).foldLeft[BoolExpr](True)(And(_,_)) , ds)
         val cs2 = elseB +: cs
         for {
           gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
@@ -171,7 +172,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os2 <- evalExpr(e2, stack)
     } yield (os1 intersect os2)
     case SetVar(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
-    case SetSymbol(id) => "Unexpected symbol in concrete expression".left
+    case SetSymbol(c, id) => "Unexpected symbol in concrete expression".left
   }
 
   private def evalBoolExpr(b: BoolExpr, stack: CStack, heap: CHeap): String \/ Boolean = b match {
@@ -192,7 +193,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
     } yield os1 subsetOf os2
-    case True() => true.right
+    case True => true.right
     case And(b1, b2) => for {
       bb1 <- evalBoolExpr(b1, stack, heap)
       bb2 <- evalBoolExpr(b2, stack, heap)

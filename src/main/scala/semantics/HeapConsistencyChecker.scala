@@ -76,7 +76,7 @@ object HeapConsistencyChecker {
       val (th2, e2res) = evalSetExpr(th1, e2)
       (th2, Intersection(e1res, e2res))
     }
-    case syntax.ast.SetSymbol(id) => {
+    case syntax.ast.SetSymbol(c, id) => {
       val sym = if (th.contains(id)) th(id) else makeSSymbol("X", "Y", id, SetSort(IntSort()))
       (th.updated(id, sym), QualifiedIdentifier(Identifier(sym._1)))
     }
@@ -105,7 +105,7 @@ object HeapConsistencyChecker {
       val (th2, b2res) = evalBoolExpr(th1, b2)
       (th2, And(b1res, b2res))
     }
-    case syntax.ast.True() => (th, True())
+    case syntax.ast.True => (th, True())
     case syntax.ast.Not(b) => {
       val (th1, bres) = evalBoolExpr(th, b)
       (th1, Not(bres))

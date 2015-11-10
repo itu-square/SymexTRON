@@ -25,9 +25,15 @@ object PrettyPrinter {
     }
   }
 
+  def pretty(crd : Cardinality): String = crd match {
+    case Single => ""
+    case Many   => "*"
+    case Opt    => "?"
+  }
+
   def pretty(e : SetExpr): String = {
     e match {
-      case SetSymbol(c,ident) => s"${prettySymb(ident).toUpperCase} ⟨${c.name}⟩"
+      case SetSymbol((cl, crd),ident) => s"${prettySymb(ident).toUpperCase} ⟨${cl.name}${pretty(crd)}⟩"
       case SetVar(name) => name
       case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
       case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
@@ -41,14 +47,14 @@ object PrettyPrinter {
     case ClassMem(e1, s) => s"(${pretty(e1)} : ${s.name})"
     case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
     case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
-    case True() => "true"
+    case True => "true"
     case And(e1, e2) => s"(${pretty(e1)} ∧ ${pretty(e2)})"
     case Not(p) => p match {
       case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
       case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
       case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
-      case True() => "false"
+      case True => "false"
       case And(e1 : Not, e2 : Not)
          => s"(${pretty(e1)} ∨ ${pretty(e2)})"
       case And(e1, e2) => s"¬(${pretty(e1)} ∧ ${pretty(e2)})"

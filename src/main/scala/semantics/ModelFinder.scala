@@ -105,7 +105,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
         }
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th)
-    case True() => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
+    case True => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
     case And(b1,b2) =>
       for {
         eb1 <- evalBoolExpr(b1, th)
@@ -163,11 +163,22 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       evalBinarySetExpr(e1, _ difference _, e2, th)
     case ISect(e1, e2) =>
       evalBinarySetExpr(e1, _ intersection _, e2, th)
-    case SetSymbol(ident) =>
+    case SetSymbol((cl, crd), ident) =>
       if (th.contains(ident)) (Set[Relation](), Set[Integer](), Formula.TRUE, th(ident), th).right[String]
       else {
         val s = freshSet
-        (Set[Relation](s), Set[Integer](), Formula.TRUE, s, th + (ident -> s)).right[String]
+        val formula = crd match {
+          case Many => Formula.TRUE
+          case Opt => {
+            val ss = Variable.unary("ss")
+            (ss.join(syms).count lte IntConstant.constant(1)) forAll (ss oneOf s)
+          }
+          case Single => {
+            val ss = Variable.unary("ss")
+            (ss.join(syms).count eq IntConstant.constant(1)) forAll (ss oneOf s)
+          }
+        }
+        (Set[Relation](s), Set[Integer](), formula, s, th + (ident -> s)).right[String]
       }
     case SetVar(nm) => s"Error: unevaluated variable: $nm".left
   }
@@ -189,7 +200,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def findSet(e : SetExpr, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
+  def findSet(e : SetExpr, heap: SHeap, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
       val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
@@ -202,13 +213,21 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       case _ =>
         val solver = new Solver()
         val ee = evalSetExpr(e)
-        // TODO Add relevant constraints from heap
+        // TODO: Add spatial derived constraints
         Process(ee).flatMap(t => (for {
             tt <- t
-            (rs, is, fs, r, th) = tt
+            (rs0, is0, fs0, r, th0) = tt
+            ps <- heap.pure.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
+              val (rs, is, fs, f, th) = st
+              for {
+                eb <- evalBoolExpr(b, th)
+                (rs2, is2, fs2, f2, th2) = eb
+              } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
+            } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
+            (rs, is, fs, fs2, th) = ps
             _ = solver.options.setSolver(SATFactory.DefaultSAT4J)
             _ = solver.options.setSymmetryBreaking(20)
-            formula = this.constraints and fs
+            formula = this.constraints and fs and fs2
             bounds = this.bounds(rs, is, minSymbols)
             res = for {
               sol <- io.iterator(Task(solver.solveAll(formula, bounds).asScala))

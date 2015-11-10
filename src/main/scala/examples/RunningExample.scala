@@ -15,20 +15,21 @@ object RunningExample extends App {
     new ClassDefinition("Int", Map(), Map(), Class("Any"))
   )
   val sourceClassDefs = Set(
-    new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Single()))), Map(), Class("Any")),
-    new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single()))), Class("Any"))
+    new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map(), Class("Any")),
+    new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single))), Class("Any"))
   )
   val targetClassDefs = Set(
-    new ClassDefinition("Table", Map("columns" -> ((Class("Column"), Many()))),
-      Map("id" -> (Class("IdColumn"), Single())), Class("Any")),
+    new ClassDefinition("Table", Map("columns" -> ((Class("Column"), Many))),
+      Map("id" -> (Class("IdColumn"), Single)), Class("Any")),
     new ClassDefinition("Column", Map(), Map(), Class("Any")),
     new ClassDefinition("IdColumn", Map(), Map(), Class("Column")),
-    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single())), Class("Column"))
+    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Class("Column"))
   )
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = SMem(Map("class" -> SetLit(Symbol(-1))),
-                     SHeap(Map(-1 -> ConcreteDesc(Class("Class"), Map("attributes" -> SetSymbol(-2)), Map())),
-                           Set(QSpatial(SetSymbol(-2), Class("Attribute"))),
+                     SHeap(Map(-1 -> ConcreteDesc(Class("Class"),
+                           Map("attributes" -> SetSymbol((Class("Attribute"), Many), -2)), Map())),
+                           Set(QSpatial(SetSymbol((Class("Attribute"), Many), -2), Class("Attribute"))),
                            Set()))
   val prog = stmtSeq(
     `new`("table", Class("Table")),

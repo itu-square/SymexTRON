@@ -33,7 +33,7 @@ object Parser extends RegexParsers {
     | (pBoolExpr <~ pAndOp)     ~ pBoolExpr ^^ { And(_,_) }
     | (pBoolExpr <~ pOrOp)      ~ pBoolExpr ^^ { (b1, b2) => Not(And(Not(b1),Not(b2))) }
     | pNotOp ~> pBoolExpr                   ^^ { Not(_) }
-    | "true" ^^^ { True() }
+    | "true" ^^^ { True }
     | "(" ~> pBoolExpr <~ ")"
   )
 

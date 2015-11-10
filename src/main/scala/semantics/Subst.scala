@@ -59,7 +59,7 @@ object Subst {
         val ee2 = e2.subst(x, e)
         SetMem(e1, ee2)
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
-      case True() => True()
+      case True => True
       case And(p1, p2) => And(p1.subst(x, e), p2.subst(x, e))
       case Not(pp) => Not(pp.subst(x,e))
     }
@@ -71,7 +71,7 @@ object Subst {
         val ee2 = e2.subst(x, e)
         SetMem(e1, ee2)
       case SetSubEq(e1, e2) => SetSubEq(e1.subst(x, e), e2.subst(x, e))
-      case True() => True()
+      case True => True
       case And(p1, p2) => And(p1.subst(x, e), p2.subst(x, e))
       case Not(pp) => Not(pp.subst(x,e))
     }

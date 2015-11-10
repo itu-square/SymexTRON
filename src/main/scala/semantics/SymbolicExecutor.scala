@@ -66,18 +66,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
     def freshSet(cl : Class, card : Cardinality) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
       card match {
-        case Single() => {
+        case Single => {
           val sym = freshSym
           List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
         }
-        case Many() => {
-          val sym = freshSym
-          List((SetSymbol(cl, sym), Map[Symbols, SpatialDesc](), Set(QSpatial(SetSymbol(cl, sym), cl))))
+        case Many => {
+          val sym = SetSymbol((cl, Many), freshSym)
+          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
         }
-        case Opt() => {
-          val sym = freshSym
-          List((SetLit(), Map(), Set())
-            , (SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
+        case Opt => {
+          val sym = SetSymbol((cl, Opt), freshSym)
+          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
         }
       }
     }
@@ -147,7 +146,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           // Just join everything together
           val joinede = childsyms.foldLeft(SetLit().asInstanceOf[SetExpr])(Union)
           for {
-            joinedset_th <- mf.findSet(joinede, beta)
+            joinedset_th <- mf.findSet(joinede, h, beta)
             joinedset_heap = joinedset_th.map(kv =>
               (h.subst_all(kv._1) |> expand, kv._2))
             cfinal = concretise_final(el, h).map(_.right)
@@ -274,7 +273,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           val ecs    = cs.map(p => evalBoolExpr(mem.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield other.map(not).foldLeft[BoolExpr](True())(And(_,_)) -> ds
+          } yield other.map(not).foldLeft[BoolExpr](True)(And(_,_)) -> ds
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs
@@ -288,7 +287,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case For(_, x, m, sb) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references
             esolr <- evalExpr(mem.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, SetLit], SetLit)](ee =>
-               mf.findSet(ee, beta)).map(_.join)
+               mf.findSet(ee, mem.heap, beta)).map(_.join)
             res <- esolr.traverse[TProcess, String, String \/ SMem](esol => {
                 val (th, ees) = esol
                 val newpre = mem.subst_all(th) |> _sm_heap.modify(expand)
@@ -407,7 +406,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       for {
         ep <- evalBoolExpr(st, p)
       } yield Not(ep)
-    case True() => True().right
+    case True => True.right
     case And(p1, p2) =>
       for {
         ep1 <- evalBoolExpr(st, p1)

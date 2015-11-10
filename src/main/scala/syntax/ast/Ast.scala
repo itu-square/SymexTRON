@@ -33,13 +33,13 @@ trait NAryNode extends com.codecommit.gll.ast.Node {
 case class Class(name: String) extends LeafNode // To be defined later
 
 sealed trait Cardinality { def isOptional: Boolean }
-case class Single() extends Cardinality {
+case object Single extends Cardinality {
   def isOptional = false
 }
-case class Many() extends Cardinality {
+case object Many extends Cardinality {
   def isOptional = true
 }
-case class Opt() extends Cardinality {
+case object Opt extends Cardinality {
   def isOptional = true
 }
 
@@ -76,7 +76,7 @@ case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
   override val sym       = 'isect
 }
 case class SetVar(name: Vars) extends SetExpr with LeafNode
-case class SetSymbol(c : Class, id: Symbols) extends SetExpr with LeafNode
+case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr with LeafNode
 
 sealed trait BoolExpr extends Node
 case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr with LeafNode
@@ -104,7 +104,7 @@ case class And(b1: BoolExpr, b2: BoolExpr) extends BoolExpr with BinaryNode {
   override val right     = b2
   override val sym       = 'and
 }
-case class True() extends BoolExpr with LeafNode
+case object True extends BoolExpr with LeafNode
 case class Not(b: BoolExpr) extends BoolExpr with UnaryNode {
   override val isPrefix = true
   override val child    = b
@@ -213,7 +213,7 @@ case class Fix(metaInf: Statement.MetaInf, e : SetExpr, sb: Statement)
 object Statement {
   sealed trait MetaInf
   case class MI(uid: Integer) extends MetaInf
-  case class NoMI() extends MetaInf
+  case object NoMI extends MetaInf
 
   val _stmt_metaInf = Lens[Statement, MetaInf]({
         case StmtSeq(minf, _*) => minf
@@ -238,14 +238,14 @@ object Statement {
   private val _stmt_mi = _stmt_metaInf composePrism GenPrism[MetaInf, MI]
   val _stmt_uid = _stmt_mi composeLens GenLens[MI](_.uid)
 
-  def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI(), ss :_*)
-  def assignVar(x : Vars, e : SetExpr) : Statement = AssignVar(NoMI(), x, e)
-  def loadField(x : Vars, e : SetExpr, f : Fields) : Statement = LoadField(NoMI(), x, e, f)
-  def `new`(x : Vars, c : Class) : Statement = New(NoMI(), x, c)
-  def assignField(e1 : SetExpr, f : Fields, e2 : SetExpr) : Statement = AssignField(NoMI(), e1, f, e2)
-  def `if`(ds : Statement, css : (BoolExpr, Statement)*) : Statement = If(NoMI(), ds, css :_*)
-  def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI(), x, m, s)
-  def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI(), e, s)
+  def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI, ss :_*)
+  def assignVar(x : Vars, e : SetExpr) : Statement = AssignVar(NoMI, x, e)
+  def loadField(x : Vars, e : SetExpr, f : Fields) : Statement = LoadField(NoMI, x, e, f)
+  def `new`(x : Vars, c : Class) : Statement = New(NoMI, x, c)
+  def assignField(e1 : SetExpr, f : Fields, e2 : SetExpr) : Statement = AssignField(NoMI, e1, f, e2)
+  def `if`(ds : Statement, css : (BoolExpr, Statement)*) : Statement = If(NoMI, ds, css :_*)
+  def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI, x, m, s)
+  def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI, e, s)
 
   def annotateUids(s : Statement) : Statement = {
     val counter = Counter(0)
