@@ -200,6 +200,21 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
+  def relevantConstraints(e: SetExpr, p: Prop): (Prop, Prop) = {
+    val (disj, norm) = p partition {
+      case Eq(ISect(_,_), SetLit()) => true
+      case _ => false
+    }
+    def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
+      val relevant = norm.filter((b : BoolExpr) => !(b.symbols intersect syms).isEmpty)
+      val relevantsyms = relevant.symbols diff visited
+      relevant ++ (if (!relevantsyms.isEmpty)
+                        rlv(relevantsyms, visited ++ syms)
+                  else Set())
+    }
+    (disj, rlv(e.symbols, Set()))
+  }
+
   def findSet(e : SetExpr, heap: SHeap, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
@@ -217,14 +232,16 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
         Process(ee).flatMap(t => (for {
             tt <- t
             (rs0, is0, fs0, r, th0) = tt
-            ps <- heap.pure.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
+            (disj, relv) = relevantConstraints(e, heap.pure)
+            ps = disj ++ relv
+            eps <- ps.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
               val (rs, is, fs, f, th) = st
               for {
                 eb <- evalBoolExpr(b, th)
                 (rs2, is2, fs2, f2, th2) = eb
               } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
             } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
-            (rs, is, fs, fs2, th) = ps
+            (rs, is, fs, fs2, th) = eps
             _ = solver.options.setSolver(SATFactory.DefaultSAT4J)
             _ = solver.options.setSymmetryBreaking(20)
             formula = this.constraints and fs and fs2
@@ -235,7 +252,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
               instance = sol.instance
               rels = instance.relationTuples.asScala
             } yield {
-              (th.mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
+              (th.filterKeys(k => !(disj.symbols diff (relv.symbols union e.symbols)).contains(k)).mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
             }
           } yield res).sequenceU)
     }

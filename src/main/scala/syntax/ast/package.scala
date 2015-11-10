@@ -76,4 +76,8 @@ package object ast {
       symbols(b)
     }
   }
+
+  implicit class RichProp(p : Prop) {
+    val symbols = p.map(_.symbols).fold(Set())(_++_)
+  }
 }
