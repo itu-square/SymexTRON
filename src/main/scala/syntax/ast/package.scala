@@ -29,13 +29,13 @@ package object ast {
       ).flatMap(cdef => cdef.children.get(f)
                             .orElse(cdef.refs.get(f)))
 
-    def supertypes(c : Class): Set[Class] = defs(c).supers.toSet.|>(s =>
+    def supertypes(c : Class): Set[Class] = defs(c).superclass.toSet.|>(s =>
       s ++ s.flatMap(supertypes _)
     )
 
     val subtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
       defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
-        cd.supers.foldLeft(m)((m_ : Map[Class, Set[Class]], sup : Class) => m_.adjust(sup)(_ + Class(cd.name)))
+        cd.superclass.cata(sup => m.adjust(sup)(_ + Class(cd.name)), m)
       ).trans
     }
 

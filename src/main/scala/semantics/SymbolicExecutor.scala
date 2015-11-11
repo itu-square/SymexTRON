@@ -58,11 +58,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def unfold(sym : Symbols, sd : SpatialDesc, heap: SHeap): Process0[String \/ (ConcreteDesc, SHeap)] = {
     def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
-      defc.children ++ defc.supers.map(all_children).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
+      defc.children ++ defc.superclass.map(all_children).getOrElse(Map())
     }
     def all_references(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
-      defc.refs ++ defc.supers.map(all_references).foldLeft(Map[Fields, (Class, Cardinality)]())(_ ++ _)
+      defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
     }
     def freshSet(cl : Class, card : Cardinality) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
       card match {
@@ -240,7 +240,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def execute(pres : Process[Task, String \/ SMem], c : Statement) : Process[Task, String \/ SMem] = {
     pres.flatMap { (pre: String \/ SMem) =>
-      if (pre.fold(_ => false, mem => !HeapConsistencyChecker.isConsistent(mem.heap))) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.toOption.get.heap)}".left)
+      if (pre.fold(_ => false, mem => !hcc.isConsistent(mem.heap))) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.toOption.get.heap)}".left)
       else c match {
         case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre))(execute)
         case AssignVar(_,x, e) => Process(for {
@@ -429,5 +429,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private def freshSym: Symbols = symCounter++
 
   private val mf = new ModelFinder(symCounter, defs)
+
+  private val hcc = new HeapConsistencyChecker(defs)
 
 }

@@ -4,55 +4,54 @@ import syntax.ast._
 
 object FullClassModel {
   val stdClassDefs = Set(
-      new ClassDefinition("Any", Map(), Map())
-    , new ClassDefinition("String", Map(), Map(), Class("Any"))
-    , new ClassDefinition("Int", Map(), Map(), Class("Any"))
+      new ClassDefinition("String", Map(), Map())
+    , new ClassDefinition("Int", Map(), Map())
   )
   // TODO Also update diagram with types for method, field and parameter
   val classDefs = Set(
-     new ClassDefinition("Package", Map("classes" -> ((Class("Class"), Many))), Map(), Class("Any"))
+     new ClassDefinition("Package", Map("classes" -> ((Class("Class"), Many))), Map())
     , new ClassDefinition("Class",
                           Map("fields" -> ((Class("Field"), Many)),
                               "methods" -> ((Class("Method"), Many))),
-       Map("super" -> ((Class("Class"), Opt)), "name" -> ((Class("String"), Single))), Class("Any")) 
+       Map("super" -> ((Class("Class"), Opt)), "name" -> ((Class("String"), Single))))
    , new ClassDefinition("Field", Map[Fields, (Class, Cardinality)](),
                          Map("name" -> ((Class("String"), Single)),
-                             "type" -> ((Class("Class"), Single))), Class("Any"))
+                             "type" -> ((Class("Class"), Single))))
    , new ClassDefinition("Method", Map("params" -> ((Class("Parameter"), Opt)),
                                         "body" -> ((Class("Statement"), Single))),
                         Map("name" -> ((Class("String"), Single)),
-                            "type" -> ((Class("Class"), Single))), Class("Any"))
+                            "type" -> ((Class("Class"), Single))))
    , new ClassDefinition("Parameter", Map("next" -> ((Class("Parameter"), Opt))),
                            Map("name" -> ((Class("String"), Single)),
-                               "type" -> ((Class("Class"), Single))), Class("Any"))
+                               "type" -> ((Class("Class"), Single))))
    , new ClassDefinition("Statement", Map[Fields, (Class, Cardinality)](),
-                           Map[Fields, (Class, Cardinality)](), Class("Any"))
+                           Map[Fields, (Class, Cardinality)]())
    , new ClassDefinition("Block", Map("current" -> ((Class("Statement"), Single)),
                                       "next" -> ((Class("Statement"), Opt))),
-                         Map[Fields, (Class, Cardinality)](), Class("Statement"))
+                         Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
    , new ClassDefinition("If", Map("then" -> ((Class("Statement"), Single)),
                                    "else" -> ((Class("Statement"), Opt)),
                                    "cond" -> ((Class("Expr"), Single))),
-                               Map[Fields, (Class, Cardinality)](), Class("Statement"))
+                               Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
     , new ClassDefinition("Return", Map("value" -> ((Class("Expr"), Single))),
-                           Map[Fields, (Class, Cardinality)](), Class("Statement"))
+                           Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
     , new ClassDefinition("Assign", Map("left" -> ((Class("AssignableExpr"), Single)),
                                         "right" -> ((Class("Expr"), Single))),
-                           Map[Fields, (Class, Cardinality)](), Class("Statement"))
+                           Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
     , new ClassDefinition("Expr", Map[Fields, (Class, Cardinality)](),
-                          Map("type" -> ((Class("Class"), Single))), Class("Any"))
+                          Map("type" -> ((Class("Class"), Single))))
     , new ClassDefinition("AssignableExpr", Map[Fields, (Class, Cardinality)](),
-                          Map[Fields, (Class, Cardinality)](), Class("Expr"))
+                          Map[Fields, (Class, Cardinality)](), Some(Class("Expr")))
     , new ClassDefinition("FieldAccessExpr", Map("target" -> ((Class("Expr"), Single))),
                           Map("field_name" -> ((Class("String"), Single))),
-                          Class("AssignableExpr"))
+                          Some(Class("AssignableExpr")))
     , new ClassDefinition("MethodCallExpr", Map("target" -> ((Class("Expr"), Single)),
                                                 "args" -> ((Class("Arg"), Opt))),
-                          Map("method_name" -> ((Class("String"), Single)) ), Class("Expr"))
+                          Map("method_name" -> ((Class("String"), Single)) ), Some(Class("Expr")))
 
     , new ClassDefinition("Arg", Map("current" -> ((Class("Expr"), Single)),
                                        "next" -> ((Class("Arg"), Opt))),
-                          Map[Fields, (Class, Cardinality)](), Class("Any"))
+                          Map[Fields, (Class, Cardinality)]())
   )
 
   val allDefs = stdClassDefs ++ classDefs

@@ -1,6 +1,8 @@
 package semantics
 
-object HeapConsistencyChecker {
+import syntax.ast._
+
+class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   import smtlib.parser.Commands._
   import smtlib.parser.Terms._
   import smtlib.parser.CommandsResponses._
@@ -15,29 +17,66 @@ object HeapConsistencyChecker {
   private val typeSort = Sort(Identifier(SSymbol("Type")))
 
   object Subtype extends helper.theories.BinaryOperation { override val name = "subtype" }
+  object SubtypeRT extends helper.theories.BinaryOperation { override val name = "subtype_rt" }
+
+  private val typeTranslations : List[Command] = {
+    val sts = defs.subtypes
+    val nothing = QualifiedIdentifier(Identifier(SSymbol("CLASS_Nothing")))
+    val any = QualifiedIdentifier(Identifier(SSymbol("CLASS_Any")))
+    if (defs.isEmpty) List(Assert(Subtype(nothing, any))) 
+    defs.keys.toList.map(c => DeclareFun(SSymbol(s"CLASS_${c.name}"), Seq(), typeSort)) ++
+      defs.flatMap { ccdef =>
+         val (c, cdef) = ccdef
+         val cx  = QualifiedIdentifier(Identifier(SSymbol(s"CLASS_${c.name}")))
+         List(Assert(Subtype(cx, cdef.superclass.fold(any)(sup =>
+           QualifiedIdentifier(Identifier(SSymbol(s"CLASS_${sup.name}")))
+         )))) ++ (if (sts.contains(c) && !sts(c).isEmpty) List()
+                 else List(Assert(Subtype(nothing, cx))))
+      }
+  }
 
   private val typeDefinitions =
       List(DeclareSort(SSymbol("Type"), 0),
            DeclareFun(SSymbol("typeof"),  Seq(IntSort()), typeSort),
            DeclareFun(SSymbol("typeofs"), Seq(SetSort(IntSort())), typeSort),
            DeclareFun(SSymbol("subtype"), Seq(typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol("subtype_rt"), Seq(typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol("CLASS_Nothing"), Seq(), typeSort ),
+           DeclareFun(SSymbol("CLASS_Any"),    Seq(), typeSort),
            Assert(Forall(SortedVar(SSymbol("x"), typeSort), Seq(),
             { val x = QualifiedIdentifier(Identifier(SSymbol("x")))
-              Subtype(x, x)
+              val nothing = QualifiedIdentifier(Identifier(SSymbol("CLASS_Nothing")))
+              Subtype(nothing, x)
             })),
+            Assert(Forall(SortedVar(SSymbol("x"), typeSort), Seq(),
+             { val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+               val any = QualifiedIdentifier(Identifier(SSymbol("CLASS_Any")))
+               Subtype(x, any)
+             })),
+           Assert(Forall(SortedVar(SSymbol("x"), typeSort), Seq(),
+            { val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+              SubtypeRT(x, x)
+            })),
+          Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+                    Seq(SortedVar(SSymbol("y"), typeSort)), {
+                         val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                         val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                         Implies(Subtype(x, y), SubtypeRT(x, y))
+                       })),
            Assert(Forall(SortedVar(SSymbol("x"), typeSort),
                      Seq(SortedVar(SSymbol("y"), typeSort),
                          SortedVar(SSymbol("z"), typeSort)), {
                           val x = QualifiedIdentifier(Identifier(SSymbol("x")))
                           val y = QualifiedIdentifier(Identifier(SSymbol("y")))
                           val z = QualifiedIdentifier(Identifier(SSymbol("z")))
-                          Implies(And(Subtype(x, y), Subtype(y, z)),
-                                  Subtype(x, z))
-                        })))
+                          Implies(And(SubtypeRT(x, y), SubtypeRT(y, z)),
+                                  SubtypeRT(x, z))
+                        }))) ++ typeTranslations
 
-  {
-      print(smtlib.printer.RecursivePrinter.toString(Script(typeDefinitions)))
-  }
+    {
+        print(smtlib.printer.RecursivePrinter.toString(Script(typeDefinitions)))
+    }
+
 
   private val prelogue =
       List(SetOption(ProduceModels(true)),

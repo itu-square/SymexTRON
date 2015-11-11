@@ -10,20 +10,19 @@ import Statement._
 
 object RunningExample extends App {
   val baseClassDefs = Set(
-    new ClassDefinition("Any", Map(), Map()),
-    new ClassDefinition("String", Map(), Map(), Class("Any")),
-    new ClassDefinition("Int", Map(), Map(), Class("Any"))
+    new ClassDefinition("String", Map(), Map()),
+    new ClassDefinition("Int", Map(), Map())
   )
   val sourceClassDefs = Set(
-    new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map(), Class("Any")),
-    new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single))), Class("Any"))
+    new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),
+    new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single))))
   )
   val targetClassDefs = Set(
     new ClassDefinition("Table", Map("columns" -> ((Class("Column"), Many))),
-      Map("id" -> (Class("IdColumn"), Single)), Class("Any")),
-    new ClassDefinition("Column", Map(), Map(), Class("Any")),
-    new ClassDefinition("IdColumn", Map(), Map(), Class("Column")),
-    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Class("Column"))
+      Map("id" -> (Class("IdColumn"), Single))),
+    new ClassDefinition("Column", Map(), Map()),
+    new ClassDefinition("IdColumn", Map(), Map()),
+    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)))
   )
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = SMem(Map("class" -> SetLit(Symbol(-1))),

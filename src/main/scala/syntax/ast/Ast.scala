@@ -43,8 +43,9 @@ case object Opt extends Cardinality {
   def isOptional = true
 }
 
+// We only support single inheritance
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
-                           refs: Map[Fields, (Class, Cardinality)], supers: Class*)
+                           refs: Map[Fields, (Class, Cardinality)], superclass: Option[Class] = None)
 
 sealed trait BasicExpr extends Node
 case class Symbol(id: Symbols) extends BasicExpr with LeafNode
