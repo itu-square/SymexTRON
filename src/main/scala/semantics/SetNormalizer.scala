@@ -46,14 +46,14 @@ object SetNormalizer {
         case None => None
       }
     }
-  } + rule[SetExpr] {
+  } /*+ rule[SetExpr] {
     // TODO Consider equalities in the props as well
     case Union(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as ++ bs).toSet.toList : _*)
   } + rule[SetExpr] {
     case Diff(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as.toSet diff bs.toSet).toList :_*)
   } + rule[SetExpr] {
     case ISect(SetLit(as @ _*), SetLit(bs @ _*)) => SetLit((as.toSet intersect bs.toSet).toList :_*)
-  } + rule[SetExpr] {
+  } */ + rule[SetExpr] {
     case ISect(Union(e1, e2), e3) => Union(ISect(e1, e3), ISect(e2, e3))
     case ISect(e1, Union(e2, e3)) => Union(ISect(e1, e2), ISect(e1, e3))
   } + rule[SetExpr] {

@@ -12,8 +12,36 @@ object HeapConsistencyChecker {
 
   type SymbolMap = Map[syntax.ast.Symbols, (SSymbol, Sort)]
 
+  private val typeSort = Sort(Identifier(SSymbol("Type")))
+
+  object Subtype extends helper.theories.BinaryOperation { override val name = "subtype" }
+
+  private val typeDefinitions =
+      List(DeclareSort(SSymbol("Type"), 0),
+           DeclareFun(SSymbol("typeof"),  Seq(IntSort()), typeSort),
+           DeclareFun(SSymbol("typeofs"), Seq(SetSort(IntSort())), typeSort),
+           DeclareFun(SSymbol("subtype"), Seq(typeSort,typeSort), BoolSort()),
+           Assert(Forall(SortedVar(SSymbol("x"), typeSort), Seq(),
+            { val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+              Subtype(x, x)
+            })),
+           Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+                     Seq(SortedVar(SSymbol("y"), typeSort),
+                         SortedVar(SSymbol("z"), typeSort)), {
+                          val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                          val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                          val z = QualifiedIdentifier(Identifier(SSymbol("z")))
+                          Implies(And(Subtype(x, y), Subtype(y, z)),
+                                  Subtype(x, z))
+                        })))
+
+  {
+      print(smtlib.printer.RecursivePrinter.toString(Script(typeDefinitions)))
+  }
+
   private val prelogue =
-      List(SetOption(ProduceModels(true)), SetLogic(NonStandardLogic(SSymbol("AUFLIRAFS"))))
+      List(SetOption(ProduceModels(true)),
+           SetLogic(NonStandardLogic(SSymbol("AUFLIRAFS"))))
 
   private val epilogue = List(CheckSat())
 
