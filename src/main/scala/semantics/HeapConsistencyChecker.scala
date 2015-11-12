@@ -16,14 +16,20 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
 
   private val typeSort = Sort(Identifier(SSymbol("Type")))
 
+  object TypeOf extends helper.theories.UnaryOperation { override val name = "typeof" }
+  object TypeOfS extends helper.theories.UnaryOperation { override val name = "typeofS" }
   object Subtype extends helper.theories.BinaryOperation { override val name = "subtype" }
-  object SubtypeRT extends helper.theories.BinaryOperation { override val name = "subtype_rt" }
+  object SubtypeRT extends helper.theories.BinaryOperation { override val name = "subtypeRT" }
+  object IsUpperBound extends helper.theories.TernaryOperation { override val name = "isUpperBound" }
+  object IsLowerBound extends helper.theories.TernaryOperation { override val name = "isLowerBound" }
+  object Lub extends helper.theories.BinaryOperation { override val name = "lub" }
+  object Glb extends helper.theories.BinaryOperation { override val name = "glb" }
 
   private val typeTranslations : List[Command] = {
     val sts = defs.subtypes
     val nothing = QualifiedIdentifier(Identifier(SSymbol("CLASS_Nothing")))
     val any = QualifiedIdentifier(Identifier(SSymbol("CLASS_Any")))
-    if (defs.isEmpty) List(Assert(Subtype(nothing, any))) 
+    if (defs.isEmpty) List(Assert(Subtype(nothing, any)))
     defs.keys.toList.map(c => DeclareFun(SSymbol(s"CLASS_${c.name}"), Seq(), typeSort)) ++
       defs.flatMap { ccdef =>
          val (c, cdef) = ccdef
@@ -37,10 +43,14 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
 
   private val typeDefinitions =
       List(DeclareSort(SSymbol("Type"), 0),
-           DeclareFun(SSymbol("typeof"),  Seq(IntSort()), typeSort),
-           DeclareFun(SSymbol("typeofs"), Seq(SetSort(IntSort())), typeSort),
-           DeclareFun(SSymbol("subtype"), Seq(typeSort,typeSort), BoolSort()),
-           DeclareFun(SSymbol("subtype_rt"), Seq(typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol(TypeOf.name),  Seq(IntSort()), typeSort),
+           DeclareFun(SSymbol(TypeOfS.name), Seq(SetSort(IntSort())), typeSort),
+           DeclareFun(SSymbol(Subtype.name), Seq(typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol(SubtypeRT.name), Seq(typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol(IsUpperBound.name), Seq(typeSort,typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol(IsLowerBound.name), Seq(typeSort,typeSort,typeSort), BoolSort()),
+           DeclareFun(SSymbol(Lub.name), Seq(typeSort,typeSort), typeSort),
+           DeclareFun(SSymbol(Glb.name), Seq(typeSort,typeSort), typeSort),
            DeclareFun(SSymbol("CLASS_Nothing"), Seq(), typeSort ),
            DeclareFun(SSymbol("CLASS_Any"),    Seq(), typeSort),
            Assert(Forall(SortedVar(SSymbol("x"), typeSort), Seq(),
@@ -57,7 +67,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
             { val x = QualifiedIdentifier(Identifier(SSymbol("x")))
               SubtypeRT(x, x)
             })),
-          Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+           Assert(Forall(SortedVar(SSymbol("x"), typeSort),
                     Seq(SortedVar(SSymbol("y"), typeSort)), {
                          val x = QualifiedIdentifier(Identifier(SSymbol("x")))
                          val y = QualifiedIdentifier(Identifier(SSymbol("y")))
@@ -71,7 +81,78 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
                           val z = QualifiedIdentifier(Identifier(SSymbol("z")))
                           Implies(And(SubtypeRT(x, y), SubtypeRT(y, z)),
                                   SubtypeRT(x, z))
-                        }))) ++ typeTranslations
+                        })),
+            Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+                      Seq(SortedVar(SSymbol("y"), typeSort),
+                          SortedVar(SSymbol("z"), typeSort)),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            val z = QualifiedIdentifier(Identifier(SSymbol("z")))
+                            Equals(IsUpperBound(x,y,z),
+                                  And(SubtypeRT(x, z), SubtypeRT(y, z)))
+                          })),
+            Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+                      Seq(SortedVar(SSymbol("y"), typeSort),
+                          SortedVar(SSymbol("z"), typeSort)),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            val z = QualifiedIdentifier(Identifier(SSymbol("z")))
+                            Equals(IsLowerBound(x,y,z),
+                                  And(SubtypeRT(z, x), SubtypeRT(z, y)))
+                          })),
+            Assert(Forall(SortedVar(SSymbol("x"), typeSort),
+                      Seq(SortedVar(SSymbol("y"), typeSort),
+                          SortedVar(SSymbol("z"), typeSort)),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            val z = QualifiedIdentifier(Identifier(SSymbol("z")))
+                            Equals(Equals(Lub(x,y), z),
+                                  And(IsUpperBound(x,y,z),
+                                      Forall(SortedVar(SSymbol("w"), typeSort),
+                                             Seq(),
+                                             {
+                                               val w = QualifiedIdentifier(Identifier(SSymbol("w")))
+                                               Implies(IsUpperBound(x,y,w),
+                                                       SubtypeRT(z, w))
+                                             }) ))
+                          })),
+            Assert(Forall(SortedVar(SSymbol("x"), SetSort(IntSort())),
+                      Seq(SortedVar(SSymbol("y"), SetSort(IntSort()))),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            Equals(TypeOfS(Union(x,y)),
+                              Lub(TypeOfS(x), TypeOf(y)))
+                          })),
+            Assert(Forall(SortedVar(SSymbol("x"), SetSort(IntSort())),
+                      Seq(SortedVar(SSymbol("y"), SetSort(IntSort()))),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            Equals(TypeOfS(Intersection(x,y)),
+                              Lub(TypeOfS(x), TypeOf(y)))
+                          })),
+            Assert(Forall(SortedVar(SSymbol("x"), SetSort(IntSort())),
+                      Seq(SortedVar(SSymbol("y"), SetSort(IntSort()))),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val y = QualifiedIdentifier(Identifier(SSymbol("y")))
+                            Equals(TypeOfS(Setminus(x,y)),
+                              TypeOfS(x))
+                          })),
+            // Membership
+            Assert(Forall(SortedVar(SSymbol("x"), IntSort()),
+                      Seq(SortedVar(SSymbol("X"), SetSort(IntSort()))),
+                          {
+                            val x = QualifiedIdentifier(Identifier(SSymbol("x")))
+                            val X = QualifiedIdentifier(Identifier(SSymbol("X")))
+                            Implies(Member(x, X),
+                              SubtypeRT(TypeOf(x), TypeOfS(X)))
+                          }))
+            ) ++ typeTranslations
 
     {
         print(smtlib.printer.RecursivePrinter.toString(Script(typeDefinitions)))
