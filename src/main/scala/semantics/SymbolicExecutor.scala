@@ -27,6 +27,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private val pmn = helper.processMonad[Nothing]
   private val pmt = helper.processMonad[Task]
 
+  //TODO Implement clean up function of heap, that removes unneeded constraints
 
   //TODO Convert use of SetLit to use of Process0[Symbols] and results to Process0[String \/ Symbols]
   def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
@@ -183,10 +184,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             (st, chld) => {
               val preve = chld._2
               //TODO Handle safely and find more precise type by infering on preve
-              val ssym = SetSymbol(defs.fieldType(c, chld._1).get, freshSym)
+              val symt = defs.fieldType(c, chld._1).get
+              val ssym1 = SetSymbol(symt, freshSym)
+              val ssym2 = SetSymbol(symt, freshSym)
               val cstrs =
-                   Set(SetSubEq(ssym, preve), Eq(ISect(ssym, ee), SetLit()))
-              st.applyLens(first).modify(_.updated(chld._1, ssym))
+                   Set(Eq(preve, Union(ssym1, ssym2)),
+                    Eq(ISect(ssym1, ssym2), SetLit()),
+                    SetSubEq(ssym2, ee),
+                    Eq(ISect(ssym1, ee), SetLit()))
+              st.applyLens(first).modify(_.updated(chld._1, ssym1))
                 .applyLens(second).modify(_ ++ cstrs)
             }
           )
