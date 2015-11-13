@@ -8,7 +8,7 @@ import scalaz.concurrent.Task
 import helper._
 import Statement._
 
-object RunningExample extends App {
+object Class2Table extends App {
   val baseClassDefs = Set(
     new ClassDefinition("String", Map(), Map()),
     new ClassDefinition("Int", Map(), Map())
