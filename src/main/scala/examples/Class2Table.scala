@@ -11,7 +11,9 @@ import Statement._
 object Class2Table extends App {
   val baseClassDefs = Set(
     new ClassDefinition("String", Map(), Map()),
-    new ClassDefinition("Int", Map(), Map())
+    new ClassDefinition("Int", Map(), Map()),
+    new ClassDefinition("Any", Map(), Map()),
+    new ClassDefinition("Nothing", Map(), Map())
   )
   val sourceClassDefs = Set(
     new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),
@@ -21,8 +23,8 @@ object Class2Table extends App {
     new ClassDefinition("Table", Map("columns" -> ((Class("Column"), Many))),
       Map("id" -> (Class("IdColumn"), Single))),
     new ClassDefinition("Column", Map(), Map()),
-    new ClassDefinition("IdColumn", Map(), Map()),
-    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)))
+    new ClassDefinition("IdColumn", Map(), Map(), Some(Class("Column"))),
+    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Some(Class("Column")))
   )
   val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
   val pre = SMem(Map("class" -> SetLit(Symbol(-1))),

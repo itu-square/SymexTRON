@@ -52,6 +52,8 @@ object FullClassModel {
     , new ClassDefinition("Arg", Map("current" -> ((Class("Expr"), Single)),
                                        "next" -> ((Class("Arg"), Opt))),
                           Map[Fields, (Class, Cardinality)]())
+    , new ClassDefinition("Any", Map(), Map())
+    , new ClassDefinition("Nothing", Map(), Map())
   )
 
   val allDefs = stdClassDefs ++ classDefs
