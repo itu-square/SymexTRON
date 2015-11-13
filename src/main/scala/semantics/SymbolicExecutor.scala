@@ -145,7 +145,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             e.asInstanceOf[Symbol].id.|>(h.spatial.get)
               .flatMap(_sd_concrete.getOption).map(_.children.values).get)
           // Just join everything together
-          val joinede = childsyms.foldLeft(SetLit().asInstanceOf[SetExpr])(Union)
+          val joinede = childsyms.foldLeft(SetLit() : SetExpr)(Union)
           for {
             joinedset_th <- mf.findSet(joinede, h, beta)
             joinedset_heap = joinedset_th.map(kv =>

@@ -206,13 +206,13 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       case _ => false
     }
     def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
-      val relevant = norm.filter((b : BoolExpr) => !(b.symbols intersect syms).isEmpty)
-      val relevantsyms = relevant.symbols diff visited
+      val relevant = norm.filter((b : BoolExpr) => !(b.symbols.ids intersect syms).isEmpty)
+      val relevantsyms = relevant.symbols.ids diff visited
       relevant ++ (if (!relevantsyms.isEmpty)
                         rlv(relevantsyms, visited ++ syms)
                   else Set())
     }
-    (disj, rlv(e.symbols, Set()))
+    (disj, rlv(e.symbols.ids, Set()))
   }
 
   def findSet(e : SetExpr, heap: SHeap, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
@@ -252,7 +252,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
               instance = sol.instance
               rels = instance.relationTuples.asScala
             } yield {
-              (th.filterKeys(k => !(disj.symbols diff (relv.symbols union e.symbols)).contains(k)).mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
+              (th.filterKeys(k => !(disj.symbols.ids diff (relv.symbols.ids union e.symbols.ids)).contains(k)).mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
             }
           } yield res).sequenceU)
     }
