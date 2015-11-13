@@ -29,12 +29,12 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   private val typeNothing = typeName(Class("Nothing"))
   private def typeName(c : Class) = SSymbol(s"CLASS_${c.name}")
 
-  private val typeTranslations : List[Command] = {
+  private val (typeTranslations, subtypingRelations) : (Seq[Constructor], List[Command]) = {
     val sts = defs.subtypes
     val nothing = QualifiedIdentifier(Identifier(typeNothing))
     val any = QualifiedIdentifier(Identifier(typeAny))
-    if (defs.isEmpty) List(Assert(Subtype(nothing, any)))
-    defs.keys.toList.map(c => DeclareFun(typeName(c), Seq(), typeSort)) ++
+    if (defs.isEmpty) (Seq(), List(Assert(Subtype(nothing, any))))
+    (defs.keys.toList.map(c => Constructor(typeName(c), Seq())) ,
       defs.flatMap { ccdef =>
          val (c, cdef) = ccdef
          val cx  = QualifiedIdentifier(Identifier(typeName(c)))
@@ -42,11 +42,16 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
            QualifiedIdentifier(Identifier(typeName(sup)))
          )))) ++ (if (sts.contains(c) && !sts(c).isEmpty) List()
                  else List(Assert(Subtype(nothing, cx))))
-      }
+      }.toList)
   }
 
   private val typeDefinitions =
-      List(DeclareSort(SSymbol("Type"), 0),
+      List(DeclareDatatypes(Seq((SSymbol("Type"),
+           Seq(
+               Constructor(typeNothing, Seq())
+             , Constructor(typeAny, Seq())
+           ) ++ typeTranslations
+         ))),
            DeclareFun(SSymbol(TypeOf.name),  Seq(IntSort()), typeSort),
            DeclareFun(SSymbol(TypeOfS.name), Seq(SetSort(IntSort())), typeSort),
            DeclareFun(SSymbol(Subtype.name), Seq(typeSort,typeSort), BoolSort()),
@@ -55,25 +60,17 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
            DeclareFun(SSymbol(IsLowerBound.name), Seq(typeSort,typeSort,typeSort), BoolSort()),
            DeclareFun(SSymbol(Lub.name), Seq(typeSort,typeSort), typeSort),
            DeclareFun(SSymbol(Glb.name), Seq(typeSort,typeSort), typeSort),
-           DeclareFun(typeNothing, Seq(), typeSort ),
-           DeclareFun(typeAny,    Seq(), typeSort),
            Assert(Forall(SortedVar(SSymbol("t"), typeSort), Seq(),
             { val t = QualifiedIdentifier(Identifier(SSymbol("t")))
               SubtypeRT(t, t)
             })),
-           Assert(Forall(SortedVar(SSymbol("t1"), typeSort),
-                    Seq(SortedVar(SSymbol("t2"), typeSort)), {
-                         val t1 = QualifiedIdentifier(Identifier(SSymbol("t1")))
-                         val t2 = QualifiedIdentifier(Identifier(SSymbol("t2")))
-                         Implies(Subtype(t1, t2), SubtypeRT(t1, t2))
-                       })),
            Assert(Forall(SortedVar(SSymbol("t1"), typeSort),
                      Seq(SortedVar(SSymbol("t2"), typeSort),
                          SortedVar(SSymbol("t3"), typeSort)), {
                           val t1 = QualifiedIdentifier(Identifier(SSymbol("t1")))
                           val t2 = QualifiedIdentifier(Identifier(SSymbol("t2")))
                           val t3 = QualifiedIdentifier(Identifier(SSymbol("t3")))
-                          Implies(And(SubtypeRT(t1, t2), SubtypeRT(t2, t3)),
+                          Implies(And(Subtype(t1, t2), SubtypeRT(t2, t3)),
                                   SubtypeRT(t1, t3))
                         })),
             Assert(Forall(SortedVar(SSymbol("t1"), typeSort),
@@ -176,11 +173,10 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
                               SubtypeRT(TypeOf(x), TypeOfS(X)))
                           }))
 
-            ) ++ typeTranslations
+            ) ++ subtypingRelations
 
   private val prelogue =
-      List(SetOption(ProduceModels(true)),
-           SetLogic(NonStandardLogic(SSymbol("AUFLIRAFS"))))
+      List(SetLogic(NonStandardLogic(SSymbol("ALL_SUPPORTED"))))
 
   private val epilogue = List(CheckSat())
 
@@ -190,7 +186,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   def isConsistent(heap : syntax.ast.SHeap): Boolean = {
     var interpreter: ScriptInterpreter = null
     try {
-      interpreter = ScriptInterpreter(CVC4Interpreter.buildDefault)
+      interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
       val syms = heap.symbols
       val symsmap = syms.map(_.fold(
               ss => (ss.id, makeSSymbol("X", "Y", ss.id, SetSort(IntSort())))
@@ -213,11 +209,11 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       val pureConstraints = bs.map(Assert(_) : Command)
       val scr = makeScript(typeDefinitions, symsDecl, symsTyping, pureConstraints)
       val res = interpreter.interpret(scr)
-      println(scr)
+      scr.commands.foreach(println)
       println(res)
       interpreter.satStatus(res).fold(false) {
           case SatStatus => true
-          case s => println(s);false
+          case s => false
       }
     } finally {
         Option(interpreter).map (_.free)
