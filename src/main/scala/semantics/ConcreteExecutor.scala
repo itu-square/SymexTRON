@@ -181,10 +181,10 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os2 <- evalExpr(e2, stack)
     } yield e1 == e2
     case ClassMem(e, c) => for {
-      os <- evalExpr(e, stack)
-      types <- os.traverseU(o => heap.typeenv.get(o).cata(_.right, s"Unknown instance $o".left))
+      o <- evalBasicExpr(e, stack)
+      otype <- heap.typeenv.get(o).cata(_.right, s"Unknown instance $o".left)
       sts <- defs.subtypesOrSelf.get(c).cata(_.right, s"Unknown class $c".left)
-    } yield types.forall(sts.contains)
+    } yield sts.contains(otype)
     case SetMem(be1, e2) => for {
       o <- evalBasicExpr(be1, stack)
       os <- evalExpr(e2, stack)

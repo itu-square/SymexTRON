@@ -260,7 +260,8 @@ object Refactoring {
                                                      "methods" -> SetSymbol((Class("Method"), Many), classMethodsId))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol((Class("Class"), Opt), classSuperId))),
-                                   fieldId -> AbstractDesc(Class("Field"))),
+                                   fieldId -> AbstractDesc(Class("Field")),
+                                   classNameId -> ConcreteDesc(Class("String"), Map(), Map())),
                               Set(QSpatial(SetSymbol((Class("Field"), Many), classFieldsId), Class("Field")),
                                   QSpatial(SetSymbol((Class("Method"), Many), classMethodsId), Class("Method"))),
                               Set())
@@ -290,7 +291,7 @@ object Refactoring {
     // Replace other delegations with calls to the object itself
     , `for`("mcexpr", MatchStar(SetLit(Var("class")), Class("MethodCallExpr")), stmtSeq(
           loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
-        , `if`(stmtSeq(), ClassMem(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")) -> stmtSeq(
+        , `if`(stmtSeq(), ClassMem(Var("mcexpr_target"), Class("FieldAccessExpr")) -> stmtSeq(
               loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
             , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
             , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")

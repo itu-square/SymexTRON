@@ -1,6 +1,8 @@
 package semantics
 
 import syntax.ast._
+import scalaz.State, scalaz.syntax.applicative._
+import helper._
 
 class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   import smtlib.parser.Commands._
@@ -28,40 +30,70 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     var interpreter: ScriptInterpreter = null
     try {
       interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
-      val syms = heap.symbols
-      val symsmap = syms.map(_.fold(
-              ss => (ss.id, makeSSymbol("X", "Y", ss.id, SetSort(IntSort())))
-            , s => (s.id, makeSSymbol("x", "y", s.id, IntSort())))).toMap
-      val bs = evalProp(symsmap, heap.pure)
-      val symsDecl = symsmap.values.toList.map(sym =>
-                      DeclareFun(sym._1, Seq(), sym._2) : Command)
-      val pureConstraints = bs.map(Assert(_) : Command)
-      val scr = makeScript(symsDecl, pureConstraints)
-      val res = interpreter.interpret(scr)
-      val pcconsistent = interpreter.satStatus(res).fold(false) {
-          case SatStatus => true
-          case s => false
-      }
+      val pcconsistent = checkPureConstraintConsistency(interpreter, heap)
       //TODO Do QSPatial and pure type constraints as well
-      val typeconsistent = heap.spatial.forall {
-        case (id, sd) => sd match {
-          case AbstractDesc(_) => true
-          case ConcreteDesc(c, children, refs) =>
-            (children ++ refs).forall {
-              case (f, e) =>
-                // TODO handle safely
-                val (expectedType,_) = defs.fieldType(c, f).get
-                val actualType = typeInference.inferType(e, heap)
-                  actualType == Class("Nothing") ||
-                  actualType == expectedType   ||
-                  defs.supertypes(actualType).contains(expectedType)
-            }
-        }
-      }
+      val typeconsistent = checkTypeConsistency(heap)
       pcconsistent && typeconsistent
     } finally {
         Option(interpreter).map (_.free)
     }
+  }
+
+  def checkPureConstraintConsistency(interpreter : ScriptInterpreter, heap : syntax.ast.SHeap): Boolean = {
+    val syms = heap.symbols
+    val symsmap = syms.map(_.fold(
+            ss => (ss.id, makeSSymbol("X", "Y", ss.id, SetSort(IntSort())))
+          , s => (s.id, makeSSymbol("x", "y", s.id, IntSort())))).toMap
+    val bs = evalProp(symsmap, heap.pure)
+    val symsDecl = symsmap.values.toList.map(sym =>
+                    DeclareFun(sym._1, Seq(), sym._2) : Command)
+    val pureConstraints = bs.map(Assert(_) : Command)
+    val scr = makeScript(symsDecl, pureConstraints)
+    val res = interpreter.interpret(scr)
+    interpreter.satStatus(res).fold(false) {
+        case SatStatus => true
+        case s => false
+    }
+  }
+
+  def checkTypeConsistency(heap : syntax.ast.SHeap): Boolean = {
+    heap.spatial forall {
+      case (id, sd) => sd match {
+        case AbstractDesc(_) => true
+        case ConcreteDesc(c, children, refs) =>
+          (children ++ refs).forall {
+            case (f, e) =>
+              // TODO handle safely
+              val (expectedType,_) = defs.fieldType(c, f).get
+              val actualType = typeInference.inferType(e, heap)
+                actualType == Class("Nothing") ||
+                actualType == expectedType   ||
+                defs.supertypes(actualType).contains(expectedType)
+          }
+      }
+    }
+    type StateCM[A] =  State[Map[syntax.ast.Symbols, Class], A]
+    def checkTypeConsistencyBoolExpr(b : BoolExpr) : StateCM[Boolean] = b match {
+      case syntax.ast.Not(b) => checkTypeConsistencyBoolExpr(b).map(!_)
+      case syntax.ast.And(b1, b2) =>
+       for {
+         b1c <- checkTypeConsistencyBoolExpr(b1)
+         b2c <- checkTypeConsistencyBoolExpr(b2)
+       } yield b1c && b2c
+      case syntax.ast.ClassMem(e, c) => {
+        // TODO handle safely
+        val sym = e.asInstanceOf[Symbol]
+        val sts = defs.subtypesOrSelf
+        for {
+          st <- State.get[Map[syntax.ast.Symbols, Class]]
+          symtype = if (st.contains(sym.id)) st(sym.id) else SpatialDesc._sd_c.get(heap.spatial(sym.id))
+          isSubType = sts(symtype).contains(c)
+          _ <- if (isSubType) State.put(st.updated(sym.id, c)) else ().point[StateCM]
+        } yield isSubType || defs.supertypes(c).contains(symtype)
+      }
+      case _ => true.point[StateCM]
+    }
+    heap.pure.traverseU(checkTypeConsistencyBoolExpr).eval(Map()).forall(identity)
   }
 
   def makeSSymbol(npref: String, ppref: String, id : syntax.ast.Symbols, symsort : Sort) = {

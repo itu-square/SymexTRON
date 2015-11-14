@@ -81,7 +81,7 @@ case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr with
 
 sealed trait BoolExpr extends Node
 case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr with LeafNode
-case class ClassMem(e1: SetExpr, s: Class) extends BoolExpr with BinaryNode {
+case class ClassMem(e1: BasicExpr, s: Class) extends BoolExpr with BinaryNode {
   override val assocLeft = false
   override val left      = e1
   override val right     = s

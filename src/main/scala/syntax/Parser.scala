@@ -28,7 +28,7 @@ object Parser extends RegexParsers {
   lazy val pBoolExpr:  Parser[BoolExpr] = (
       (pSetExpr <~ pSetSubEqOp) ~ pSetExpr  ^^ { SetSubEq(_,_) }
     | (pVar <~ pSetMemOp)       ~ pSetExpr  ^^ { (v, e) => SetMem(Var(v),e) }
-    | (pSetExpr <~ pClassMemOp) ~ pClass    ^^ { ClassMem(_,_) }
+    | (pVar <~ pClassMemOp)     ~ pClass    ^^ { (v, c) => ClassMem(Var(v),c) }
     | (pSetExpr <~ pEqOp)       ~ pSetExpr  ^^ { Eq(_,_) }
     | (pBoolExpr <~ pAndOp)     ~ pBoolExpr ^^ { And(_,_) }
     | (pBoolExpr <~ pOrOp)      ~ pBoolExpr ^^ { (b1, b2) => Not(And(Not(b1),Not(b2))) }

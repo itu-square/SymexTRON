@@ -406,7 +406,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       } yield Eq(ee1, ee2)
     case ClassMem(e1, s) =>
       for {
-        ee1 <- evalExpr(st, e1)
+        ee1 <- evalBasicExpr(st, e1)
       } yield ClassMem(ee1, s)
     case Not(p) =>
       for {
