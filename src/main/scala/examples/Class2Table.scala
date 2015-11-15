@@ -46,7 +46,7 @@ object Class2Table extends App {
     ))
   )
   val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap, beta=1)
-  val task: Task[Unit] = scc.execute(Process(pre.right), prog).map(path =>
+  val task: Task[Unit] = scc.execute(Process(pre), prog).map(path =>
      path.fold(identity, mem => s"Resulting memory: ${PrettyPrinter.pretty(mem)}")).to(io.stdOutLines).run
   task.run
 }

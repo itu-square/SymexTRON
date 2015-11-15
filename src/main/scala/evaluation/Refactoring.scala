@@ -313,7 +313,7 @@ object Refactoring {
       import scalaz.concurrent.Task
 
       val symex = new SymbolicExecutor(FullClassModel.allDefsWithKeys, kappa = 2, beta = 5, delta = 7)
-      val task: Task[Unit] = symex.execute(Process(initialMems : _*).map(_.right), refactoring).filter(p).map(path => path.fold(identity, mem => {
+      val task: Task[Unit] = symex.execute(Process(initialMems : _*), refactoring).filter(p).map(path => path.fold(identity, mem => {
         val nmem: SMem = SetNormalizer.normalize(mem.heap.pure)(mem).cata(_.asInstanceOf[SMem], mem)
         s"Resulting memory: ${PrettyPrinter.pretty(nmem)}"})).to(io.stdOutLines).run
       println("-" * 20)

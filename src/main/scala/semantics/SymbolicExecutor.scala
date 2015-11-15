@@ -244,39 +244,43 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     SHeap(newspatial, newqspatial, heap.pure)
   }
 
-  def execute(pres : Process[Task, String \/ SMem], c : Statement) : Process[Task, String \/ SMem] = {
-    pres.flatMap { (pre: String \/ SMem) =>
-      if (pre.fold(_ => false, mem => !hcc.isConsistent(mem.heap))) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.toOption.get.heap)}".left)
+  def execute(pres : Process[Task, SMem], c : Statement) : Process[Task, String \/ SMem] = {
+    // Todo parallelise using mergeN
+    pres.flatMap { (pre: SMem) =>
+      if (!hcc.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
       else c match {
-        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre))(execute)
+        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre.right))(
+          (pmem, s) => for {
+            memr <- pmem
+            res <- memr.traverse[TProcess, String, String \/ SMem](mem =>
+               execute(Process(mem), s)).map(_.join)
+          } yield res)
         case AssignVar(_,x, e) => Process(for {
-          mem <- pre
-          ee <- evalExpr(mem.stack, e)
-        } yield _sm_stack.modify(_ + (x -> ee))(mem))
+          ee <- evalExpr(pre.stack, e)
+        } yield _sm_stack.modify(_ + (x -> ee))(pre))
         case New(_, x, c) => Process(for {
-          mem <- pre
           cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
           xsym = freshSym
           alloced =
               xsym -> ConcreteDesc(c, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
         } yield (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) `andThen`
-                      (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(mem))
-        case LoadField(_, x, e, f) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
-          sym <- Process(evalExpr(mem.stack, e).flatMap(getSymbol))
+                      (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(pre))
+        case LoadField(_, x, e, f) => for {
+          sym <- Process(evalExpr(pre.stack, e).flatMap(getSymbol))
           ares <- sym.traverse[TProcess, String, String \/ (SetExpr, SHeap)](s =>
-                  access(s, f, mem.heap))(pmt).map(_.join)
-        } yield ares.map(p => SMem(mem.stack + (x -> p._1), p._2)))(pmt).map(_.join)
-        case AssignField(_, e1, f, e2) => pre.traverse[TProcess, String, String \/ SMem](mem =>
-          evalExpr(mem.stack, e1).flatMap(getSymbol).traverse[TProcess, String, String \/ SMem](sym =>
-              evalExpr(mem.stack, e2).traverse[TProcess, String, String \/ SMem](ee2 =>
+                  access(s, f, pre.heap))(pmt).map(_.join)
+        } yield ares.map(p => SMem(pre.stack + (x -> p._1), p._2))
+        case AssignField(_, e1, f, e2) => {
+          evalExpr(pre.stack, e1).flatMap(getSymbol).traverse[TProcess, String, String \/ SMem](sym =>
+              evalExpr(pre.stack, e2).traverse[TProcess, String, String \/ SMem](ee2 =>
                     for {
-                       newheaps <- update(sym, f, ee2, mem.heap)
-                    } yield newheaps.map(_sm_heap.set(_)(mem))
+                       newheaps <- update(sym, f, ee2, pre.heap)
+                    } yield newheaps.map(_sm_heap.set(_)(pre))
               )(pmt).map(_.join)
           )(pmt).map(_.join)
-        )(pmt).map(_.join)
-        case If(_, ds, cs@_*) => pre.traverse[TProcess, String, String \/ SMem]( mem => {
-          val ecs    = cs.map(p => evalBoolExpr(mem.stack, p._1).map((_, p._2))).toList
+        }
+        case If(_, ds, cs@_*) =>{
+          val ecs    = cs.map(p => evalBoolExpr(pre.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
           } yield other.map(not).foldLeft[BoolExpr](True)(And(_,_)) -> ds
@@ -285,18 +289,18 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             cstmt <- newecs
             posts <- cstmt.traverse[TProcess, String, String \/ SMem]( cst => {
                 val (eb, s) = cst
-                val newmem = (_sm_heap ^|-> _sh_pure).modify(_ + eb)(mem)
-                execute(Process(newmem.right), s)
+                val newmem = (_sm_heap ^|-> _sh_pure).modify(_ + eb)(pre)
+                execute(Process(newmem), s)
             }).map(_.join)
           } yield posts
-          }).map(_.join)
-        case For(_, x, m, sb) => pre.traverse[TProcess, String, String \/ SMem](mem => for {
+        }
+        case For(_, x, m, sb) => for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references
-            esolr <- evalExpr(mem.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, SetLit], SetLit)](ee =>
-               mf.findSet(ee, mem.heap, beta)).map(_.join)
+            esolr <- evalExpr(pre.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, SetLit], SetLit)](ee =>
+               mf.findSet(ee, pre.heap, beta)).map(_.join)
             res <- esolr.traverse[TProcess, String, String \/ SMem](esol => {
                 val (th, ees) = esol
-                val newpre = mem.subst_all(th) |> _sm_heap.modify(expand)
+                val newpre = pre.subst_all(th) |> _sm_heap.modify(expand)
                 for {
                   mres  <- m match {
                     case MSet(e) => Process((ees, newpre).right)
@@ -314,23 +318,23 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                     } yield res.map(p => (p._1, _sm_heap.set(p._2)(newpre)))
                   }
                   res <- mres.traverse[TProcess, String, String \/ SMem](mr => {
-                    val (syms, mem) = mr
-                    syms.es.toList.foldLeft[Process[Task, String \/ SMem]](Process(mem.right))((memp : Process[Task, String \/ SMem], sym : BasicExpr) =>
+                    val (syms, pre) = mr
+                    syms.es.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre.right))((memp : Process[Task, String \/ SMem], sym : BasicExpr) =>
                       for {
                         memr <- memp
                         res <- memr.traverse[TProcess, String, String \/ SMem](nmem =>
-                          execute(Process(_sm_stack.modify(_ + (x -> SetLit(sym)))(nmem).right), sb)
+                          execute(Process(_sm_stack.modify(_ + (x -> SetLit(sym)))(nmem)), sb)
                         )(pmt).map(_.join)
                       } yield res
                     )
                   })(pmt).map(_.join)
                 } yield res
               })(pmt).map(_.join)
-        } yield res)(pmt).map(_.join)
+        } yield res
         case Fix(_, e, sb) => {
           def fixEqCase(bmem: SMem): Process[Task, String \/ SMem] = {
             for {
-              sbr <- execute(Process(bmem.right), sb)
+              sbr <- execute(Process(bmem), sb)
               res = for {
                   amem <- sbr
                   eeb <- evalExpr(bmem.stack, e)
@@ -340,7 +344,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           }
           def fixNeqCase(bmem: SMem, k: Int): Process[Task, String \/ SMem] = {
             for {
-              sbr <- execute(Process(bmem.right), sb)
+              sbr <- execute(Process(bmem), sb)
               imem2r = for {
                 imem <- sbr
                 eeb <- evalExpr(bmem.stack, e)
@@ -351,8 +355,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               ).map(_.join)
             } yield res
           }
-          pre.traverse[TProcess, String, String \/ SMem](mem =>
-            fixEqCase(mem) ++ fixNeqCase(mem, kappa)).map(_.join)
+          fixEqCase(pre) ++ fixNeqCase(pre, kappa)
         }
       }
     }
