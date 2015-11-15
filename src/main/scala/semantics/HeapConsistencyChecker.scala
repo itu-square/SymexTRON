@@ -30,15 +30,17 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     Script(prelogue ++ subscripts.fold(List())(_ ++ _) ++ epilogue)
 
   def isConsistent(heap : syntax.ast.SHeap): Boolean = {
-    var interpreter: ScriptInterpreter = null
-    try {
-      interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
-      val constraintconsistent = checkConstraintConsistency(interpreter, heap)
-      //TODO Do QSPatial and pure type constraints as well
-      val typeconsistent = checkTypeConsistency(heap)
-      constraintconsistent && typeconsistent
-    } finally {
-        Option(interpreter).map (_.free)
+    this.synchronized {
+      var interpreter: ScriptInterpreter = null
+      try {
+        interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
+        val constraintconsistent = checkConstraintConsistency(interpreter, heap)
+        //TODO Do QSPatial and pure type constraints as well
+        val typeconsistent = checkTypeConsistency(heap)
+        constraintconsistent && typeconsistent
+      } finally {
+          Option(interpreter).map (_.free)
+      }
     }
   }
 
