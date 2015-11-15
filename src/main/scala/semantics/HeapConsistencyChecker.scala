@@ -11,8 +11,11 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   import smtlib.theories.Core._
   import smtlib.theories.Ints._
   import helper.theories.Sets._
+  import helper.theories._
   import smtlib.interpreters._
   import helper.interpreters._
+
+  object Distinct extends NAryOperation { override val name = "distinct" }
 
   type SymbolMap = Map[syntax.ast.Symbols, (SSymbol, Sort)]
 
@@ -30,16 +33,16 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     var interpreter: ScriptInterpreter = null
     try {
       interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
-      val pcconsistent = checkPureConstraintConsistency(interpreter, heap)
+      val constraintconsistent = checkConstraintConsistency(interpreter, heap)
       //TODO Do QSPatial and pure type constraints as well
       val typeconsistent = checkTypeConsistency(heap)
-      pcconsistent && typeconsistent
+      constraintconsistent && typeconsistent
     } finally {
         Option(interpreter).map (_.free)
     }
   }
 
-  def checkPureConstraintConsistency(interpreter : ScriptInterpreter, heap : syntax.ast.SHeap): Boolean = {
+  def checkConstraintConsistency(interpreter : ScriptInterpreter, heap : syntax.ast.SHeap): Boolean = {
     val syms = heap.symbols
     val symsmap = syms.map(_.fold(
             ss => (ss.id, makeSSymbol("X", "Y", ss.id, SetSort(IntSort())))
@@ -48,7 +51,22 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     val symsDecl = symsmap.values.toList.map(sym =>
                     DeclareFun(sym._1, Seq(), sym._2) : Command)
     val pureConstraints = bs.map(Assert(_) : Command)
-    val scr = makeScript(symsDecl, pureConstraints)
+    val separation =
+       if (heap.spatial.size >= 2)
+         List(Assert(Distinct(heap.spatial.keys.toSeq
+                       .map(symsmap).map {
+                         case (ssym, _) => QualifiedIdentifier(Identifier(ssym))
+                       })))
+      else List()
+    val directAcyclicity = heap.spatial.collect {
+      case (symid, ConcreteDesc(_, children, _)) =>
+        children.values.toList.map(e =>
+            Assert(Not(Member(
+              QualifiedIdentifier(Identifier(symsmap(symid)._1)),
+              evalSetExpr(symsmap, e))))
+        )
+    }.toList.flatten
+    val scr = makeScript(symsDecl, separation, directAcyclicity, pureConstraints)
     val res = interpreter.interpret(scr)
     interpreter.satStatus(res).fold(false) {
         case SatStatus => true
