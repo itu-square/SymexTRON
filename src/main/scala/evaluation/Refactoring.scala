@@ -306,16 +306,17 @@ object Refactoring {
     , assignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))
     )
 
-    def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement, p: scalaz.\/[String, SMem] => Boolean = (_ => true)): Unit = {
+    def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement, p: scalaz.\/[String, (SHeap, SMem)] => Boolean = (_ => true)): Unit = {
       import syntax.PrettyPrinter
       import semantics._
       import scalaz._, Scalaz._, scalaz.stream._
       import scalaz.concurrent.Task
 
       val symex = new SymbolicExecutor(FullClassModel.allDefsWithKeys, kappa = 2, beta = 5, delta = 7)
-      val task: Task[Unit] = symex.execute(Process(initialMems : _*), refactoring).filter(p).map(path => path.fold(identity, mem => {
-        val nmem: SMem = SetNormalizer.normalize(mem.heap.pure)(mem).cata(_.asInstanceOf[SMem], mem)
-        s"Resulting memory: ${PrettyPrinter.pretty(nmem)}"})).to(io.stdOutLines).run
+      val task: Task[Unit] = symex.execute(Set(initialMems : _*), refactoring).filter(p).map(path => path.fold(identity, {
+          case (initHeap, mem) =>
+            val nmem: SMem = SetNormalizer.normalize(mem.heap.pure)(mem).cata(_.asInstanceOf[SMem], mem)
+            s"Resulting memory: ${PrettyPrinter.pretty(nmem)}"})).to(io.stdOutLines).run
       println("-" * 20)
       println(s"Starting execution of $name")
       println("-" * 20)
