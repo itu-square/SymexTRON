@@ -340,7 +340,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       } yield newheaps)
   }
 
-  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
+  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int = delta): Process[Task, String \/ (SMem, SMem)] = {
     def concretise_final(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
       el.es.foldLeft(Process((initialMem, currentMem).right) : Process[Task, String \/ (SMem, SMem)]) { (memr: Process[Task, String \/ (SMem, SMem)], b: BasicExpr) =>
         for {
@@ -362,7 +362,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                             })(pmt).map(_.join)
                          } else Process()
               res = thr.map {th =>
-                  (initMem.subst_all(th), curMem.subst_all(th)).map(_sm_heap.modify(expand))
+                  (initMem.subst_all(th) |> _sm_heap.modify(expand), curMem.subst_all(th) |> _sm_heap.modify(expand))
               }
           } yield res })(pmt).map(_.join)
           /*_sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)*/
@@ -399,7 +399,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         }}(pmt).map(_.join)
       } yield res
     }
-    concretise_helper(el, initialMem, currentMem, delta)
+    concretise_helper(el, initialMem, currentMem, depth)
   }
 
 }

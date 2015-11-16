@@ -130,7 +130,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private def executeHelper(pres : Process[Task, (SMem, SMem)], c : Statement) : Process[Task, String \/ (SMem, SMem)] = {
     // Todo parallelise using mergeN
     pres.flatMap { case (initMem: SMem, pre: SMem) =>
-      if (!hcc.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
+      if (!heapConsistencyChecker.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
       else c match {
         case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))(
           (pmem, s) => for {
@@ -317,7 +317,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private def freshSym: Symbols = symCounter++
 
-  private val hcc = new HeapConsistencyChecker(defs)
+  val heapConsistencyChecker = new HeapConsistencyChecker(defs)
 
   val modelFinder = new ModelFinder(symCounter, defs, beta, delta)
 

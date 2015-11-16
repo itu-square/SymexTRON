@@ -63,6 +63,14 @@ trait SymbolicOps {
                             heap.pure.symbols
   }
 
+  implicit class SymbolicSStack(stack : SStack) extends Symbolic {
+    override val symbols = stack.values.toSet.flatMap((e : SetExpr) => e.symbols)
+  }
+
+  implicit class SymbolicSMem(mem : SMem) extends Symbolic {
+    override val symbols = mem.stack.symbols ++ mem.heap.symbols
+  }
+
   implicit class SymbolIds(s : Set[SetSymbol \/ Symbol]) {
     val ids = s.map(_.fold(_.id,_.id))
   }

@@ -1,6 +1,6 @@
 package examples
 
-import semantics.SymbolicExecutor
+import testing.TestGenerator
 import syntax.PrettyPrinter
 import syntax.ast._
 import scalaz._, Scalaz._, scalaz.stream._
@@ -45,10 +45,7 @@ object Class2Table extends App {
       assignField(SetLit(Var("table")), "columns", Union(SetVar("tablecolumns"), SetLit(Var("col"))))
     ))
   )
-  val scc = new SymbolicExecutor(classDefs.map(cd => Class(cd.name) -> cd).toMap, beta=1)
-  val task: Task[Unit] = scc.execute(Set(pre), prog).map(path =>
-     path.fold(identity, {
-       case (initHeap, mem) => s"Resulting memory: ${PrettyPrinter.pretty(mem)}"
-   })).to(io.stdOutLines).run
+  val tg = new TestGenerator(classDefs.map(cd => Class(cd.name) -> cd).toMap, beta=10, delta=5, kappa=2)
+  val task: Task[Unit] = tg.generateTests(Set(pre), prog).map(_.toString).to(io.stdOutLines).run
   task.run
 }
