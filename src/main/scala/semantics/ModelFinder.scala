@@ -7,7 +7,13 @@ import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
 import kodkod.instance.{Bounds, TupleSet, Universe}
 
+import syntax.PrettyPrinter
 import syntax.ast._
+import syntax.ast.SpatialDesc._
+import syntax.ast.ConcreteDesc._
+import syntax.ast.SHeap._
+import syntax.ast.SMem._
+import semantics.Subst._
 import helper._
 
 import scala.collection.JavaConverters._
@@ -18,7 +24,8 @@ import scalaz.stream._
 
 
 
-class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map()) {
+class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
+                  beta: Int, delta: Int) {
   private type StringE[T] = String \/ T
   private type EvalRes[T] = (Set[Relation], Set[Integer], Formula, T, Map[Symbols, Relation])
 
@@ -58,8 +65,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
 
   def bounds(rs : Set[Relation], is : Set[Integer], minSymbols : Int) : Bounds = {
     val symbolintnames = (for (i <- 1 to (minSymbols - is.size)) yield {
-      symcounter := !symcounter + 1
-      Int.box(!symcounter)
+      Int.box(symcounter.++)
     }).toSet ++ is
 
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
@@ -221,7 +227,7 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
       val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
       val rsymids = rels(name).iterator.asScala.filter(
         t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
-      SetLit(rsymids.toList.map(Symbol): _*)
+      SetLit(rsymids.toList.map(Symbol.apply): _*)
     }
     e match {
       case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
@@ -256,6 +262,144 @@ class ModelFinder(symcounter : Counter, defs: Map[Class, ClassDefinition] = Map(
             }
           } yield res).sequenceU)
     }
+  }
+
+  def expand(heap: SHeap): SHeap = {
+    val (newspatial, newqspatial) = heap.qspatial.foldLeft((heap.spatial, Set[QSpatial]())) {
+      (part : (Spatial[Symbols], Set[QSpatial]), qs : QSpatial) => qs.e match {
+          // TODO: Use String \/ - instead
+        case SetLit(as @_*) =>
+          val expanded: Map[Symbols, SpatialDesc] =
+            as.map(_.asInstanceOf[Symbol]).map(_.id -> _sd_abstract.reverseGet(AbstractDesc(qs.c))).toMap
+          // TODO: Consider a good way to merge things
+          (part._1 ++ expanded, part._2)
+        case _ => (part._1, part._2 + qs)
+      }
+    }
+    SHeap(newspatial, newqspatial, heap.pure)
+  }
+
+  def unfold(sym : Symbols, sd : SpatialDesc, initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (ConcreteDesc, SHeap, SHeap)] = {
+    def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
+      val defc = defs(c)
+      defc.children ++ defc.superclass.map(all_children).getOrElse(Map())
+    }
+    def all_references(c : Class) : Map[Fields, (Class, Cardinality)] = {
+      val defc = defs(c)
+      defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
+    }
+    def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
+      card match {
+        case Single => {
+          val sym = symcounter.++
+          List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
+        }
+        case Many => {
+          val sym = SetSymbol((cl, Many), symcounter.++)
+          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
+        }
+        case Opt => {
+          val sym = SetSymbol((cl, Opt), symcounter.++)
+          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
+        }
+      }
+    }
+
+    sd match {
+      case AbstractDesc(c) =>
+        for {
+           defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
+           // Type inference is a bit limited for higher-kinded types
+           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList : _*))(pmn)
+           cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap, SHeap)](st => for {
+                     cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
+                     rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
+                     chlds = cs.mapValues(_._1)
+                     refs  = rs.mapValues(_._1)
+                     all = cs.values.toList ++ rs.values.toList
+                     (_, newspatials, newqspatials) = all.unzip3(identity)
+                     newspatial = newspatials.foldLeft(Map[Symbols, SpatialDesc]())(_ ++ _)
+                     newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
+                     cd = ConcreteDesc(st, chlds, refs)
+                     upd = _sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial)
+                   } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn)
+        } yield cdc
+      case cd@ConcreteDesc(c, children, refs) => Process((cd, initHeap, currentHeap).right)
+    }
+  }
+
+  def unfold_all(syms : SetLit, initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
+    syms.es.toList.foldLeft[Process0[String \/ (SHeap, SHeap)]](Process((initHeap, currentHeap).right))((heaps: Process0[String \/ (SHeap, SHeap)], b : BasicExpr) =>
+      for {
+        he <- heaps
+        newheaps <-  he.flatMap { case (ih, ch) => for {
+           sym <- getSingletonSymbolId(SetLit(b))
+           symv <- ch.spatial.get(sym).cata(_.right, s"Unknown symbol: ${PrettyPrinter.pretty(Symbol(sym))}".left)
+           newheaps = unfold(sym, symv, ih, ch)
+        } yield newheaps }.traverse(identity)(pmn).map(_.join.map { case (_, ih, ch) => (ih, ch) })
+      } yield newheaps)
+  }
+
+  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
+    def concretise_final(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
+      el.es.foldLeft(Process((initialMem, currentMem).right) : Process[Task, String \/ (SMem, SMem)]) { (memr: Process[Task, String \/ (SMem, SMem)], b: BasicExpr) =>
+        for {
+          mem <- memr
+          res <- mem.traverse[TProcess, String, String \/ (SMem, SMem)]({ case (initMem, curMem) => for {
+              sym <- b match {
+                case Symbol(id) => Process(id)
+                case Var(name) => Process()
+              }
+              symv <- Process(curMem.heap.spatial.get(sym).toSeq :_*)
+              cd <- Process(_sd_concrete.getOption(symv).toSeq :_*)
+              defc <- Process(defs.get(cd.c).toSeq : _*)
+              thr <- if (defc.children.values.forall(_._2.isOptional)) {
+                            (_sd_concrete ^|-> _cd_children).getOption(curMem.heap.spatial(sym)).map(_.values)
+                                 .cata(_.right, s"Error: $sym doesn't have a concrete desc".left).traverse[TProcess, String, String \/ Map[Symbols, SetLit]]({ ownedExprs =>
+                                    val finalConstraints = ownedExprs.map(Eq(_, SetLit()))
+                                    findSet(ownedExprs.foldLeft(SetLit() : SetExpr)(Union),
+                                        _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
+                            })(pmt).map(_.join)
+                         } else Process()
+              res = thr.map {th =>
+                  (initMem.subst_all(th), curMem.subst_all(th)).map(_sm_heap.modify(expand))
+              }
+          } yield res })(pmt).map(_.join)
+          /*_sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)*/
+        } yield res
+      }
+    }
+    // TODO Convert all SetLit to expression
+    def concretise_helper(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int): Process[Task, String \/ (SMem, SMem)] = {
+      if (depth <= 0) {
+        concretise_final(el, initialMem, currentMem)
+      }
+      else for {
+        unfolded <- unfold_all(el, initialMem.heap, currentMem.heap)
+        res <- unfolded.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ih, ch) => {
+          val childsyms = el.es.flatMap(e =>
+            e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
+              .flatMap(_sd_concrete.getOption).map(_.children.values).get)
+          // Just join everything together
+          val joinede = childsyms.foldLeft(SetLit() : SetExpr)(Union)
+          val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
+          for {
+            joinedset_th <- findSet(joinede, ch, beta)
+            joinedset_mem = joinedset_th.map { case (th, els) =>
+              (newInitialMem.subst_all(th) |> _sm_heap.modify(expand),
+                     newCurrentMem.subst_all(th) |> _sm_heap.modify(expand),
+                     els)
+            }
+            cfinal = concretise_final(el, newInitialMem, newCurrentMem)
+            cfurther = joinedset_mem.traverse[TProcess, String, String \/ (SMem, SMem)]{
+              case (newInitialMem:SMem, newCurrentMem:SMem, els : SetLit) => concretise_helper(els, newInitialMem, newCurrentMem, depth - 1)
+            }.map(_.join)
+            concretised <- cfinal ++ cfurther
+          } yield concretised
+        }}(pmt).map(_.join)
+      } yield res
+    }
+    concretise_helper(el, initialMem, currentMem, delta)
   }
 
 }

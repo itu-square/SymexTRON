@@ -33,7 +33,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     this.synchronized {
       var interpreter: ScriptInterpreter = null
       try {
-        interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs ++ Array("--fmf-fun-rlv")))
+        interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs))
         val constraintconsistent = checkConstraintConsistency(interpreter, heap)
         //TODO Do QSPatial and pure type constraints as well
         val typeconsistent = checkTypeConsistency(heap)

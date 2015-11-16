@@ -1,6 +1,7 @@
 import sbt._
+import util.matching.Regex._
 
-resolvers += Resolver.sonatypeRepo("releases")
+resolvers += Resolver.sonatypeRepo("public")
 
 name := "VeriTRAN"
 
@@ -31,6 +32,10 @@ libraryDependencies ++= Seq(
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
 libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
+
+
+//TODO Figure out how to do this cross platform compatible with 1.7 <= using threeten
+libraryDependencies += "codes.reactive" %% "scala-time" % "0.3.0-SNAPSHOT"
 
 fork in Test := true
 

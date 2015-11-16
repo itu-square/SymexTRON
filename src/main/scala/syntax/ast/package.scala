@@ -19,6 +19,13 @@ package object ast extends SymbolicOps {
     case p => Not(p)
   } //Smart constructor
 
+  def getSingletonSymbolId(e : SetExpr): String \/ Symbols = {
+    e match {
+      case SetLit(Symbol(sym)) => sym.right
+      case _ => s"${PrettyPrinter.pretty(e)} is not a symbol".left
+    }
+  }
+
   implicit class RichDefs(defs: Map[Class, ClassDefinition]){
     val childfields: Set[Fields] = defs.values.flatMap(_.children.keys).toSet
     val reffields: Set[Fields]   = defs.values.flatMap(_.refs.keys).toSet

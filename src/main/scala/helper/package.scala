@@ -8,11 +8,17 @@ import scalaz.Leibniz.===
 import scalaz.{Unapply, Functor, Applicative, Monoid, Monad}
 import scalaz.stream.Process
 import scala.concurrent.stm._
+import scalaz.concurrent.Task
+import scalaz.\/
+import scalaz.stream.Process
 
 sealed trait BlackHole
 case class HoleError() extends Error
 
 package object helper {
+  type StringE[B] = String \/ B
+  type TProcess[A] = Process[Task, A]
+
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
     def adjust[B1 >: Set[V]](key: K)(f : B1 => B1) = m updated (key, f (m getOrElse(key, Set())))
     def merge: Option[Map[K, V]] = m.foldLeft(Option(Map[K,V]())){
@@ -80,6 +86,10 @@ package object helper {
     def point[A](a: => A): Process[F, A] = Process.emit(a)
     def bind[A, B](fa : Process[F, A])(f : A => Process[F, B]): Process[F, B] = fa.flatMap(f)
   }
+
+  val pmn = helper.processMonad[Nothing]
+  val pmt = helper.processMonad[Task]
+
 
   implicit class UnFunction1[A,B,C](f : (A, B) => C) {
     def un(b : B)(a : A): C = f (a, b)
