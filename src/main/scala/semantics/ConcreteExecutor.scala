@@ -16,11 +16,13 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
 
   val progBranches = Statement.branches(prog)
 
-  private val _stmtCoverage = TMap.empty[Integer, Boolean]
-  private val _branchCoverage = TMap.empty[BranchPoint, Boolean]
+  private val _stmtCoverageMap = TMap.empty[Integer, Boolean]
+  private val _branchCoverageMap = TMap.empty[BranchPoint, Boolean]
 
-  def stmtCoverage = Map(_stmtCoverage.single.toSeq: _*)
-  def branchCoverage = Map(_branchCoverage.single.toSeq: _*)
+  def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
+  def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
+
+  def branchCoverage = branchCoverageMap.size.toDouble / progBranches.values.map(_.size).sum
 
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
@@ -28,7 +30,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
     val uid = Statement._stmt_uid.getOption(s).get
     atomic { implicit txn =>
-      _stmtCoverage.put(uid, true)
+      _stmtCoverageMap.put(uid, true)
     }
     s match {
       case StmtSeq(_, ss @ _*) => {
@@ -74,7 +76,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
           gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
           gr = evalBoolExpr(gs._1, mem.stack, mem.heap)
           res <- gr.traverseU(g => if (g) {
-            _branchCoverage.updateValue(BranchPoint(uid, gs._3), _ => true)
+            _branchCoverageMap.updateValue(BranchPoint(uid, gs._3), _ => true)
             executeStmt(mem, gs._2)
           } else Process.empty).map(_.join)
         } yield res
@@ -83,9 +85,9 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         osr <- evalMatchExpr(m, mem.stack, mem.heap) |> Process.emit
         res <- osr.traverseU(os => {
           if (os.size == 0)
-            _branchCoverage.updateValue(BranchPoint(uid, 0), _ => true)
+            _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
           else
-            _branchCoverage.updateValue(BranchPoint(uid, 1), _ => true)
+            _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
           os.foldLeft[Process[Task, String \/ CMem]](
             Process.emit(mem.right)
           ) { (pmem, o) =>
@@ -103,10 +105,10 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
             eea <- evalExpr(e, nmem.stack)
           } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
             if (eeb == eea) {
-              _branchCoverage.updateValue(BranchPoint(uid, 0), _ => true)
+              _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
               Process.emit(nmem.right)
             } else {
-              _branchCoverage.updateValue(BranchPoint(uid, 1), _ => true)
+              _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
               fix(nmem)
             }
           }.tupled).map(_.join)
