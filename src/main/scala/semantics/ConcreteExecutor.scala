@@ -22,7 +22,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
-  def branchCoverage = branchCoverageMap.size.toDouble / progBranches.values.map(_.size).sum
+  def branchCoverage =  branchCoverageMap.size.toDouble / progBranches.values.map(_.size).sum
 
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 

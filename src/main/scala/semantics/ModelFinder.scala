@@ -340,7 +340,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       } yield newheaps)
   }
 
-  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int = delta): Process[Task, String \/ (SMem, SMem)] = {
+  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem, alsoReferences: Boolean = false, depth: Int = delta): Process[Task, String \/ (SMem, SMem)] = {
     def concretise_final(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
       el.es.foldLeft(Process((initialMem, currentMem).right) : Process[Task, String \/ (SMem, SMem)]) { (memr: Process[Task, String \/ (SMem, SMem)], b: BasicExpr) =>
         for {
@@ -353,12 +353,18 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
               symv <- Process(curMem.heap.spatial.get(sym).toSeq :_*)
               cd <- Process(_sd_concrete.getOption(symv).toSeq :_*)
               defc <- Process(defs.get(cd.c).toSeq : _*)
-              thr <- if (defc.children.values.forall(_._2.isOptional)) {
-                            (_sd_concrete ^|-> _cd_children).getOption(curMem.heap.spatial(sym)).map(_.values)
-                                 .cata(_.right, s"Error: $sym doesn't have a concrete desc".left).traverse[TProcess, String, String \/ Map[Symbols, SetLit]]({ ownedExprs =>
-                                    val finalConstraints = ownedExprs.map(Eq(_, SetLit()))
-                                    findSet(ownedExprs.foldLeft(SetLit() : SetExpr)(Union),
-                                        _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
+              thr <- if (defc.children.values.forall(_._2.isOptional)
+                          && (if (alsoReferences) defc.refs.values.forall(_._2.isOptional) else true)) {
+                            val childExprs = (_sd_concrete ^|-> _cd_children).getOption(curMem.heap.spatial(sym)).map(_.values)
+                            val refExprs = (_sd_concrete ^|-> _cd_refs).getOption(curMem.heap.spatial(sym)).map(_.values)
+                            val allExprs = for {
+                              cexs <- childExprs
+                              rexs <- if (alsoReferences) refExprs else Set().some
+                            } yield (cexs ++ rexs)
+                            allExprs.cata(_.right, s"Error: $sym doesn't have a concrete desc".left).traverse[TProcess, String, String \/ Map[Symbols, SetLit]]({ ownedExprs =>
+                              val finalConstraints = ownedExprs.map(Eq(_, SetLit()))
+                              findSet(ownedExprs.foldLeft(SetLit() : SetExpr)(Union),
+                                  _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
                             })(pmt).map(_.join)
                          } else Process()
               res = thr.map {th =>
@@ -380,8 +386,12 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           val childsyms = el.es.flatMap(e =>
             e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
               .flatMap(_sd_concrete.getOption).map(_.children.values).get)
+          val refsyms = el.es.flatMap(e =>
+            e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
+              .flatMap(_sd_concrete.getOption).map(_.refs.values).get)
+          val allSyms = childsyms ++ (if (alsoReferences) refsyms else Set())
           // Just join everything together
-          val joinede = childsyms.foldLeft(SetLit() : SetExpr)(Union)
+          val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
           val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
           for {
             joinedset_th <- findSet(joinede, ch, beta)

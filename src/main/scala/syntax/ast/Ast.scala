@@ -258,9 +258,9 @@ object Statement {
         case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
         case New(_, x, c) => New(sMInf, x, c)
         case AssignField(_, e1, f, e2) => AssignField(sMInf, e1, f, e2)
-        case If(_, ds, cs@_*) => If(sMInf, ds, cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
-        case For(_, x, m, sb) => For(sMInf, x, m, sb)
-        case Fix(_, e, sb) => Fix(sMInf, e, sb)
+        case If(_, ds, cs@_*) => If(sMInf, annotateUidH(ds), cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
+        case For(_, x, m, sb) => For(sMInf, x, m, annotateUidH(sb))
+        case Fix(_, e, sb) => Fix(sMInf, e, annotateUidH(sb))
       }
     }
     annotateUidH(s)
