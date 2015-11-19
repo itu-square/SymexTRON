@@ -22,12 +22,17 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
-  def branchCoverage =  (branchCoverageMap.filter(_._2).size * 100) / progBranches.values.map(_.size).sum
+  def branchCoverage =  {
+    val coveredBranches = branchCoverageMap.filter(_._2).keys.toSet
+    val allBranches     = progBranches.values.toSet
+    coveredBranches.size * 100 / allBranches.size
+  }
 
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
   //TODO Check for type and ownership constraints
   private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
+    //println(s"executeStmt($mem, $s)")
     val uid = Statement._stmt_uid.getOption(s).get
     atomic { implicit txn =>
       _stmtCoverageMap.put(uid, true)
@@ -105,6 +110,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
             eea <- evalExpr(e, nmem.stack)
           } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
             if (eeb == eea) {
+              println("fixing")
               _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
               Process.emit(nmem.right)
             } else {

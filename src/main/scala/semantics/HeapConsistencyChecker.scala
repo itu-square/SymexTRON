@@ -77,7 +77,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   }
 
   def checkTypeConsistency(heap : syntax.ast.SHeap): Boolean = {
-    heap.spatial forall {
+    val typeConsistentAssigniments = heap.spatial forall {
       case (id, sd) => sd match {
         case AbstractDesc(_) => true
         case ConcreteDesc(c, children, refs) =>
@@ -86,9 +86,10 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
               // TODO handle safely
               val (expectedType,_) = defs.fieldType(c, f).get
               val actualType = typeInference.inferType(e, heap)
-                actualType == Class("Nothing") ||
-                actualType == expectedType   ||
-                defs.supertypes(actualType).contains(expectedType)
+                val isNothing = actualType == Class("Nothing")
+                val isSame = actualType == expectedType
+                val isSubtype = defs.supertypes(actualType).contains(expectedType)
+                isNothing || isSame || isSubtype
           }
       }
     }
@@ -113,7 +114,8 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       }
       case _ => true.point[StateCM]
     }
-    heap.pure.traverseU(checkTypeConsistencyBoolExpr).eval(Map()).forall(identity)
+    typeConsistentAssigniments &&
+      heap.pure.traverseU(checkTypeConsistencyBoolExpr).eval(Map()).forall(identity)
   }
 
   def makeSSymbol(npref: String, ppref: String, id : syntax.ast.Symbols, symsort : Sort) = {

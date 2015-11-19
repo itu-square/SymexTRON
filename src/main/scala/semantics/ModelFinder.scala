@@ -241,6 +241,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
       case _ =>
         val solver = new Solver()
+        println(s"finding set for ${PrettyPrinter.pretty(e)}...")
         val ee = evalSetExpr(e)
         // TODO: Add spatial derived constraints
         Process(ee).flatMap(t => (for {
@@ -315,10 +316,11 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
     sd match {
       case AbstractDesc(c) =>
+        println(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
         for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
            // Type inference is a bit limited for higher-kinded types
-           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList : _*))(pmn)
+           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList.filter(_ != Class("Nothing")) : _*))(pmn)
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap, SHeap)](st => for {
                      cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
                      rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
@@ -348,7 +350,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       } yield newheaps)
   }
 
-  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem, alsoReferences: Boolean = false, depth: Int = delta): Process[Task, String \/ (SMem, SMem)] = {
+  def concretise(el: SetLit, initialMem: SMem, currentMem: SMem, alsoReferences: Boolean = false, depth: Int = delta, c: Option[Class] = None): Process[Task, String \/ (SMem, SMem)] = {
+    def typeFilter(c1: Class) = c.cata(c2 => defs.canContain(c1, c2), true)
     def concretise_final(el: SetLit, initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
       el.es.foldLeft(Process((initialMem, currentMem).right) : Process[Task, String \/ (SMem, SMem)]) { (memr: Process[Task, String \/ (SMem, SMem)], b: BasicExpr) =>
         for {
@@ -385,34 +388,47 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
     // TODO Convert all SetLit to expression
     def concretise_helper(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int): Process[Task, String \/ (SMem, SMem)] = {
+      println(s"concretising ${PrettyPrinter.pretty(el)} at depth $depth}...")
       if (depth <= 0) {
         concretise_final(el, initialMem, currentMem)
       }
       else for {
         unfolded <- unfold_all(el, initialMem.heap, currentMem.heap)
         res <- unfolded.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ih, ch) => {
-          val childsyms = el.es.flatMap(e =>
+          // TODO handle safely
+          val childes = el.es.flatMap(e =>
             e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
-              .flatMap(_sd_concrete.getOption).map(_.children.values).get)
-          val refsyms = el.es.flatMap(e =>
+              .flatMap(_sd_concrete.getOption)
+              .map(cd => if (typeFilter(cd.c)) cd.children.values else Set()).get)
+          val refes = el.es.flatMap(e =>
             e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
-              .flatMap(_sd_concrete.getOption).map(_.refs.values).get)
-          val allSyms = childsyms ++ (if (alsoReferences) refsyms else Set())
+              .flatMap(_sd_concrete.getOption)
+              .map(cd => if(typeFilter(cd.c)) cd.refs.values else Set()).get)
+          val alles = childes ++ (if (alsoReferences) refes else Set())
+          val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
           // TODO, we may actually need to iterate each child individually to not restrict the shapes
           // Just join everything together
-          val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
-          val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
-          for {
-            joinedset_th <- findSet(joinede, ch, beta)
-            joinedset_mem = joinedset_th.map { case (th, els) =>
-              (applySubst(th, newInitialMem), applySubst(th, newCurrentMem), els)
+          // val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
+          // blackHole(childes)
+          alles.foldLeft[TProcess[String \/ (SMem, SMem)]](Process((newInitialMem, newCurrentMem).right)) { (pmemr, e) =>
+            pmemr.flatMap {
+              memr => memr.traverse[TProcess, String, String \/ (SMem, SMem)] { case (nim, ncm) =>
+                for {
+                  pth <- findSet(e, ch, beta)
+                  memr = pth.map { case (th, els) =>
+                    (applySubst(th, nim), applySubst(th, ncm), els)
+                  }
+                  cfinal = memr.traverse[TProcess,String, String \/ (SMem, SMem)]{
+                      case (nim:SMem, ncm:SMem, els : SetLit) => concretise_final(el, nim, ncm)
+                  }.map(_.join)
+                  cfurther = memr.traverse[TProcess, String, String \/ (SMem, SMem)]{
+                    case (nim:SMem, ncm:SMem, els : SetLit) => concretise_helper(els, nim, ncm, depth - 1)
+                  }.map(_.join)
+                  concretised <- cfinal.merge(cfurther)
+                } yield concretised
+              }(pmt).map(_.join)
             }
-            cfinal = concretise_final(el, newInitialMem, newCurrentMem)
-            cfurther = joinedset_mem.traverse[TProcess, String, String \/ (SMem, SMem)]{
-              case (newInitialMem:SMem, newCurrentMem:SMem, els : SetLit) => concretise_helper(els, newInitialMem, newCurrentMem, depth - 1)
-            }.map(_.join)
-            concretised <- cfinal ++ cfurther
-          } yield concretised
+          }
         }}(pmt).map(_.join)
       } yield res
     }

@@ -34,21 +34,23 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     case Var(name) => s"Unevaluated var $name".left
   }.map(l => SetLit(l.join : _*))
 
-  def descendants_or_self(set : SetLit, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
-    case e@Symbol(ident) => for {
-      symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
-      cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: $symv".left)
-      res <- cd.children.values.toList.traverseU({
-        case chldv: SetLit => descendants_or_self(chldv, heap)
-        case e2 => s"Not a concrete set: $e2".left
-      }).map(l => l.flatMap(_.es))
-    } yield e :: res
-    case Var(name) => s"Unevaluated var $name".left
-  }.map(l => SetLit(l.join :_*))
+  def descendants_or_self(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = {
+    set.es.toList.traverseU {
+      case e@Symbol(ident) => for {
+        symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
+        cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: ${PrettyPrinter.pretty(Map(ident -> symv))} in heap \n\n${PrettyPrinter.pretty(heap)}\n\n".left)
+        res <- if (defs.canContain(cd.c, c)) cd.children.values.toList.traverseU({
+          case chldv: SetLit => descendants_or_self(chldv, c, heap)
+          case e2 => s"Not a concrete set: $e2".left
+        }).map(l => l.flatMap(_.es)) else List().right
+      } yield e :: res
+      case Var(name) => s"Unevaluated var $name".left
+    }.map(l => SetLit(l.join :_*))
+  }
 
   def match_star(set : SetLit, c : Class, heap : SHeap): String \/ SetLit =
     for {
-      dcs <- descendants_or_self(set, heap)
+      dcs <- descendants_or_self(set, c, heap)
       m <- match_it(dcs, c, heap)
     } yield m
 
@@ -127,10 +129,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
      executeHelper(Process.emitAll(pres.toSeq).map(pre => (pre, pre)), c)
   }
 
+  private def isConsistent(initHeap: SHeap, curHeap: SHeap) = {
+    heapConsistencyChecker.isConsistent(initHeap) &&
+      heapConsistencyChecker.isConsistent(curHeap)
+  }
+
   private def executeHelper(pres : Process[Task, (SMem, SMem)], c : Statement) : Process[Task, String \/ (SMem, SMem)] = {
     // Todo parallelise using mergeN
     pres.flatMap { case (initMem: SMem, pre: SMem) =>
-      if (!heapConsistencyChecker.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
+      if (!isConsistent(initMem.heap, pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
       else c match {
         case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))(
           (pmem, s) => for {
@@ -185,22 +192,27 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 val (th, ees) = esol
                 val newpre = modelFinder.applySubst(th, pre)
                 val newinitMem = modelFinder.applySubst(th, initMem)
+                // TODO Somewhat inefficient, optimize
                 for {
-                  mres  <- m match {
-                    case MSet(e) => Process((ees, newinitMem, newpre).right)
+                  mres  <- (m match {
+                    case MSet(e) =>
+                        //if (isConsistent(newinitMem.heap, newpre.heap))
+                        Process((ees, newinitMem, newpre).right)
+                        //else Process()
                     case Match(e, c) => for {
                        heapr <- modelFinder.unfold_all(ees, newinitMem.heap, newpre.heap)
-                       res = heapr.flatMap { case (ih, ch) => for {
+                       res = heapr/*.filter((isConsistent _).tupled)*/.flatMap { case (ih, ch) => for {
                           matches <- match_it(ees, c, ch)
                        } yield (matches, ih, ch) }
                     } yield res.map(p => (p._1, _sm_heap.set(p._2)(newinitMem), _sm_heap.set(p._3)(newpre)))
                     case MatchStar(e, c) => for {
-                      memr <- modelFinder.concretise(ees, newinitMem, newpre)
-                      res = memr.flatMap { case (initMem, curMem) => for {
+                      memr <- modelFinder.concretise(ees, newinitMem, newpre, c = c.some)
+                      res = memr/*.filter{ case (im, cm) => isConsistent(im.heap, cm.heap)
+                                 }*/.flatMap { case (initMem, curMem) => for {
                         matches <- match_star(ees, c, curMem.heap)
                       } yield (matches, initMem, curMem) }
                     } yield res
-                  }
+                  })
                   res <- mres.traverse[TProcess, String, String \/ (SMem, SMem)](mr => {
                     val (syms, initMem, pre) = mr
                     syms.es.toList.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))((memp : Process[Task, String \/ (SMem, SMem)], sym : BasicExpr) =>

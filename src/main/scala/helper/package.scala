@@ -31,14 +31,15 @@ package object helper {
 
   implicit class TransitiveClosure[S](m: Map[S, Set[S]]) {
     def trans(): Map[S, Set[S]] = {
-      def transget(s : S) : Set[S] = {
+      def transget(s : S, seen : Set[S]) : Set[S] = {
         if (m.contains(s)) {
           val ms = m(s)
-          ms ++ ms.flatMap(transget)
+          ms ++ ms.flatMap[S,Set[S]](ss => if(!seen.contains(ss))
+                                    transget(ss, seen ++ ms) else Set())
         }
         else Set()
       }
-      m.keys.map(k => k -> transget(k)).toMap
+      m.keys.map(k => k -> transget(k, Set[S]())).toMap
     }
   }
 

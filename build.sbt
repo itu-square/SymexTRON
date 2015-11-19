@@ -33,10 +33,6 @@ libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
 libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
 
-
-//TODO Figure out how to do this cross platform compatible with 1.7 <= using threeten
-libraryDependencies += "codes.reactive" %% "scala-time" % "0.3.0-SNAPSHOT"
-
 fork in Test := true
 
 triggeredMessage := Watched.clearWhenTriggered
