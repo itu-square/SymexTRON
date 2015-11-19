@@ -17,12 +17,12 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   val progBranches = Statement.branches(prog)
 
   private val _stmtCoverageMap = TMap.empty[Integer, Boolean]
-  private val _branchCoverageMap = TMap.empty[BranchPoint, Boolean]
+  private val _branchCoverageMap = TMap(progBranches.flatMap(_._2).map(_ -> false).toSeq : _*)
 
   def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
-  def branchCoverage =  branchCoverageMap.size.toDouble / progBranches.values.map(_.size).sum
+  def branchCoverage =  (branchCoverageMap.filter(_._2).size * 100) / progBranches.values.map(_.size).sum
 
   def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
 
@@ -211,7 +211,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os_types.filter(oc => defs.subtypesOrSelf(c).contains(oc._2)).map(_._1)
     }
     def descendants_or_selves(os: Set[Instances]): String \/ Set[Instances] = {
-      for {
+      if (os.isEmpty) os.right
+      else for {
         cos <- os.traverseU(o =>
           heap.childenv.get(o).cata(
             _.values.toSet.flatten.right,

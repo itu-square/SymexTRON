@@ -47,7 +47,8 @@ object Refactoring {
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol((Class("Class"), Opt), classSuperId))),
                                    oldFieldId -> AbstractDesc(Class("Field")),
-                                   newFieldId -> AbstractDesc(Class("Field"))),
+                                   newFieldId -> AbstractDesc(Class("Field")),
+                                   classNameId -> ConcreteDesc(Class("String"), Map(), Map())),
                               Set(QSpatial(SetSymbol((Class("Class"), Many),  packageClassesId), Class("Class")),
                                   QSpatial(SetSymbol((Class("Field"), Many),  classFieldsId), Class("Field")),
                                   QSpatial(SetSymbol((Class("Method"), Many), classMethodsId), Class("Method"))),
@@ -306,17 +307,13 @@ object Refactoring {
     , assignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))
     )
 
-    def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement, p: scalaz.\/[String, (SMem, SMem)] => Boolean = (_ => true)): Unit = {
-      import syntax.PrettyPrinter
-      import semantics._
+    def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement): Unit = {
+      import testing._
       import scalaz._, Scalaz._, scalaz.stream._
       import scalaz.concurrent.Task
 
-      val symex = new SymbolicExecutor(FullClassModel.allDefsWithKeys, kappa = 2, beta = 5, delta = 7)
-      val task: Task[Unit] = symex.execute(Set(initialMems : _*), refactoring).filter(p).map(path => path.fold(identity, {
-          case (initMem, mem) =>
-            val nmem: SMem = SetNormalizer.normalize(mem.heap.pure)(mem).cata(_.asInstanceOf[SMem], mem)
-            s"Resulting memory: ${PrettyPrinter.pretty(nmem)}"})).to(io.stdOutLines).run
+      val tg = new TestGenerator(FullClassModel.allDefsWithKeys, beta=10, delta=5, kappa=2)
+      val task: Task[Unit] = tg.generateTestsE(Set(initialMems : _*), refactoring).map(_.toString).to(io.stdOutLines).run
       println("-" * 20)
       println(s"Starting execution of $name")
       println("-" * 20)
@@ -327,10 +324,10 @@ object Refactoring {
     }
 
     def main(args : Array[String]): Unit = {
-      //executeRefactoring("Rename-Field", List(renameFieldInput), renameFieldAst, _.isRight)
-      //executeRefactoring("Rename-Method", List(renameMethodInput), renameMethod, _.isRight)
-      //executeRefactoring("Extract-Super-Class", List(extractSuperclassInput), extractSuperclassAst, _.isRight)
-      executeRefactoring("Replace-Delegation-with-Inheritance", List(replaceDelegationWithInheritanceInput), replaceDelegationWithInheritanceAst)
+      executeRefactoring("Rename-Field", List(renameFieldInput), renameFieldAst)
+      //executeRefactoring("Rename-Method", List(renameMethodInput), renameMethod)
+      //executeRefactoring("Extract-Super-Class", List(extractSuperclassInput), extractSuperclassAst)
+      //executeRefactoring("Replace-Delegation-with-Inheritance", List(replaceDelegationWithInheritanceInput), replaceDelegationWithInheritanceAst)
     }
 
 }

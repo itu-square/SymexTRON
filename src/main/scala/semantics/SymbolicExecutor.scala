@@ -38,7 +38,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     case e@Symbol(ident) => for {
       symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
       cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: $symv".left)
-      res <- cd.children.values.toList.map(s => SetNormalizer.normalize(heap.pure).apply(s).get).traverseU({
+      res <- cd.children.values.toList.traverseU({
         case chldv: SetLit => descendants_or_self(chldv, heap)
         case e2 => s"Not a concrete set: $e2".left
       }).map(l => l.flatMap(_.es))
@@ -183,8 +183,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                modelFinder.findSet(ee, pre.heap, beta)).map(_.join)
             res <- esolr.traverse[TProcess, String, String \/ (SMem, SMem)](esol => {
                 val (th, ees) = esol
-                val newpre = pre.subst_all(th) |> _sm_heap.modify(modelFinder.expand)
-                val newinitMem = initMem.subst_all(th) |> _sm_heap.modify(modelFinder.expand)
+                val newpre = modelFinder.applySubst(th, pre)
+                val newinitMem = modelFinder.applySubst(th, initMem)
                 for {
                   mres  <- m match {
                     case MSet(e) => Process((ees, newinitMem, newpre).right)

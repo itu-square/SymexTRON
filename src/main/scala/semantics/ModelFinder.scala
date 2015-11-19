@@ -221,6 +221,14 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     (disj, rlv(e.symbols.ids, Set()))
   }
 
+  def applySubst(th: Map[Symbols, SetLit], mem: SMem): SMem = {
+    mem.subst_all(th) |>
+        (mem => SetNormalizer.normalize(mem.heap.pure)(mem).collect{
+          case mem : SMem => mem
+        }.getOrElse(mem)) |>
+      _sm_heap.modify(expand)
+  }
+
   def findSet(e : SetExpr, heap: SHeap, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
@@ -368,7 +376,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                             })(pmt).map(_.join)
                          } else Process()
               res = thr.map {th =>
-                  (initMem.subst_all(th) |> _sm_heap.modify(expand), curMem.subst_all(th) |> _sm_heap.modify(expand))
+                  (applySubst(th, initMem), applySubst(th, initMem))
               }
           } yield res })(pmt).map(_.join)
           /*_sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)*/
@@ -390,15 +398,14 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
             e.asInstanceOf[Symbol].id.|>(ch.spatial.get)
               .flatMap(_sd_concrete.getOption).map(_.refs.values).get)
           val allSyms = childsyms ++ (if (alsoReferences) refsyms else Set())
+          // TODO, we may actually need to iterate each child individually to not restrict the shapes
           // Just join everything together
           val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
           val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
           for {
             joinedset_th <- findSet(joinede, ch, beta)
             joinedset_mem = joinedset_th.map { case (th, els) =>
-              (newInitialMem.subst_all(th) |> _sm_heap.modify(expand),
-                     newCurrentMem.subst_all(th) |> _sm_heap.modify(expand),
-                     els)
+              (applySubst(th, newInitialMem), applySubst(th, newCurrentMem), els)
             }
             cfinal = concretise_final(el, newInitialMem, newCurrentMem)
             cfurther = joinedset_mem.traverse[TProcess, String, String \/ (SMem, SMem)]{
