@@ -237,7 +237,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
       SetLit(rsymids.toList.map(Symbol.apply): _*)
     }
-    e match {
+    SetNormalizer.normalize(heap.pure)(e).getOrElse(e).asInstanceOf[SetExpr] match {
       case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
       case _ =>
         val solver = new Solver()
@@ -317,10 +317,10 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     sd match {
       case AbstractDesc(c) =>
         println(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
-        for {
-           defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left))
+        (for {
+           defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)).interleaved
            // Type inference is a bit limited for higher-kinded types
-           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList.filter(_ != Class("Nothing")) : _*))(pmn)
+           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList.filter(_ != Class("Nothing")) : _*))(pmn).interleaved
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap, SHeap)](st => for {
                      cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
                      rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
@@ -332,8 +332,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                      newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
                      cd = ConcreteDesc(st, chlds, refs)
                      upd = _sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial)
-                   } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn)
-        } yield cdc
+                   } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn).interleaved
+        } yield cdc).toProcess
       case cd@ConcreteDesc(c, children, refs) => Process((cd, initHeap, currentHeap).right)
     }
   }
@@ -378,7 +378,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                                   _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
                             })(pmt).map(_.join)
                          } else Process()
-              res = thr.map {th =>
+              res = thr.map { th =>
                   (applySubst(th, initMem), applySubst(th, initMem))
               }
           } yield res })(pmt).map(_.join)
@@ -388,8 +388,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
     // TODO Convert all SetLit to expression
     def concretise_helper(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int): Process[Task, String \/ (SMem, SMem)] = {
-      println(s"concretising ${PrettyPrinter.pretty(el)} at depth $depth}...")
-      if (depth <= 0) {
+      //println(s"concretising ${PrettyPrinter.pretty(el)} at depth $depth}...")
+      if (depth <= 0 || el.es.isEmpty) {
         concretise_final(el, initialMem, currentMem)
       }
       else for {
@@ -424,7 +424,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                   cfurther = memr.traverse[TProcess, String, String \/ (SMem, SMem)]{
                     case (nim:SMem, ncm:SMem, els : SetLit) => concretise_helper(els, nim, ncm, depth - 1)
                   }.map(_.join)
-                  concretised <- cfinal.merge(cfurther)
+                  concretised <- cfinal.tee(cfurther)(teePlus.interleaveAll)
                 } yield concretised
               }(pmt).map(_.join)
             }

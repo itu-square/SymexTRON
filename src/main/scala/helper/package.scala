@@ -15,6 +15,17 @@ import scalaz.stream.Process
 sealed trait BlackHole
 case class HoleError() extends Error
 
+case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
+  def map[O2](f : O => O2) = Interleaved(toProcess.map(f))
+
+  def flatMap[F2[x] >: F[x], O2](f: O => Interleaved[F2, O2])
+      : Interleaved[F2, O2] = Interleaved {
+    toProcess.fold(Process.halt : Process[F2, O2])((ps, o) =>
+      ps.tee((f(o).toProcess))(helper.teePlus.interleaveAll)
+    ).flatMap(identity)
+  }
+}
+
 package object helper {
   type StringE[B] = String \/ B
   type TProcess[A] = Process[Task, A]
@@ -109,5 +120,9 @@ package object helper {
       val oldVr = m.get(k)
       oldVr.foreach(oldV => m.update(k, f(oldV)))
     }
+  }
+
+  implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
+    val interleaved: Interleaved[F, O] = Interleaved(p)
   }
 }

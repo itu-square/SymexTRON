@@ -26,9 +26,9 @@ object FullClassModel {
                                "type" -> ((Class("Class"), Single))))
    , new ClassDefinition("Statement", Map[Fields, (Class, Cardinality)](),
                            Map[Fields, (Class, Cardinality)]())
-   , new ClassDefinition("Block", Map("current" -> ((Class("Statement"), Single)),
+   /*, new ClassDefinition("Block", Map("current" -> ((Class("Statement"), Single)),
                                       "next" -> ((Class("Statement"), Opt))),
-                         Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
+                         Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))*/
    , new ClassDefinition("If", Map("then" -> ((Class("Statement"), Single)),
                                    "else" -> ((Class("Statement"), Opt)),
                                    "cond" -> ((Class("Expr"), Single))),
