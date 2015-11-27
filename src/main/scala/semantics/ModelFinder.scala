@@ -5,6 +5,7 @@ import java.util
 import kodkod.ast._
 import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
+import minkodkod.{MinSATSolverFactory, MinSolver, MinReporterToGatherSkolemBounds}
 import kodkod.instance.{Bounds, TupleSet, Universe}
 
 import syntax.PrettyPrinter
@@ -22,10 +23,11 @@ import scalaz._, Scalaz._
 import scalaz.concurrent.Task
 import scalaz.stream._
 
-
+import com.typesafe.scalalogging.LazyLogging
 
 class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
-                  beta: Int, delta: Int) {
+                  beta: Int, delta: Int)
+  extends LazyLogging {
   private type StringE[T] = String \/ T
   private type EvalRes[T] = (Set[Relation], Set[Integer], Formula, T, Map[Symbols, Relation])
 
@@ -240,8 +242,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     SetNormalizer.normalize(heap.pure)(e).getOrElse(e).asInstanceOf[SetExpr] match {
       case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
       case _ =>
-        val solver = new Solver()
-        // println(s"finding set for ${PrettyPrinter.pretty(e)}...")
+        logger.debug(s"finding set for ${PrettyPrinter.pretty(e)}...")
         val ee = evalSetExpr(e)
         // TODO: Add spatial derived constraints
         Process(ee).flatMap(t => (for {
@@ -257,8 +258,16 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
               } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
             } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
             (rs, is, fs, fs2, th) = eps
-            _ = solver.options.setSolver(SATFactory.DefaultSAT4J)
-            _ = solver.options.setSymmetryBreaking(20)
+            solver = new Solver() // new MinSolver()
+            _ = {
+              val minrep = new MinReporterToGatherSkolemBounds()
+              val fac = SATFactory.DefaultSAT4J //new MinSATSolverFactory()
+              //solver.options.setFlatten(true)
+              solver.options.setSolver(fac)
+              solver.options.setSymmetryBreaking(20)
+              //solver.options.setSymmetryBreaking(0)
+              //solver.options.setReporter(minrep)
+            }
             formula = this.constraints and fs and fs2
             bounds = this.bounds(rs, is, minSymbols)
             res = for {
@@ -316,7 +325,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
     sd match {
       case AbstractDesc(c) =>
-        // println(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
+        logger.debug(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
         (for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)).interleaved
            // Type inference is a bit limited for higher-kinded types
@@ -389,7 +398,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
     // TODO Convert all SetLit to expression
     def concretise_helper(el: SetLit, initialMem: SMem, currentMem: SMem, depth: Int): Process[Task, String \/ (SMem, SMem)] = {
-      //println(s"concretising ${PrettyPrinter.pretty(el)} at depth $depth}...")
+      logger.debug(s"concretising ${PrettyPrinter.pretty(el)} at depth $depth}...")
       if (depth <= 0 || el.es.isEmpty) {
         concretise_final(el, initialMem, currentMem)
       }

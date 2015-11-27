@@ -33,6 +33,10 @@ libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
 
 libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
 
+libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
+
+libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
+
 fork in Test := true
 
 triggeredMessage := Watched.clearWhenTriggered
