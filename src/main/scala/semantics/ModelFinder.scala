@@ -241,7 +241,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       case lit: SetLit => Process((Map[Symbols, SetLit](), lit).right[String])
       case _ =>
         val solver = new Solver()
-        println(s"finding set for ${PrettyPrinter.pretty(e)}...")
+        // println(s"finding set for ${PrettyPrinter.pretty(e)}...")
         val ee = evalSetExpr(e)
         // TODO: Add spatial derived constraints
         Process(ee).flatMap(t => (for {
@@ -316,11 +316,12 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
     sd match {
       case AbstractDesc(c) =>
-        println(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
+        // println(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
         (for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)).interleaved
            // Type inference is a bit limited for higher-kinded types
-           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name))).toList.filter(_ != Class("Nothing")) : _*))(pmn).interleaved
+           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name)))
+                      .toList.filter(_ != Class("Nothing")) : _*))(pmn).interleaved
            cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap, SHeap)](st => for {
                      cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
                      rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
@@ -411,10 +412,10 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           // val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
           // blackHole(childes)
           alles.foldLeft[TProcess[String \/ (SMem, SMem)]](Process((newInitialMem, newCurrentMem).right)) { (pmemr, e) =>
-            pmemr.flatMap {
+            pmemr.interleaved.flatMap {
               memr => memr.traverse[TProcess, String, String \/ (SMem, SMem)] { case (nim, ncm) =>
-                for {
-                  pth <- findSet(e, ch, beta)
+                (for {
+                  pth <- findSet(e, ch, beta).interleaved
                   memr = pth.map { case (th, els) =>
                     (applySubst(th, nim), applySubst(th, ncm), els)
                   }
@@ -424,10 +425,10 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                   cfurther = memr.traverse[TProcess, String, String \/ (SMem, SMem)]{
                     case (nim:SMem, ncm:SMem, els : SetLit) => concretise_helper(els, nim, ncm, depth - 1)
                   }.map(_.join)
-                  concretised <- cfinal.tee(cfurther)(teePlus.interleaveAll)
-                } yield concretised
-              }(pmt).map(_.join)
-            }
+                  concretised <- cfinal.tee(cfurther)(teePlus.interleaveAll).interleaved
+                } yield concretised).toProcess
+              }(pmt).map(_.join).interleaved
+            }.toProcess
           }
         }}(pmt).map(_.join)
       } yield res
