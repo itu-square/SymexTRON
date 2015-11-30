@@ -258,15 +258,15 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
               } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
             } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
             (rs, is, fs, fs2, th) = eps
-            solver = new Solver() // new MinSolver()
+            solver = /*new Solver() */ new MinSolver()
             _ = {
               val minrep = new MinReporterToGatherSkolemBounds()
-              val fac = SATFactory.DefaultSAT4J //new MinSATSolverFactory()
-              //solver.options.setFlatten(true)
+              val fac = /*SATFactory.DefaultSAT4J */new MinSATSolverFactory(minrep)
+              solver.options.setFlatten(true)
               solver.options.setSolver(fac)
               solver.options.setSymmetryBreaking(20)
-              //solver.options.setSymmetryBreaking(0)
-              //solver.options.setReporter(minrep)
+              solver.options.setSymmetryBreaking(0)
+              solver.options.setReporter(minrep)
             }
             formula = this.constraints and fs and fs2
             bounds = this.bounds(rs, is, minSymbols)
