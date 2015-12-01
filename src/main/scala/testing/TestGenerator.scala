@@ -39,7 +39,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
   }
 
   def convertMem(sMem: SMem): (String, String) \/ CMem = {
-    val maxDepth = 10
+    val maxDepth = 3
     def sbexpr2sinstance(es : Seq[BasicExpr]) =
       es.map(_.asInstanceOf[Symbol].id).toSet
     def symbolic2concrete(csMem : SMem): (String, String) \/ CMem =  {

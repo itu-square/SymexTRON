@@ -5,7 +5,6 @@ import java.util
 import kodkod.ast._
 import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
-import minkodkod.{MinSATSolverFactory, MinSolver, MinReporterToGatherSkolemBounds}
 import kodkod.instance.{Bounds, TupleSet, Universe}
 
 import syntax.PrettyPrinter
@@ -152,7 +151,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           val sym = Variable.unary("sym")
           val ees:  String \/ List[Formula] = es.map {
             case Symbol(ident) => (sym.join(name) eq IntConstant.constant(ident).toExpression).right
-            case Var(x) => (s"Error: unevaluated variable: $name").left
+            case Var(x) => s"Error: unevaluated variable: $name".left
           }.toList.sequence[StringE, Formula]
           ees.fold(_.left, ees => {
             val ee1 :: ees1 = ees
@@ -231,6 +230,13 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       _sm_heap.modify(expand)
   }
 
+  def ownershipConstraints(spatial: Spatial[Symbols]): Prop = {
+    spatial.flatMap{ case (sym, sd) => sd match {
+      case AbstractDesc(c) => Set[BoolExpr]()
+      case ConcreteDesc(c, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
+    }}.toSet
+  }
+
   def findSet(e : SetExpr, heap: SHeap, minSymbols : Int): Process[Task, String \/ (Map[Symbols, SetLit], SetLit)] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): SetLit = {
       val rval = rels(r).iterator.next.atom(0)
@@ -248,8 +254,10 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         Process(ee).flatMap(t => (for {
             tt <- t
             (rs0, is0, fs0, r, th0) = tt
-            (disj, relv) = relevantConstraints(e, heap.pure)
+            ownership = ownershipConstraints(heap.spatial)
+            (disj, relv) = relevantConstraints(e, heap.pure ++ ownership)
             ps = disj ++ relv
+            _ = println(PrettyPrinter.pretty(ps))
             eps <- ps.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
               val (rs, is, fs, f, th) = st
               for {
@@ -258,15 +266,12 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
               } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
             } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
             (rs, is, fs, fs2, th) = eps
-            solver = /*new Solver() */ new MinSolver()
+            solver = new Solver()
             _ = {
-              val minrep = new MinReporterToGatherSkolemBounds()
-              val fac = /*SATFactory.DefaultSAT4J */new MinSATSolverFactory(minrep)
+              val fac = SATFactory.DefaultSAT4J
               solver.options.setFlatten(true)
               solver.options.setSolver(fac)
               solver.options.setSymmetryBreaking(20)
-              solver.options.setSymmetryBreaking(0)
-              solver.options.setReporter(minrep)
             }
             formula = this.constraints and fs and fs2
             bounds = this.bounds(rs, is, minSymbols)
