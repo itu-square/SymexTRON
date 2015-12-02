@@ -39,6 +39,11 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
   val Symbols = Relation.unary("Symbols")
   val name = Relation.binary("name")
 
+  val Types = Relation.unary("Types")
+  val isSubType = Relation.binary("isSubType")
+  val typeOfS = Relation.binary("typeOfS")
+  val typeOf = Relation.binary("typeOf")
+
   def freshSet : Relation = {
     counter = counter + 1
     Relation.unary(s"ConcreteSymbolicSet$counter")
@@ -60,7 +65,17 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       val s2 = Variable.unary("s2")
       (s1 eq s2) iff (s1.join(name) eq s2.join(name)) forAll ((s1 oneOf Symbols) and (s2 oneOf Symbols))
     }
-    nameTyping and nameUniqueness and symsTyping
+    val typeOfSTyping = {
+      val ss = Variable.unary("ss")
+      (ss.join(typeOfS).one and (ss.join(typeOfS) in Types) forAll (ss oneOf SymbolicSet)) and
+        (typeOfS.join(Expression.UNIV) in SymbolicSet)
+    }
+    val typeOfTyping = {
+      val s = Variable.unary("s")
+      (s.join(typeOf).one and (s.join(typeOf) in Types) forAll (s oneOf Symbols)) and
+        (typeOf.join(Expression.UNIV) in Symbols)
+    }
+    nameTyping and nameUniqueness and symsTyping // and typeOfSTyping and typeOfTyping
   }
 
 
@@ -71,7 +86,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
     val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
-    val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2)
+    val types = (for (c <- defs.keys) yield (c, s"type'${c.name}")).toMap
+    val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2) ++ types.values.toSeq
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
@@ -88,6 +104,18 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     for ((sid, sname) <- symbolids.zip(symbolintnames.toList.sorted))
       nameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(name, nameUpper)
+
+    bounds.boundExactly(Types, f setOf (types.values.toSeq :_*)) // TODO fix bounds
+    val stBounds = f noneOf 2
+    println(defs.subTypesOrSelf)
+    readLine()
+    for ((c, sc) <- defs.subtypesOrSelf.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
+      stBounds.add((f tuple (types(sc))) product (f tuple (types(c))))
+    }
+    bounds.boundExactly(isSubType, stBounds)
+    /*bounds.bound(typeOfS, f noneOf 2)
+    bounds.bound(typeOf, f noneOf 2)*/
+
     bounds
   }
 
@@ -278,6 +306,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
             bounds = this.bounds(rs, is, minSymbols)
             res = for {
               sol <- io.iterator(Task(solver.solveAll(formula, bounds).asScala))
+              _ = println(sol)
               if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
               instance = sol.instance
               rels = instance.relationTuples.asScala
