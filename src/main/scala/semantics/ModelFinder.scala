@@ -91,9 +91,9 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     bounds
   }
 
-  def evalBoolExpr(b : BoolExpr, th : Map[Symbols, Relation])
+  def evalBoolExpr(b : BoolExpr, th : Map[Symbols, Relation], isNegated: Boolean = false)
   : String \/ EvalRes[Formula] = b match {
-    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th)
+    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
     case ClassMem(e1, s) => ???
     case SetMem(e1, e2) => for {
         _ <- e1 match {
@@ -105,29 +105,30 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         formula = {
           val sym = Variable.unary("sym")
           val x = Variable.unary("x")
+          val symInSyms = sym in x.join(syms)
           (e1 match {
             case Symbol(symident) => sym.join(name) eq IntConstant.constant(symident).toExpression
             case Var(name) => impossible
-          }) implies (sym in x.join(syms)) forAll ((sym oneOf Symbols) and (x oneOf r2))
+          }) implies isNegated.fold(symInSyms.not, symInSyms) forAll ((sym oneOf Symbols) and (x oneOf r2))
         }
       } yield (rs2, is2, formula and f2, formula, th2)
-    case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th)
+    case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
     case True => (Set[Relation](), Set[Integer](), Formula.TRUE, Formula.TRUE, th).right
     case And(b1,b2) =>
       for {
-        eb1 <- evalBoolExpr(b1, th)
+        eb1 <- evalBoolExpr(b1, th, isNegated)
         (rs1, is1, fs1, r1, th1) = eb1
-        eb2 <- evalBoolExpr(b2, th1)
+        eb2 <- evalBoolExpr(b2, th1, isNegated)
         (rs2, is2, fs2, r2, th2) = eb2
-      } yield (rs1 union rs2, is1 union is2, fs1 and fs2, r1 and r2, th2)
+      } yield (rs1 union rs2, is1 union is2,  fs1 and fs2, isNegated.fold(r1 or r2, r1 and r2), th2)
     case Not(b) => for {
-        eb <- evalBoolExpr(b, th)
+        eb <- evalBoolExpr(b, th, !isNegated)
         (rs1, is1, f1, r, th1) = eb
-      } yield (rs1, is1, f1, r.not, th1)
+      } yield (rs1, is1, f1, r, th1)
   }
 
   def evalBinaryBoolExpr(e1: SetExpr, op: (Expression, Expression) => Formula, e2: SetExpr,
-                         th: Map[Symbols, Relation]): String \/ EvalRes[Formula] = {
+                         th: Map[Symbols, Relation], isNegated: Boolean): String \/ EvalRes[Formula] = {
     for {
       ee1 <- evalSetExpr(e1, th)
       (rs1, is1, f1, r1, th1) = ee1
@@ -136,7 +137,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       formula = {
         val x1 = Variable.unary("x1")
         val x2 = Variable.unary("x2")
-        op(x1.join(syms), x2.join(syms)) forAll ((x1 oneOf r1) and (x2 oneOf r2))
+        val res = op(x1.join(syms), x2.join(syms))
+        isNegated.fold(res.not, res) forAll ((x1 oneOf r1) and (x2 oneOf r2))
       }
     } yield (rs1 union rs2, is1 union is2, formula and f1 and f2, formula, th2)
   }
