@@ -259,7 +259,6 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
             ownership = ownershipConstraints(heap.spatial)
             (disj, relv) = relevantConstraints(e, heap.pure ++ ownership)
             ps = disj ++ relv
-            _ = println(PrettyPrinter.pretty(ps))
             eps <- ps.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
               val (rs, is, fs, f, th) = st
               for {
