@@ -107,9 +107,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
     bounds.boundExactly(Types, f setOf (types.values.toSeq :_*)) // TODO fix bounds
     val stBounds = f noneOf 2
-    println(defs.subTypesOrSelf)
-    readLine()
-    for ((c, sc) <- defs.subtypesOrSelf.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
+    for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
       stBounds.add((f tuple (types(sc))) product (f tuple (types(c))))
     }
     bounds.boundExactly(isSubType, stBounds)
@@ -286,6 +284,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
             (rs0, is0, fs0, r, th0) = tt
             ownership = ownershipConstraints(heap.spatial)
             (disj, relv) = relevantConstraints(e, heap.pure ++ ownership)
+            ownershipc = ownershipConstraints(heap.spatial)
+            (disj, relv) = relevantConstraints(e, heap.pure ++ ownershipc)
             ps = disj ++ relv
             eps <- ps.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
               val (rs, is, fs, f, th) = st
@@ -342,6 +342,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
     }
     def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr, Spatial[Symbols], Set[QSpatial])] = {
+      // TODO encode cardinality constraints in KodKod instead
       card match {
         case Single => {
           val sym = symcounter.++
