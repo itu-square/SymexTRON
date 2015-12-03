@@ -40,3 +40,5 @@ libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
 fork in Test := true
 
 triggeredMessage := Watched.clearWhenTriggered
+
+maxErrors := 5

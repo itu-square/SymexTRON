@@ -8,21 +8,23 @@ package object ast extends SymbolicOps {
   type Symbols = Int
   type Fields = String
   type Spatial[T] = Map[T, SpatialDesc]
-  type Prop = Set[BoolExpr]
-  type SStack = Map[Vars, SetExpr]
+  type Prop = Set[BoolExpr[IsSymbolic]]
+  type SStack = Map[Vars, SetExpr[IsSymbolic]]
   type Instances = Int
   type CStack = Map[Vars, Set[Instances]]
+  type IsSymbolic = IsSymbolic.type
+  type IsProgram  = IsProgram.type
 
-  def not(p : BoolExpr) : BoolExpr = p match {
+  def not[T <: ASTType](p : BoolExpr[T]) : BoolExpr[T] = p match {
     case Not(Not(p)) => not(p)
     case Not(p) => p
     case p => Not(p)
   } //Smart constructor
 
-  def getSingletonSymbolId(e : SetExpr): String \/ Symbols = {
+  def getSingletonSymbolId(e : SetExpr[IsSymbolic]): String \/ Symbols = {
     e match {
       case SetLit(Symbol(sym)) => sym.right
-      case _ => s"${PrettyPrinter.pretty(e)} is not a symbol".left
+      case _ => s"${PrettyPrinter.pretty(e)} is not a single symbol".left
     }
   }
 

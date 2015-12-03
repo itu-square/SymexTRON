@@ -75,11 +75,11 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         h2 <- update(o, f, os2, mem.heap)
       } yield mem |> _cm_heap.set(h2)) |> Process.emit
       case If(_, ds, cs @ _*) => {
-        val elseB = (cs.map(_._1).map(not).foldLeft[BoolExpr](True)(And(_,_)) , ds)
+        val elseB = (cs.map(_._1).map(not).foldLeft(True() : BoolExpr[IsProgram])(And(_,_)) , ds)
         val cs2 = elseB +: cs
         for {
           gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
-          gr = evalBoolExpr(gs._1, mem.stack, mem.heap)
+          gr = evalBoolExpr(gs._1, mem.stack)
           res <- gr.traverseU(g => if (g) {
             _branchCoverageMap.updateValue(BranchPoint(uid, gs._3), _ => true)
             executeStmt(mem, gs._2)
@@ -155,8 +155,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     else s"$f neither a child nor reference".left
   }
 
-  private def evalBasicExpr(e: BasicExpr, stack: CStack): String \/ Instances = e match {
-    case Symbol(id) => "Unexpected symbol in concrete expression".left
+  private def evalBasicExpr(e: BasicExpr[IsProgram], stack: CStack): String \/ Instances = e match {
     case Var(name) => stack.get(name).cata(
       res =>
         if (res.size == 1) res.head.right
@@ -165,7 +164,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     )
   }
 
-  private def evalExpr(e: SetExpr, stack: CStack): String \/ Set[Instances] = e match {
+  private def evalExpr(e: SetExpr[IsProgram], stack: CStack): String \/ Set[Instances] = e match {
     case SetLit(es @ _*) => es.toSet.traverseU(e => evalBasicExpr(e, stack))
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
@@ -180,19 +179,13 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os2 <- evalExpr(e2, stack)
     } yield (os1 intersect os2)
     case SetVar(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
-    case SetSymbol(c, id) => "Unexpected symbol in concrete expression".left
   }
 
-  private def evalBoolExpr(b: BoolExpr, stack: CStack, heap: CHeap): String \/ Boolean = b match {
+  private def evalBoolExpr(b: BoolExpr[IsProgram], stack: CStack): String \/ Boolean = b match {
     case Eq(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
     } yield e1 == e2
-    case ClassMem(e, c) => for {
-      o <- evalBasicExpr(e, stack)
-      otype <- heap.typeenv.get(o).cata(_.right, s"Unknown instance $o".left)
-      sts <- defs.subtypesOrSelf.get(c).cata(_.right, s"Unknown class $c".left)
-    } yield sts.contains(otype)
     case SetMem(be1, e2) => for {
       o <- evalBasicExpr(be1, stack)
       os <- evalExpr(e2, stack)
@@ -201,13 +194,13 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
     } yield os1 subsetOf os2
-    case True => true.right
+    case True() => true.right
     case And(b1, b2) => for {
-      bb1 <- evalBoolExpr(b1, stack, heap)
-      bb2 <- evalBoolExpr(b2, stack, heap)
+      bb1 <- evalBoolExpr(b1, stack)
+      bb2 <- evalBoolExpr(b2, stack)
     } yield bb1 && bb2
     case Not(b) => for {
-      bb <- evalBoolExpr(b, stack, heap)
+      bb <- evalBoolExpr(b, stack)
     } yield !bb
   }
 

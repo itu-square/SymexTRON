@@ -26,36 +26,34 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   //TODO Implement clean up function of heap, that removes unneeded constraints
 
   //TODO Convert use of SetLit to use of Process0[Symbols] and results to Process0[String \/ Symbols]
-  def match_it(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = set.es.toList.traverseU {
-    case Symbol(ident) => for {
-      symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
+  def match_it(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = set.traverseU (sym =>
+    for {
+      symv <- heap.spatial.get(sym).cata(_.right, s"Unknown symbol: $sym".left)
       stc <- defs.subtypesOrSelf.get(c).cata(cs => cs.right, s"Unknown class: $c".left)
-    } yield if (stc.contains(_sd_c.get(symv))) List[BasicExpr](Symbol(ident)) else List()
-    case Var(name) => s"Unevaluated var $name".left
-  }.map(l => SetLit(l.join : _*))
+    } yield if (stc.contains(_sd_c.get(symv))) Set[Symbols](sym) else Set[Symbols]()
+  ).map(_.flatMap(identity))
 
-  def descendants_or_self(set : SetLit, c : Class, heap: SHeap): String \/ SetLit = {
-    set.es.toList.traverseU {
-      case e@Symbol(ident) => for {
+  def descendants_or_self(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = {
+    set.traverseU { ident =>
+      for {
         symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
         cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: ${PrettyPrinter.pretty(Map(ident -> symv))} in heap \n\n${PrettyPrinter.pretty(heap)}\n\n".left)
-        res <- if (defs.canContain(cd.c, c)) cd.children.values.toList.traverseU({
-          case chldv: SetLit => descendants_or_self(chldv, c, heap)
+        res <- if (defs.canContain(cd.c, c)) cd.children.values.toSet.traverseU({
+          case SetLit(es@_*) => descendants_or_self(es.map { case Symbol(ident) => ident }.toSet, c, heap)
           case e2 => s"Not a concrete set: $e2".left
-        }).map(l => l.flatMap(_.es)) else List().right
-      } yield e :: res
-      case Var(name) => s"Unevaluated var $name".left
-    }.map(l => SetLit(l.join :_*))
+        }).map(_.flatMap(identity)) else Set[Symbols]().right
+      } yield res + ident
+    }.map(_.flatMap(identity))
   }
 
-  def match_star(set : SetLit, c : Class, heap : SHeap): String \/ SetLit =
+  def match_star(set : Set[Symbols], c : Class, heap : SHeap): String \/ Set[Symbols] =
     for {
       dcs <- descendants_or_self(set, c, heap)
       m <- match_it(dcs, c, heap)
     } yield m
 
 
-  def access(sym: Symbols, f: Fields, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SetExpr, SHeap, SHeap)] = {
+  def access(sym: Symbols, f: Fields, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SetExpr[IsSymbolic], SHeap, SHeap)] = {
     for {
       symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
       unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
@@ -70,11 +68,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield res.join
   }
 
-  def disown(heap: SHeap, ee: SetExpr) : SHeap = {
+  def disown(heap: SHeap, ee: SetExpr[IsSymbolic]) : SHeap = {
     def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
       case cd@ConcreteDesc(c, children, refs) => {
         val (newchildren, newconstrs) =
-          children.foldLeft((Map[String, SetExpr](), Set[BoolExpr]()))(
+          children.foldLeft((Map[String, SetExpr[IsSymbolic]](), Set[BoolExpr[IsSymbolic]]()))(
             (st, chld) => {
               val preve = chld._2
               //TODO Handle safely and find more precise type by infering on preve
@@ -106,7 +104,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         f `andThen` (disownSD _).tupled(el))(h))) (heap)
   }
 
-  def update(sym: Symbols, f: Fields, ee2: SetExpr, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
+  def update(sym: Symbols, f: Fields, ee2: SetExpr[IsSymbolic], initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
     for {
       symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
       unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
@@ -157,7 +155,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                       (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(pre)))
         case LoadField(_, x, e, f) => for {
           sym <- Process(evalExpr(pre.stack, e).flatMap(getSingletonSymbolId))
-          ares <- sym.traverse[TProcess, String, String \/ (SetExpr, SHeap, SHeap)](s =>
+          ares <- sym.traverse[TProcess, String, String \/ (SetExpr[IsSymbolic], SHeap, SHeap)](s =>
                   access(s, f, initMem.heap, pre.heap))(pmt).map(_.join)
         } yield ares.map(p => (SMem(initMem.stack, p._2), SMem(pre.stack + (x -> p._1), p._3)))
         case AssignField(_, e1, f, e2) => {
@@ -173,7 +171,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           val ecs    = cs.map(p => evalBoolExpr(pre.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield other.map(not).foldLeft[BoolExpr](True)(And(_,_)) -> ds
+          } yield other.map(not).foldLeft[BoolExpr[IsSymbolic]](True())(And(_,_)) -> ds
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs
@@ -186,7 +184,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         }
         case For(_, x, m, sb) => for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references
-            esolr <- evalExpr(pre.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, SetLit], SetLit)](ee =>
+            esolr <- evalExpr(pre.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, Set[Symbols]], Set[Symbols])](ee =>
                modelFinder.findSet(ee, pre.heap, beta)).map(_.join)
             res <- esolr.traverse[TProcess, String, String \/ (SMem, SMem)](esol => {
                 val (th, ees) = esol
@@ -194,32 +192,34 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 val newinitMem = modelFinder.applySubst(th, initMem)
                 // TODO Somewhat inefficient, optimize
                 for {
-                  mres  <- (m match {
+                  mres  <- m match {
                     case MSet(e) =>
-                        //if (isConsistent(newinitMem.heap, newpre.heap))
-                        Process((ees, newinitMem, newpre).right)
-                        //else Process()
+                      //if (isConsistent(newinitMem.heap, newpre.heap))
+                      Process((ees, newinitMem, newpre).right)
+                    //else Process()
                     case Match(e, c) => for {
-                       heapr <- modelFinder.unfold_all(ees, newinitMem.heap, newpre.heap)
-                       res = heapr/*.filter((isConsistent _).tupled)*/.flatMap { case (ih, ch) => for {
-                          matches <- match_it(ees, c, ch)
-                       } yield (matches, ih, ch) }
+                      heapr <- modelFinder.unfold_all(ees, newinitMem.heap, newpre.heap)
+                      res = heapr /*.filter((isConsistent _).tupled)*/ .flatMap { case (ih, ch) => for {
+                        matches <- match_it(ees, c, ch)
+                      } yield (matches, ih, ch)
+                      }
                     } yield res.map(p => (p._1, _sm_heap.set(p._2)(newinitMem), _sm_heap.set(p._3)(newpre)))
                     case MatchStar(e, c) => for {
                       memr <- modelFinder.concretise(ees, newinitMem, newpre, c = c.some)
-                      res = memr/*.filter{ case (im, cm) => isConsistent(im.heap, cm.heap)
-                                 }*/.flatMap { case (initMem, curMem) => for {
+                      res = memr /*.filter{ case (im, cm) => isConsistent(im.heap, cm.heap)
+                                 }*/ .flatMap { case (initMem, curMem) => for {
                         matches <- match_star(ees, c, curMem.heap)
-                      } yield (matches, initMem, curMem) }
+                      } yield (matches, initMem, curMem)
+                      }
                     } yield res
-                  })
+                  }
                   res <- mres.traverse[TProcess, String, String \/ (SMem, SMem)](mr => {
                     val (syms, initMem, pre) = mr
-                    syms.es.toList.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))((memp : Process[Task, String \/ (SMem, SMem)], sym : BasicExpr) =>
+                    syms.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))((memp : Process[Task, String \/ (SMem, SMem)], sym : Symbols) =>
                       for {
                         memr <- memp
                         res <- memr.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ninitMem, nmem) =>
-                          executeHelper(Process((ninitMem, _sm_stack.modify(_ + (x -> SetLit(sym)))(nmem))), sb)
+                          executeHelper(Process((ninitMem, _sm_stack.modify(_ + (x -> SetLit(Symbol(sym))))(nmem))), sb)
                         }(pmt).map(_.join)
                       } yield res
                     )
@@ -259,8 +259,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
-  def evalBasicExpr(s: SStack, e: BasicExpr): String \/ BasicExpr = e match {
-    case Symbol(id) => Symbol(id).right
+  def evalBasicExpr(s: SStack, e: BasicExpr[IsProgram]): String \/ BasicExpr[IsSymbolic] = e match {
     case Var(name) =>
       s.get(name).cata({
             case SetLit(evalue) => evalue.right
@@ -268,13 +267,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         }, s"Error while evaluating expression $e".left)
   }
 
-  def evalExpr(s : SStack, e : SetExpr) : String \/ SetExpr = {
+  def evalExpr(s : SStack, e : SetExpr[IsProgram]) : String \/ SetExpr[IsSymbolic] = {
       e match {
         case SetLit(es @ _*) =>
           for {
             ees <- es.toList.traverseU(e => evalBasicExpr(s, e))
           } yield SetLit(ees : _*)
-        case ssym : SetSymbol => ssym.right
         case SetVar(name) =>
           s.get(name).cata(_.right, s"Error while evaluating expression $e".left)
         case Diff(e1, e2) => for {
@@ -292,21 +290,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       }
     }
 
-  def evalBoolExpr(st : SStack, sp : BoolExpr) : String \/ BoolExpr = sp match {
+  def evalBoolExpr(st : SStack, sp : BoolExpr[IsProgram]) : String \/ BoolExpr[IsSymbolic] = sp match {
     case Eq(e1, e2) =>
       for {
         ee1 <- evalExpr(st, e1)
         ee2 <- evalExpr(st, e2)
       } yield Eq(ee1, ee2)
-    case ClassMem(e1, s) =>
-      for {
-        ee1 <- evalBasicExpr(st, e1)
-      } yield ClassMem(ee1, s)
     case Not(p) =>
       for {
         ep <- evalBoolExpr(st, p)
       } yield Not(ep)
-    case True => True.right
+    case True() => True().right
     case And(p1, p2) =>
       for {
         ep1 <- evalBoolExpr(st, p1)

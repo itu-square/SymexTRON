@@ -94,7 +94,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       }
     }
     type StateCM[A] =  State[Map[syntax.ast.Symbols, Class], A]
-    def checkTypeConsistencyBoolExpr(b : BoolExpr) : StateCM[Boolean] = b match {
+    def checkTypeConsistencyBoolExpr(b : BoolExpr[IsSymbolic]) : StateCM[Boolean] = b match {
       case syntax.ast.Not(b) => checkTypeConsistencyBoolExpr(b).map(!_)
       case syntax.ast.And(b1, b2) =>
        for {
@@ -123,15 +123,14 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   }
 
   //TODO do proper error handling
-  def evalBasicExpr(th: SymbolMap, e: syntax.ast.BasicExpr): Term  = e match {
+  def evalBasicExpr(th: SymbolMap, e: syntax.ast.BasicExpr[IsSymbolic]): Term  = e match {
       case syntax.ast.Symbol(id) => {
         val sym = th(id)
         QualifiedIdentifier(Identifier(sym._1))
       }
-      case _ => ???
   }
 
-  def evalSetExpr(th: SymbolMap, e: syntax.ast.SetExpr): Term = e match {
+  def evalSetExpr(th: SymbolMap, e: syntax.ast.SetExpr[IsSymbolic]): Term = e match {
     case syntax.ast.SetLit() => EmptySet(SetSort(IntSort()))
     case syntax.ast.SetLit(es@_*) => {
       val esres = es.foldLeft(EmptySet(SetSort(IntSort()))){ (st, e) =>
@@ -159,10 +158,9 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       val sym = th(id)
       QualifiedIdentifier(Identifier(sym._1))
     }
-    case _ => ???
   }
 
-  def evalBoolExpr(th: SymbolMap, b : syntax.ast.BoolExpr): Term = b match {
+  def evalBoolExpr(th: SymbolMap, b : syntax.ast.BoolExpr[IsSymbolic]): Term = b match {
     case syntax.ast.Eq(e1, e2) => {
       val e1res = evalSetExpr(th, e1)
       val e2res = evalSetExpr(th, e2)
@@ -184,7 +182,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       val b2res = evalBoolExpr(th, b2)
       And(b1res, b2res)
     }
-    case syntax.ast.True => True()
+    case syntax.ast.True() => True()
     case syntax.ast.Not(b) => {
       val bres = evalBoolExpr(th, b)
       Not(bres)

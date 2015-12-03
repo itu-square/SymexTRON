@@ -11,7 +11,7 @@ object Parser extends RegexParsers {
       """(\s|/\*([^*]|\*[^/])*\*/)+""".r
   )
 
-  lazy val pSetExpr: Parser[SetExpr] = (
+  lazy val pSetExpr: Parser[SetExpr[IsProgram]] = (
       pSetVar ^^ { SetVar(_) }
     | pVar ^^ (v => SetLit(Var(v)))
     | "{" ~> pVar.*(",") <~ "}" ^^ (vars => SetLit(vars.map(Var(_)) :_*))
@@ -19,27 +19,25 @@ object Parser extends RegexParsers {
     | (pSetExpr <~ pISectOp) ~ pSetExpr ^^ { ISect(_,_) }
     | (pSetExpr <~ pDiffOp)  ~ pSetExpr ^^ { Diff(_,_) }
     | "(" ~> pSetExpr <~ ")"
-  ) filter prec(Diff, ISect, Union)
+  )
 
   lazy val pUnionOp: Parser[String] = "union" | "∪"
   lazy val pISectOp: Parser[String] = "intersect" | "∩"
   lazy val pDiffOp:  Parser[String] = "diff" | "∖"
 
-  lazy val pBoolExpr:  Parser[BoolExpr] = (
+  lazy val pBoolExpr:  Parser[BoolExpr[IsProgram]] = (
       (pSetExpr <~ pSetSubEqOp) ~ pSetExpr  ^^ { SetSubEq(_,_) }
     | (pVar <~ pSetMemOp)       ~ pSetExpr  ^^ { (v, e) => SetMem(Var(v),e) }
-    | (pVar <~ pClassMemOp)     ~ pClass    ^^ { (v, c) => ClassMem(Var(v),c) }
     | (pSetExpr <~ pEqOp)       ~ pSetExpr  ^^ { Eq(_,_) }
     | (pBoolExpr <~ pAndOp)     ~ pBoolExpr ^^ { And(_,_) }
     | (pBoolExpr <~ pOrOp)      ~ pBoolExpr ^^ { (b1, b2) => Not(And(Not(b1),Not(b2))) }
     | pNotOp ~> pBoolExpr                   ^^ { Not(_) }
-    | "true" ^^^ { True }
+    | "true" ^^^ { True[IsProgram]() }
     | "(" ~> pBoolExpr <~ ")"
-  )
+  ) filter prec(Diff.apply[IsProgram] _, ISect.apply[IsProgram] _, Union.apply[IsProgram] _)
 
   lazy val pSetSubEqOp = "subset" | "⊆"
   lazy val pSetMemOp   = "mem"    | "∈"
-  lazy val pClassMemOp = ":"
   lazy val pEqOp       = "="
   lazy val pAndOp      = "&" | "∧"
   lazy val pOrOp       = "|" | "∨"
@@ -78,7 +76,7 @@ object Parser extends RegexParsers {
     | ("if" ~> ("|" ~> pGuardedStatement).* <~ "else") ~ pStatement ^^ { (gss, ds) => Statement.`if`(ds, gss :_*) }
   )
 
-  lazy val pGuardedStatement: Parser[(BoolExpr, Statement)] =
+  lazy val pGuardedStatement: Parser[(BoolExpr[IsProgram], Statement)] =
     (pBoolExpr <~ pArrowOp) ~ pStatement ^^ { (_,_) }
 
   lazy val pArrowOp: Parser[String] =

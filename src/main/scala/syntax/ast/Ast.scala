@@ -43,82 +43,86 @@ case object Opt extends Cardinality {
   def isOptional = true
 }
 
+sealed trait ASTType
+case object IsSymbolic extends ASTType
+case object IsProgram extends ASTType
+
 // We only support single inheritance
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
                            refs: Map[Fields, (Class, Cardinality)], superclass: Option[Class] = None)
 
-sealed trait BasicExpr extends Node
-case class Symbol(id: Symbols) extends BasicExpr with LeafNode
-case class Var(name: Vars) extends BasicExpr with LeafNode
+sealed trait BasicExpr[T <: ASTType] extends Node
+case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic] with LeafNode
+case class Var(name: Vars) extends BasicExpr[IsProgram] with LeafNode
 
-sealed trait SetExpr extends Node
-case class SetLit(es: BasicExpr*) extends SetExpr with NAryNode {
+sealed trait SetExpr[T <: ASTType] extends Node
+case class SetLit[T <: ASTType](es: BasicExpr[T]*) extends SetExpr[T] with NAryNode {
   override val children = es.toList
   override val startSym = 'sl_start.some
   override val endSym   = 'sl_end.some
   override val sepSym   = 'sl_sep.some
 }
-case class Union(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left  = e1
   override val right = e2
   override val sym   = 'union
 }
-case class Diff(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = e1
   override val right     = e2
   override val sym       = 'diff
 }
-case class ISect(e1 : SetExpr, e2 : SetExpr) extends SetExpr with BinaryNode {
+case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = e1
   override val right     = e2
   override val sym       = 'isect
 }
-case class SetVar(name: Vars) extends SetExpr with LeafNode
-case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr with LeafNode
+case class SetVar(name: Vars) extends SetExpr[IsProgram] with LeafNode
+case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr[IsSymbolic] with LeafNode
 
-sealed trait BoolExpr extends Node
-case class Eq(e1: SetExpr, e2: SetExpr) extends BoolExpr with LeafNode
-case class ClassMem(e1: BasicExpr, s: Class) extends BoolExpr with BinaryNode {
+sealed trait BoolExpr[T <: ASTType] extends Node
+case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with LeafNode
+case class ClassMem(e1: SetExpr[IsSymbolic], s: Class) extends BoolExpr[IsSymbolic] with BinaryNode {
   override val assocLeft = false
   override val left      = e1
   override val right     = s
   override val sym       = 'classmem
 }
-case class SetMem(e1: BasicExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
+case class SetMem[T <: ASTType](e1: BasicExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = e1
   override val right     = e2
   override val sym       = 'setmem
 }
-case class SetSubEq(e1: SetExpr, e2: SetExpr) extends BoolExpr with BinaryNode {
+case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = e1
   override val right     = e2
   override val sym       = 'setsubeq
 }
-case class And(b1: BoolExpr, b2: BoolExpr) extends BoolExpr with BinaryNode {
+case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = b1
   override val right     = b2
   override val sym       = 'and
 }
-case object True extends BoolExpr with LeafNode
-case class Not(b: BoolExpr) extends BoolExpr with UnaryNode {
+case class True[T <: ASTType]() extends BoolExpr[T] with LeafNode
+case class Not[T <: ASTType](b: BoolExpr[T]) extends BoolExpr[T] with UnaryNode {
   override val isPrefix = true
   override val child    = b
   override val sym      = 'not
 }
 
 sealed trait MatchExpr
-case class MSet(e : SetExpr) extends MatchExpr
-case class Match(e : SetExpr, c : Class) extends MatchExpr
-case class MatchStar(e : SetExpr, c : Class) extends MatchExpr
+case class MSet(e : SetExpr[IsProgram]) extends MatchExpr
+case class Match(e : SetExpr[IsProgram], c : Class) extends MatchExpr
+case class MatchStar(e : SetExpr[IsProgram], c : Class) extends MatchExpr
 
 object MatchExpr {
-  val _me_e = Lens[MatchExpr, SetExpr]({
+  val _me_e = Lens[MatchExpr, SetExpr[IsProgram]]({
       case MSet(e) => e
       case Match(e, c) => e
       case MatchStar(e, c) => e
@@ -131,7 +135,7 @@ object MatchExpr {
 
 sealed abstract class SpatialDesc
 case class AbstractDesc(c : Class) extends SpatialDesc
-case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr], refs : Map[Fields, SetExpr]) extends SpatialDesc
+case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr[IsSymbolic]], refs : Map[Fields, SetExpr[IsSymbolic]]) extends SpatialDesc
 
 object SpatialDesc {
   val _sd_abstract = GenPrism[SpatialDesc, AbstractDesc]
@@ -152,7 +156,7 @@ object ConcreteDesc {
   val _cd_refs = GenLens[ConcreteDesc](_.refs)
 }
 
-case class QSpatial(e : SetExpr, c : Class)
+case class QSpatial(e : SetExpr[IsSymbolic], c : Class)
 
 object QSpatial {
   val _qs_e = GenLens[QSpatial](_.e)
@@ -196,19 +200,19 @@ case class BranchPoint(stmt_uid: Integer, branch_number: Integer)
 sealed trait Statement
 case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
   extends Statement
-case class AssignVar(metaInf: Statement.MetaInf, x : Vars, e : SetExpr)
+case class AssignVar(metaInf: Statement.MetaInf, x : Vars, e : SetExpr[IsProgram])
   extends Statement
-case class LoadField(metaInf: Statement.MetaInf, x : Vars, e : SetExpr, f : Fields)
+case class LoadField(metaInf: Statement.MetaInf, x : Vars, e : SetExpr[IsProgram], f : Fields)
   extends Statement
 case class New(metaInf: Statement.MetaInf, x : Vars, c : Class)
   extends Statement
-case class AssignField(metaInf: Statement.MetaInf, e1 : SetExpr, f : Fields, e2 : SetExpr)
+case class AssignField(metaInf: Statement.MetaInf, e1 : SetExpr[IsProgram], f : Fields, e2 : SetExpr[IsProgram])
   extends Statement
-case class If(metaInf: Statement.MetaInf, ds: Statement, cs : (BoolExpr, Statement)*)
+case class If(metaInf: Statement.MetaInf, ds: Statement, cs : (BoolExpr[IsProgram], Statement)*)
   extends Statement
 case class For(metaInf: Statement.MetaInf, x: Vars, m: MatchExpr, sb: Statement)
   extends Statement
-case class Fix(metaInf: Statement.MetaInf, e : SetExpr, sb: Statement)
+case class Fix(metaInf: Statement.MetaInf, e : SetExpr[IsProgram], sb: Statement)
   extends Statement
 
 object Statement {
@@ -240,13 +244,13 @@ object Statement {
   val _stmt_uid = _stmt_mi composeLens GenLens[MI](_.uid)
 
   def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI, ss :_*)
-  def assignVar(x : Vars, e : SetExpr) : Statement = AssignVar(NoMI, x, e)
-  def loadField(x : Vars, e : SetExpr, f : Fields) : Statement = LoadField(NoMI, x, e, f)
+  def assignVar(x : Vars, e : SetExpr[IsProgram]) : Statement = AssignVar(NoMI, x, e)
+  def loadField(x : Vars, e : SetExpr[IsProgram], f : Fields) : Statement = LoadField(NoMI, x, e, f)
   def `new`(x : Vars, c : Class) : Statement = New(NoMI, x, c)
-  def assignField(e1 : SetExpr, f : Fields, e2 : SetExpr) : Statement = AssignField(NoMI, e1, f, e2)
-  def `if`(ds : Statement, css : (BoolExpr, Statement)*) : Statement = If(NoMI, ds, css :_*)
+  def assignField(e1 : SetExpr[IsProgram], f : Fields, e2 : SetExpr[IsProgram]) : Statement = AssignField(NoMI, e1, f, e2)
+  def `if`(ds : Statement, css : (BoolExpr[IsProgram], Statement)*) : Statement = If(NoMI, ds, css :_*)
   def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI, x, m, s)
-  def fix(e : SetExpr, s : Statement) : Statement = Fix(NoMI, e, s)
+  def fix(e : SetExpr[IsProgram], s : Statement) : Statement = Fix(NoMI, e, s)
 
   def annotateUids(s : Statement) : Statement = {
     val counter = Counter(0)
@@ -258,7 +262,8 @@ object Statement {
         case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
         case New(_, x, c) => New(sMInf, x, c)
         case AssignField(_, e1, f, e2) => AssignField(sMInf, e1, f, e2)
-        case If(_, ds, cs@_*) => If(sMInf, annotateUidH(ds), cs.map(second[(BoolExpr, Statement), Statement].modify(annotateUidH _)) : _*)
+        case If(_, ds, cs@_*) => If(sMInf, annotateUidH(ds), cs.map(second[(BoolExpr[IsProgram], Statement), Statement]
+                                   .modify(annotateUidH _)) : _*)
         case For(_, x, m, sb) => For(sMInf, x, m, annotateUidH(sb))
         case Fix(_, e, sb) => Fix(sMInf, e, annotateUidH(sb))
       }

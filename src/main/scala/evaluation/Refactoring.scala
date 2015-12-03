@@ -1,8 +1,8 @@
 package evaluation
 
 import syntax._
+import syntax.ast.Statement._
 import syntax.ast._
-import Statement._
 
 object Refactoring {
 
@@ -39,7 +39,7 @@ object Refactoring {
         val inputHeap = SHeap(Map(packageId ->
                                     ConcreteDesc(Class("Package"),
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map[Fields, SetExpr]()),
+                                                 Map[Fields, SetExpr[IsSymbolic]]()),
                                   classId ->
                                     ConcreteDesc(Class("Class"),
                                                  Map("fields" -> Union(SetSymbol((Class("Field"), Many), classFieldsId), SetLit(Symbol(oldFieldId))),
@@ -91,7 +91,7 @@ object Refactoring {
         val inputHeap = SHeap(Map(packageId ->
                                     ConcreteDesc(Class("Package"),
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map[Fields, SetExpr]()),
+                                                 Map[Fields, SetExpr[IsSymbolic]]()),
                                   classId ->
                                     ConcreteDesc(Class("Class"),
                                                  Map("fields" -> SetSymbol((Class("Field"), Many) , classFieldsId),
@@ -152,7 +152,7 @@ object Refactoring {
          val inputHeap = SHeap(Map(packageId ->
                                      ConcreteDesc(Class("Package"),
                                                   Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
-                                                  Map[Fields, SetExpr]()),
+                                                  Map[Fields, SetExpr[IsSymbolic]]()),
                                     class1Id -> AbstractDesc(Class("Class")),
                                     class2Id -> AbstractDesc(Class("Class"))),
                                Set(QSpatial(SetSymbol((Class("Class"), Many), packageClassesId), Class("Class"))),
@@ -292,7 +292,11 @@ object Refactoring {
     // Replace other delegations with calls to the object itself
     , `for`("mcexpr", MatchStar(SetLit(Var("class")), Class("MethodCallExpr")), stmtSeq(
           loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
-        , `if`(stmtSeq(), ClassMem(Var("mcexpr_target"), Class("FieldAccessExpr")) -> stmtSeq(
+        , assignVar("MCEXPR_TARGET", SetLit())
+        , `for`("mcx", Match(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")),
+                  assignVar("MCEXPR_TARGET", SetLit(Var("mcx")))
+           )
+        , `if`(stmtSeq(), not(Eq(SetVar("MCEXPR_TARGET"), SetLit())) -> stmtSeq(
               loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
             , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
             , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
@@ -309,8 +313,9 @@ object Refactoring {
 
     def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement): Unit = {
       import testing._
-      import scalaz._, Scalaz._, scalaz.stream._
+
       import scalaz.concurrent.Task
+      import scalaz.stream._
 
       val tg = new TestGenerator(FullClassModel.allDefsWithKeys, beta=1, delta=1, kappa=2)
       val task: Task[Unit] = tg.generateTestsE(Set(initialMems : _*), refactoring).map(_.toString).to(io.stdOutLines).run

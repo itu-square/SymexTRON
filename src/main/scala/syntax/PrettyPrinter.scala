@@ -15,10 +15,10 @@ object PrettyPrinter {
       if (j < 0) j + l else j
     }
     val i = ident / l
-    s"${symbs(j)}${if (ident >= 0) (if (i == 0) "" else s"`$i") else "´"}"
+    s"${symbs(j)}${if (ident >= 0) if (i == 0) "" else s"`$i" else "´"}"
   }
 
-  def pretty(e : BasicExpr): String = {
+  def pretty[T <: ASTType](e : BasicExpr[T]): String = {
     e match {
       case Symbol(ident) => prettySymb(ident)
       case Var(name) => name
@@ -31,38 +31,38 @@ object PrettyPrinter {
     case Opt    => "?"
   }
 
-  def pretty(e : SetExpr): String = {
+  def pretty[T <: ASTType](e : SetExpr[T]): String = {
     e match {
       case SetSymbol((cl, crd),ident) => s"${prettySymb(ident).toUpperCase} ⟨${cl.name}${pretty(crd)}⟩"
       case SetVar(name) => name
-      case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty).mkString(", ")}}"
+      case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
       case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
       case Diff(e1, e2) => s"(${pretty(e1)} ∖ ${pretty(e2)})"
       case ISect(e1, e2) => s"(${pretty(e1)} ∩ ${pretty(e2)})"
     }
   }
 
-  def pretty(sp: BoolExpr): String = sp match {
+  def pretty[T <: ASTType](sp: BoolExpr[T]): String = sp match {
     case Eq(e1, e2) => s"(${pretty(e1)} = ${pretty(e2)})"
     case ClassMem(e1, s) => s"(${pretty(e1)} : ${s.name})"
     case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
     case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
-    case True => "true"
+    case True() => "true"
     case And(e1, e2) => s"(${pretty(e1)} ∧ ${pretty(e2)})"
     case Not(p) => p match {
       case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case ClassMem(e1, s) => s"¬(${pretty(e1)} : ${s.name})"
       case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
       case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
-      case True => "false"
-      case And(e1 : Not, e2 : Not)
+      case True() => "false"
+      case And(e1@Not(_), e2@Not(_))
          => s"(${pretty(e1)} ∨ ${pretty(e2)})"
       case And(e1, e2) => s"¬(${pretty(e1)} ∧ ${pretty(e2)})"
-      case Not(p) => s"${pretty(p)}"
+      case Not(be) => s"${pretty(be)}"
     }
   }
 
-  def pretty(pure: Prop): String = pure.map(pretty).mkString(" ∧ ")
+  def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic]).mkString(" ∧ ")
 
   def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
     case AbstractDesc(c) => s"inst⟨${c.name}⟩ ${pretty(Symbol(sym))}"
@@ -71,13 +71,13 @@ object PrettyPrinter {
                                                 s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
   }
 
-  def pretty(sym : Symbols, f : Fields, sep : String, e : SetExpr): String =
+  def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =
     s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
 
   def pretty(spatial : Spatial[Symbols])(implicit d : DummyImplicit) : String =
     spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
 
-  def pretty(v : Vars, f : Fields, sep : String, e : SetExpr): String =
+  def pretty[T <: ASTType](v : Vars, f : Fields, sep : String, e : SetExpr[T]): String =
     s"$v.$f $sep ${pretty(e)}"
 
   def pretty(qspatial : QSpatial): String =

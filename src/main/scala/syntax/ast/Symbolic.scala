@@ -7,28 +7,27 @@ trait Symbolic {
 }
 
 trait SymbolicOps {
-  implicit class SymbolicSetExpr(e: SetExpr) extends Symbolic {
+  implicit class SymbolicSetExpr(e: SetExpr[IsSymbolic]) extends Symbolic {
     override val symbols = {
-      def symbols(e: SetExpr): Set[SetSymbol \/ Symbol] = e match {
+      def symbols(e: SetExpr[IsSymbolic]): Set[SetSymbol \/ Symbol] = e match {
         case SetLit(es@_*) => es.collect{ case x: Symbol => x.right }.toSet
         case Union(e1, e2) => symbols(e1) ++ symbols(e2)
         case Diff(e1, e2) => symbols(e1) ++ symbols(e2)
         case ISect(e1, e2) => symbols(e1) ++ symbols(e2)
-        case SetVar(name) => Set()
         case e@SetSymbol(c, id) => Set(e.left)
       }
       symbols(e)
     }
   }
 
-  implicit class SymbolicBoolExpr(b : BoolExpr) extends Symbolic {
+  implicit class SymbolicBoolExpr(b : BoolExpr[IsSymbolic]) extends Symbolic {
     override val symbols = {
-      def symbols(b: BoolExpr): Set[SetSymbol \/ Symbol] = b match {
+      def symbols(b: BoolExpr[IsSymbolic]): Set[SetSymbol \/ Symbol] = b match {
         case Eq(e1, e2) => e1.symbols ++ e2.symbols
-        case ClassMem(e1, s) => SetLit(e1).symbols
+        case ClassMem(e1, s) => e1.symbols
         case SetMem(e1, e2) => SetLit(e1).symbols ++ e2.symbols
         case SetSubEq(e1, e2) => e1.symbols ++ e2.symbols
-        case True => Set()
+        case True() => Set()
         case And(p1, p2) => symbols(p1) ++ symbols(p2)
         case Not(pp) => symbols(pp)
       }
@@ -64,7 +63,7 @@ trait SymbolicOps {
   }
 
   implicit class SymbolicSStack(stack : SStack) extends Symbolic {
-    override val symbols = stack.values.toSet.flatMap((e : SetExpr) => e.symbols)
+    override val symbols = stack.values.toSet.flatMap((e : SetExpr[IsSymbolic]) => e.symbols)
   }
 
   implicit class SymbolicSMem(mem : SMem) extends Symbolic {

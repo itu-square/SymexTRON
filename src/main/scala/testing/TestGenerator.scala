@@ -40,8 +40,8 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
 
   def convertMem(sMem: SMem): (String, String) \/ CMem = {
     val maxDepth = 3
-    def sbexpr2sinstance(es : Seq[BasicExpr]) =
-      es.map(_.asInstanceOf[Symbol].id).toSet
+    def sbexpr2sinstance(es : Seq[BasicExpr[IsSymbolic]]) =
+      es.map { case Symbol(ident) => ident }.toSet
     def symbolic2concrete(csMem : SMem): (String, String) \/ CMem =  {
           val cStackr = csMem.stack.toList.traverseU {
             case (x, SetLit(es@_*)) if es.forall(_.isInstanceOf[Symbol]) =>
@@ -72,7 +72,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
           } yield CMem(cStack, cHeap)
         }
 
-    val allSymbols = SetLit(sMem.heap.spatial.keys.toSet.map(Symbol).toSeq : _*)
+    val allSymbols = sMem.heap.spatial.keys.toSet
 
     val concreteSMem = symbExec.modelFinder.concretise(allSymbols, sMem, sMem, alsoReferences = true, depth=maxDepth)
                .filter(_.isRight).map(_.toOption.get._2)
