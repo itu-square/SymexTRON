@@ -75,7 +75,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       (s.join(typeOf).one and (s.join(typeOf) in Types) forAll (s oneOf SymbolsRel)) and
         (typeOf.join(Expression.UNIV) in SymbolsRel)
     }
-    nameTyping and nameUniqueness and symsTyping // and typeOfSTyping and typeOfTyping
+    nameTyping and nameUniqueness and symsTyping and typeOfTyping and typeOfSTyping
   }
 
 
@@ -111,9 +111,20 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       stBounds.add((f tuple (types(sc))) product (f tuple (types(c))))
     }
     bounds.boundExactly(isSubType, stBounds)
-    /*bounds.bound(typeOfS, f noneOf 2)
-    bounds.bound(typeOf, f noneOf 2)*/
-
+    val typeOfSUpper = f noneOf 2
+    for (ss <- symbolicsets.map(_._2).toList) {
+      for (typ <- types.values.toList) {
+        typeOfSUpper.add((f tuple ss) product (f tuple typ))
+      }
+    }
+    bounds.bound(typeOfS, typeOfSUpper)
+    val typeOfUpper = f noneOf 2
+    for (sid <- symbolids) {
+      for (typ <- types.values.toList) {
+        typeOfUpper.add((f tuple sid) product (f tuple typ))
+      }
+    }
+    bounds.bound(typeOf, typeOfUpper)
     bounds
   }
 
