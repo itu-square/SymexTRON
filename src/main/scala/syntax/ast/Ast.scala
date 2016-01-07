@@ -163,6 +163,14 @@ object QSpatial {
   val _qs_c = GenLens[QSpatial](_.c)
 }
 
+case class QJump(source : SetExpr[IsSymbolic], c : Class, target : SetExpr[IsSymbolic])
+
+object QJump {
+  val _qj_source = GenLens[QJump](_.source)
+  val _qj_c = GenLens[QJump](_.c)
+  val _qj_target = GenLens[QJump](_.target)
+}
+
 case class SHeap(spatial: Spatial[Symbols], qspatial: Set[QSpatial], pure : Prop)
 
 object SHeap {
