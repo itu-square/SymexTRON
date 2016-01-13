@@ -75,7 +75,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       (s.join(typeOf).one and (s.join(typeOf) in Types) forAll (s oneOf SymbolsRel)) and
         (typeOf.join(Expression.UNIV) in SymbolsRel)
     }
-    nameTyping and nameUniqueness and symsTyping and typeOfTyping and typeOfSTyping
+    nameTyping and nameUniqueness and symsTyping //and typeOfTyping and typeOfSTyping
   }
 
 
@@ -131,7 +131,6 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
   def evalBoolExpr(b : BoolExpr[IsSymbolic], th : Map[Symbols, Relation], isNegated: Boolean = false)
   : String \/ EvalRes[Formula] = b match {
     case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
-    case ClassMem(e1, s) => ???
     case SetMem(e1, e2) => for {
         ee2 <- evalSetExpr(e2, th)
         (rs2, is2, f2, r2, th2) = ee2
@@ -261,6 +260,12 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }}.toSet
   }
 
+  def typeConstraints(heap: SHeap) = heap.spatial.map { case (sym, sd) => sd match {
+    case AbstractDesc(c) =>
+    case ConcreteDesc(c, children, refs) =>
+    }
+  }
+
   def findSet(e : SetExpr[IsSymbolic], heap: SHeap, minSymbols : Int):
       Process[Task, String \/ (Map[Symbols, Set[ast.Symbols]], Set[ast.Symbols])] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): Set[ast.Symbols] = {
@@ -280,7 +285,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         Process(ee).flatMap(t => (for {
             tt <- t
             (rs0, is0, fs0, r, th0) = tt
-         //   typec = typeConstraints(heap)
+            //typec = typeConstraints(heap)
             ownershipc = ownershipConstraints(heap.spatial)
             (disj, relv) = relevantConstraints(e, heap.pure ++ ownershipc)
             ps = disj ++ relv

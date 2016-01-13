@@ -24,7 +24,6 @@ trait SymbolicOps {
     override val symbols = {
       def symbols(b: BoolExpr[IsSymbolic]): Set[SetSymbol \/ Symbol] = b match {
         case Eq(e1, e2) => e1.symbols ++ e2.symbols
-        case ClassMem(e1, s) => e1.symbols
         case SetMem(e1, e2) => SetLit(e1).symbols ++ e2.symbols
         case SetSubEq(e1, e2) => e1.symbols ++ e2.symbols
         case True() => Set()

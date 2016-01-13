@@ -51,7 +51,6 @@ object Subst {
 
     override def subst(x: Symbols, e: SetExpr[IsSymbolic]): BoolExpr[IsSymbolic] = p match {
       case Eq(e1, e2) => Eq(e1.subst(x, e), e2.subst(x, e))
-      case ClassMem(e1, s) => ClassMem(e1.subst(x, e), s)
       case SetMem(e1, e2) =>
         val ee2 = e2.subst(x, e)
         SetMem(e1, ee2)
@@ -63,7 +62,6 @@ object Subst {
 
     override def subst(x: Symbols, e: BasicExpr[IsSymbolic]): BoolExpr[IsSymbolic] = p match {
       case Eq(e1, e2) => Eq(e1.subst(x, e), e2.subst(x, e))
-      case ClassMem(e1, s) => ClassMem(e1.subst(x, e), s)
       case SetMem(e1, e2) =>
         val ee2 = e2.subst(x, e)
         SetMem(e1, ee2)

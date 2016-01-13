@@ -94,28 +94,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       }
     }
     type StateCM[A] =  State[Map[syntax.ast.Symbols, Class], A]
-    def checkTypeConsistencyBoolExpr(b : BoolExpr[IsSymbolic]) : StateCM[Boolean] = b match {
-      case syntax.ast.Not(b) => checkTypeConsistencyBoolExpr(b).map(!_)
-      case syntax.ast.And(b1, b2) =>
-       for {
-         b1c <- checkTypeConsistencyBoolExpr(b1)
-         b2c <- checkTypeConsistencyBoolExpr(b2)
-       } yield b1c && b2c
-      case syntax.ast.ClassMem(e, c) => {
-        // TODO handle safely
-        val sym = e.asInstanceOf[Symbol]
-        val sts = defs.subtypesOrSelf
-        for {
-          st <- State.get[Map[syntax.ast.Symbols, Class]]
-          symtype = if (st.contains(sym.id)) st(sym.id) else SpatialDesc._sd_c.get(heap.spatial(sym.id))
-          isSubType = sts(symtype).contains(c)
-          _ <- if (isSubType) State.put(st.updated(sym.id, c)) else ().point[StateCM]
-        } yield isSubType || defs.supertypes(c).contains(symtype)
-      }
-      case _ => true.point[StateCM]
-    }
-    typeConsistentAssigniments &&
-      heap.pure.traverseU(checkTypeConsistencyBoolExpr).eval(Map()).forall(identity)
+    typeConsistentAssigniments
   }
 
   def makeSSymbol(npref: String, ppref: String, id : syntax.ast.Symbols, symsort : Sort) = {
@@ -166,7 +145,6 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       val e2res = evalSetExpr(th, e2)
       Equals(e1res, e2res)
     }
-    case syntax.ast.ClassMem(e, c) => True() // We don't handle types by the SMT solver
     case syntax.ast.SetMem(e1, e2) => {
       val e1res = evalBasicExpr(th, e1)
       val e2res = evalSetExpr(th, e2)

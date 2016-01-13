@@ -85,12 +85,6 @@ case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr[IsSy
 
 sealed trait BoolExpr[T <: ASTType] extends Node
 case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with LeafNode
-case class ClassMem(e1: SetExpr[IsSymbolic], s: Class) extends BoolExpr[IsSymbolic] with BinaryNode {
-  override val assocLeft = false
-  override val left      = e1
-  override val right     = s
-  override val sym       = 'classmem
-}
 case class SetMem[T <: ASTType](e1: BasicExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with BinaryNode {
   override val assocLeft = true
   override val left      = e1
