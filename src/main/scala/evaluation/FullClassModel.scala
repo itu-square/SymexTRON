@@ -17,18 +17,15 @@ object FullClassModel {
    , new ClassDefinition("Field", Map[Fields, (Class, Cardinality)](),
                          Map("name" -> ((Class("String"), Single)),
                              "type" -> ((Class("Class"), Single))))
-   , new ClassDefinition("Method", Map("params" -> ((Class("Parameter"), Opt)),
+   , new ClassDefinition("Method", Map("params" -> ((Class("Parameter"), Many)),
                                         "body" -> ((Class("Statement"), Single))),
                         Map("name" -> ((Class("String"), Single)),
                             "type" -> ((Class("Class"), Single))))
-   , new ClassDefinition("Parameter", Map("next" -> ((Class("Parameter"), Opt))),
+   , new ClassDefinition("Parameter", Map(),
                            Map("name" -> ((Class("String"), Single)),
                                "type" -> ((Class("Class"), Single))))
-   , new ClassDefinition("Statement", Map[Fields, (Class, Cardinality)](),
+   , new ClassDefinition("Statement", Map[Fields, (Class, Cardinality)](), //Abstract
                            Map[Fields, (Class, Cardinality)]())
-   , new ClassDefinition("Block", Map("current" -> ((Class("Statement"), Single)),
-                                      "next" -> ((Class("Statement"), Opt))),
-                         Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
    , new ClassDefinition("If", Map("then" -> ((Class("Statement"), Single)),
                                    "else" -> ((Class("Statement"), Opt)),
                                    "cond" -> ((Class("Expr"), Single))),
@@ -38,7 +35,7 @@ object FullClassModel {
     , new ClassDefinition("Assign", Map("left" -> ((Class("AssignableExpr"), Single)),
                                         "right" -> ((Class("Expr"), Single))),
                            Map[Fields, (Class, Cardinality)](), Some(Class("Statement")))
-    , new ClassDefinition("Expr", Map[Fields, (Class, Cardinality)](),
+    , new ClassDefinition("Expr", Map[Fields, (Class, Cardinality)](), // Abstract
                           Map("type" -> ((Class("Class"), Single))))
     , new ClassDefinition("AssignableExpr", Map[Fields, (Class, Cardinality)](),
                           Map[Fields, (Class, Cardinality)](), Some(Class("Expr")))
@@ -46,12 +43,10 @@ object FullClassModel {
                           Map("field_name" -> ((Class("String"), Single))),
                           Some(Class("AssignableExpr")))
     , new ClassDefinition("MethodCallExpr", Map("target" -> ((Class("Expr"), Single)),
-                                                "args" -> ((Class("Arg"), Opt))),
+                                                "args" -> ((Class("Arg"), Many))),
                           Map("method_name" -> ((Class("String"), Single)) ), Some(Class("Expr")))
 
-    , new ClassDefinition("Arg", Map("current" -> ((Class("Expr"), Single)),
-                                       "next" -> ((Class("Arg"), Opt))),
-                          Map[Fields, (Class, Cardinality)]())
+    , new ClassDefinition("Arg", Map("value" -> ((Class("Expr"), Single))), Map("name" -> ((Class("String"), Single))))
     , new ClassDefinition("Any", Map(), Map())
     , new ClassDefinition("Nothing", Map(), Map())
   )

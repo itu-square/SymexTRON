@@ -21,6 +21,8 @@ package object ast extends SymbolicOps {
     case p => Not(p)
   } //Smart constructor
 
+  def or[T <: ASTType](p1 : BoolExpr[T], p2 : BoolExpr[T]): BoolExpr[T] = Not(And(Not(p1), Not(p2)))
+
   def getSingletonSymbolId(e : SetExpr[IsSymbolic]): String \/ Symbols = {
     e match {
       case SetLit(Symbol(sym)) => sym.right
