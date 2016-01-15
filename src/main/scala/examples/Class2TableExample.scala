@@ -3,7 +3,7 @@ package examples
 import syntax.ast.Statement._
 import syntax.ast._
 
-object Class2Table extends Example {
+object Class2TableExample extends Example {
 
   val sourceClassDefs = Set(
     new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),

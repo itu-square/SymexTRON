@@ -6,10 +6,10 @@ import syntax.ast.Statement._
 /**
   * Created by asal on 15/01/2016.
   */
-trait BlogPostFeed extends Example {
+trait BlogPostFeedExample extends Example {
   override val pres: Set[SMem] = Set(SMem(Map("post" -> SetLit(Symbol(-1))),
                                             SHeap(Map(-1 -> AbstractDesc(Class("Post"))), Set(), Set())))
-  override val classDefs: Set[ClassDefinition] = Set(
+  override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       new ClassDefinition("Title", Map(), Map("value" -> (Class("String"), Single)))
     , new ClassDefinition("CapitalisedTitle", Map(), Map(), Some(Class("Title")))
     , new ClassDefinition("Timestamp", Map(), Map("value" -> (Class("Int"), Single)))
@@ -20,7 +20,7 @@ trait BlogPostFeed extends Example {
   )
 }
 
-object BlogPostFeedTimestamps extends BlogPostFeed {
+object BlogPostFeedTimestampsExample extends BlogPostFeedExample {
   override val prog: Statement = stmtSeq(
      assignVar("timestamps", SetLit())
    , `for`("ts", MatchStar(SetLit(Var("post")), Class("Timestamp")), stmtSeq(
@@ -29,7 +29,7 @@ object BlogPostFeedTimestamps extends BlogPostFeed {
   )
 }
 
-object BlogPostFeedCapitaliseTitles extends BlogPostFeed {
+object BlogPostFeedCapitaliseTitlesExample extends BlogPostFeedExample {
   override val prog: Statement = `for`("sp", MatchStar(SetLit(Var("post")), Class("SinglePost")), stmtSeq(
       loadField("sp_title", SetLit(Var("sp")), "title")
     , loadField("sp_title_value", SetLit(Var("sp_title")), "value")
