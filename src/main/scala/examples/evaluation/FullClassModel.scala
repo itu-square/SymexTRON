@@ -4,10 +4,6 @@ package evaluation
 import syntax.ast._
 
 object FullClassModel {
-  val stdClassDefs = Set(
-      new ClassDefinition("String", Map(), Map())
-    , new ClassDefinition("Int", Map(), Map())
-  )
   // TODO Also update diagram with types for method, field and parameter
   val classDefs = Set(
      new ClassDefinition("Package", Map("classes" -> ((Class("Class"), Many))), Map())
@@ -48,11 +44,9 @@ object FullClassModel {
                           Map("method_name" -> ((Class("String"), Single)) ), Some(Class("Expr")))
 
     , new ClassDefinition("Arg", Map("value" -> ((Class("Expr"), Single))), Map("name" -> ((Class("String"), Single))))
-    , new ClassDefinition("Any", Map(), Map())
-    , new ClassDefinition("Nothing", Map(), Map())
   )
 
-  val allDefs = stdClassDefs ++ classDefs
+  val allDefs = Shared.stdClassDefs ++ classDefs
 
   val allDefsWithKeys = allDefs.map(d => Class(d.name) -> d).toMap
 }

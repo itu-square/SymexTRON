@@ -1,20 +1,10 @@
 package examples
 
-import testing.TestGenerator
-import syntax.PrettyPrinter
+import syntax.ast.Statement._
 import syntax.ast._
-import scalaz._, Scalaz._, scalaz.stream._
-import scalaz.concurrent.Task
-import helper._
-import Statement._
 
-object Class2Table extends App {
-  val baseClassDefs = Set(
-    new ClassDefinition("String", Map(), Map()),
-    new ClassDefinition("Int", Map(), Map()),
-    new ClassDefinition("Any", Map(), Map()),
-    new ClassDefinition("Nothing", Map(), Map())
-  )
+object Class2Table extends Example {
+
   val sourceClassDefs = Set(
     new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),
     new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single))))
@@ -26,13 +16,13 @@ object Class2Table extends App {
     new ClassDefinition("IdColumn", Map(), Map(), Some(Class("Column"))),
     new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Some(Class("Column")))
   )
-  val classDefs = baseClassDefs ++ sourceClassDefs ++ targetClassDefs
-  val pre = SMem(Map("class" -> SetLit(Symbol(-1))),
+  override val classDefs = Shared.stdClassDefs ++ sourceClassDefs ++ targetClassDefs
+  override val pres = Set(SMem(Map("class" -> SetLit(Symbol(-1))),
                      SHeap(Map(-1 -> ConcreteDesc(Class("Class"),
                            Map("attributes" -> SetSymbol((Class("Attribute"), Many), -2)), Map())),
                            Set(QSpatial(SetSymbol((Class("Attribute"), Many), -2), Class("Attribute"))),
-                           Set()))
-  val prog = stmtSeq(
+                           Set())))
+  override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),
     assignField(SetLit(Var("table")), "id", SetLit(Var("idcol"))),
@@ -45,7 +35,5 @@ object Class2Table extends App {
       assignField(SetLit(Var("table")), "columns", Union(SetVar("tablecolumns"), SetLit(Var("col"))))
     ))
   )
-  val tg = new TestGenerator(classDefs.map(cd => Class(cd.name) -> cd).toMap, beta=10, delta=5, kappa=2)
-  val task: Task[Unit] = tg.generateTests(Set(pre), prog).map(_.toString).to(io.stdOutLines).run
-  task.run
+
 }
