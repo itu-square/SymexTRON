@@ -75,7 +75,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         h2 <- update(o, f, os2, mem.heap)
       } yield mem |> _cm_heap.set(h2)) |> Process.emit
       case If(_, ds, cs @ _*) => {
-        val elseB = (cs.map(_._1).map(not).foldLeft(True() : BoolExpr[IsProgram])(And(_,_)) , ds)
+        val elseB = (cs.map(_._1).map(not).foldLeft(True() : BoolExpr[IsProgram.type])(And(_,_)) , ds)
         val cs2 = elseB +: cs
         for {
           gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
@@ -155,7 +155,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     else s"$f neither a child nor reference".left
   }
 
-  private def evalBasicExpr(e: BasicExpr[IsProgram], stack: CStack): String \/ Instances = e match {
+  private def evalBasicExpr(e: BasicExpr[IsProgram.type], stack: CStack): String \/ Instances = e match {
     case Var(name) => stack.get(name).cata(
       res =>
         if (res.size == 1) res.head.right
@@ -164,7 +164,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     )
   }
 
-  private def evalExpr(e: SetExpr[IsProgram], stack: CStack): String \/ Set[Instances] = e match {
+  private def evalExpr(e: SetExpr[IsProgram.type], stack: CStack): String \/ Set[Instances] = e match {
     case SetLit(es @ _*) => es.toSet.traverseU(e => evalBasicExpr(e, stack))
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
@@ -181,7 +181,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     case SetVar(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 
-  private def evalBoolExpr(b: BoolExpr[IsProgram], stack: CStack): String \/ Boolean = b match {
+  private def evalBoolExpr(b: BoolExpr[IsProgram.type], stack: CStack): String \/ Boolean = b match {
     case Eq(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)

@@ -60,7 +60,7 @@ object PrettyPrinter {
     }
   }
 
-  def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic]).mkString(" ∧ ")
+  def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic.type]).mkString(" ∧ ")
 
   def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
     case AbstractDesc(c) => s"inst⟨${c.name}⟩ ${pretty(Symbol(sym))}"

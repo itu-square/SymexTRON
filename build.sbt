@@ -29,7 +29,8 @@ libraryDependencies ++= Seq(
   "com.github.julien-truffaut"  %%  "monocle-law"     % monocleLibraryVersion % "test"
 )
 
-libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
+libraryDependencies += "org.scalactic" %% "scalactic" % "2.2.6"
+libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 
 libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
 

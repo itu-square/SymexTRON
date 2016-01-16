@@ -24,7 +24,7 @@ object Refactoring {
         val inputHeap = SHeap(Map(packageId ->
                                     ConcreteDesc(Class("Package"),
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map[Fields, SetExpr[IsSymbolic]]()),
+                                                 Map()),
                                   classId ->
                                     ConcreteDesc(Class("Class"),
                                                  Map("fields" -> Union(SetSymbol((Class("Field"), Many), classFieldsId), SetLit(Symbol(oldFieldId))),
@@ -74,7 +74,7 @@ object Refactoring {
         val inputHeap = SHeap(Map(packageId ->
                                     ConcreteDesc(Class("Package"),
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map[Fields, SetExpr[IsSymbolic]]()),
+                                                 Map()),
                                   classId ->
                                     ConcreteDesc(Class("Class"),
                                                  Map("fields" -> SetSymbol((Class("Field"), Many) , classFieldsId),
@@ -137,7 +137,7 @@ object Refactoring {
          val inputHeap = SHeap(Map(packageId ->
                                      ConcreteDesc(Class("Package"),
                                                   Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
-                                                  Map[Fields, SetExpr[IsSymbolic]]()),
+                                                  Map()),
                                     class1Id -> AbstractDesc(Class("Class")),
                                     class2Id -> AbstractDesc(Class("Class"))),
                                Set(QSpatial(SetSymbol((Class("Class"), Many), packageClassesId), Class("Class"))),

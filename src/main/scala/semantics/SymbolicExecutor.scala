@@ -53,7 +53,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield m
 
 
-  def access(sym: Symbols, f: Fields, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SetExpr[IsSymbolic], SHeap, SHeap)] = {
+  def access(sym: Symbols, f: Fields, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SetExpr[IsSymbolic.type], SHeap, SHeap)] = {
     for {
       symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
       unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
@@ -68,11 +68,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield res.join
   }
 
-  def disown(heap: SHeap, ee: SetExpr[IsSymbolic]) : SHeap = {
+  def disown(heap: SHeap, ee: SetExpr[IsSymbolic.type]) : SHeap = {
     def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
       case cd@ConcreteDesc(c, children, refs) => {
         val (newchildren, newconstrs) =
-          children.foldLeft((Map[String, SetExpr[IsSymbolic]](), Set[BoolExpr[IsSymbolic]]()))(
+          children.foldLeft((Map[String, SetExpr[IsSymbolic.type]](), Set[BoolExpr[IsSymbolic.type]]()))(
             (st, chld) => {
               val preve = chld._2
               //TODO Handle safely and find more precise type by infering on preve
@@ -104,7 +104,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         f `andThen` (disownSD _).tupled(el))(h))) (heap)
   }
 
-  def update(sym: Symbols, f: Fields, ee2: SetExpr[IsSymbolic], initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
+  def update(sym: Symbols, f: Fields, ee2: SetExpr[IsSymbolic.type], initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
     for {
       symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
       unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
@@ -155,7 +155,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                       (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(pre)))
         case LoadField(_, x, e, f) => for {
           sym <- Process(evalExpr(pre.stack, e).flatMap(getSingletonSymbolId))
-          ares <- sym.traverse[TProcess, String, String \/ (SetExpr[IsSymbolic], SHeap, SHeap)](s =>
+          ares <- sym.traverse[TProcess, String, String \/ (SetExpr[IsSymbolic.type], SHeap, SHeap)](s =>
                   access(s, f, initMem.heap, pre.heap))(pmt).map(_.join)
         } yield ares.map(p => (SMem(initMem.stack, p._2), SMem(pre.stack + (x -> p._1), p._3)))
         case AssignField(_, e1, f, e2) => {
@@ -171,7 +171,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           val ecs    = cs.map(p => evalBoolExpr(pre.stack, p._1).map((_, p._2))).toList
           val elsecase = for {
             other <- ecs.traverseU(_.map(_._1))
-          } yield other.map(not).foldLeft[BoolExpr[IsSymbolic]](True())(And(_,_)) -> ds
+          } yield other.map(not).foldLeft[BoolExpr[IsSymbolic.type]](True())(And(_,_)) -> ds
           val newecs = Process((elsecase :: ecs) : _*)
           for {
             cstmt <- newecs
@@ -259,7 +259,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
-  def evalBasicExpr(s: SStack, e: BasicExpr[IsProgram]): String \/ BasicExpr[IsSymbolic] = e match {
+  def evalBasicExpr(s: SStack, e: BasicExpr[IsProgram.type]): String \/ BasicExpr[IsSymbolic.type] = e match {
     case Var(name) =>
       s.get(name).cata({
             case SetLit(evalue) => evalue.right
@@ -267,7 +267,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         }, s"Error while evaluating expression $e".left)
   }
 
-  def evalExpr(s : SStack, e : SetExpr[IsProgram]) : String \/ SetExpr[IsSymbolic] = {
+  def evalExpr(s : SStack, e : SetExpr[IsProgram.type]) : String \/ SetExpr[IsSymbolic.type] = {
       e match {
         case SetLit(es @ _*) =>
           for {
@@ -290,7 +290,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       }
     }
 
-  def evalBoolExpr(st : SStack, sp : BoolExpr[IsProgram]) : String \/ BoolExpr[IsSymbolic] = sp match {
+  def evalBoolExpr(st : SStack, sp : BoolExpr[IsProgram.type]) : String \/ BoolExpr[IsSymbolic.type] = sp match {
     case Eq(e1, e2) =>
       for {
         ee1 <- evalExpr(st, e1)

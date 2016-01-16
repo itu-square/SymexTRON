@@ -8,12 +8,10 @@ package object ast extends SymbolicOps {
   type Symbols = Int
   type Fields = String
   type Spatial[T] = Map[T, SpatialDesc]
-  type Prop = Set[BoolExpr[IsSymbolic]]
-  type SStack = Map[Vars, SetExpr[IsSymbolic]]
+  type Prop = Set[BoolExpr[IsSymbolic.type]]
+  type SStack = Map[Vars, SetExpr[IsSymbolic.type]]
   type Instances = Int
   type CStack = Map[Vars, Set[Instances]]
-  type IsSymbolic = IsSymbolic.type
-  type IsProgram  = IsProgram.type
 
   def not[T <: ASTType](p : BoolExpr[T]) : BoolExpr[T] = p match {
     case Not(Not(p)) => not(p)
@@ -23,7 +21,7 @@ package object ast extends SymbolicOps {
 
   def or[T <: ASTType](p1 : BoolExpr[T], p2 : BoolExpr[T]): BoolExpr[T] = Not(And(Not(p1), Not(p2)))
 
-  def getSingletonSymbolId(e : SetExpr[IsSymbolic]): String \/ Symbols = {
+  def getSingletonSymbolId(e : SetExpr[IsSymbolic.type]): String \/ Symbols = {
     e match {
       case SetLit(Symbol(sym)) => sym.right
       case _ => s"${PrettyPrinter.pretty(e)} is not a single symbol".left

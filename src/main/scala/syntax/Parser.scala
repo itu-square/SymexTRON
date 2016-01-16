@@ -11,7 +11,7 @@ object Parser extends RegexParsers {
       """(\s|/\*([^*]|\*[^/])*\*/)+""".r
   )
 
-  lazy val pSetExpr: Parser[SetExpr[IsProgram]] = (
+  lazy val pSetExpr: Parser[SetExpr[IsProgram.type]] = (
       pSetVar ^^ { SetVar(_) }
     | pVar ^^ (v => SetLit(Var(v)))
     | "{" ~> pVar.*(",") <~ "}" ^^ (vars => SetLit(vars.map(Var(_)) :_*))
@@ -25,16 +25,16 @@ object Parser extends RegexParsers {
   lazy val pISectOp: Parser[String] = "intersect" | "∩"
   lazy val pDiffOp:  Parser[String] = "diff" | "∖"
 
-  lazy val pBoolExpr:  Parser[BoolExpr[IsProgram]] = (
+  lazy val pBoolExpr:  Parser[BoolExpr[IsProgram.type]] = (
       (pSetExpr <~ pSetSubEqOp) ~ pSetExpr  ^^ { SetSubEq(_,_) }
     | (pVar <~ pSetMemOp)       ~ pSetExpr  ^^ { (v, e) => SetMem(Var(v),e) }
     | (pSetExpr <~ pEqOp)       ~ pSetExpr  ^^ { Eq(_,_) }
     | (pBoolExpr <~ pAndOp)     ~ pBoolExpr ^^ { And(_,_) }
     | (pBoolExpr <~ pOrOp)      ~ pBoolExpr ^^ { (b1, b2) => Not(And(Not(b1),Not(b2))) }
     | pNotOp ~> pBoolExpr                   ^^ { Not(_) }
-    | "true" ^^^ { True[IsProgram]() }
+    | "true" ^^^ { True[IsProgram.type]() }
     | "(" ~> pBoolExpr <~ ")"
-  ) filter prec(Diff.apply[IsProgram] _, ISect.apply[IsProgram] _, Union.apply[IsProgram] _)
+  ) filter prec(Diff.apply[IsProgram.type] _, ISect.apply[IsProgram.type] _, Union.apply[IsProgram.type] _)
 
   lazy val pSetSubEqOp = "subset" | "⊆"
   lazy val pSetMemOp   = "mem"    | "∈"
@@ -76,7 +76,7 @@ object Parser extends RegexParsers {
     | ("if" ~> ("|" ~> pGuardedStatement).* <~ "else") ~ pStatement ^^ { (gss, ds) => Statement.`if`(ds, gss :_*) }
   )
 
-  lazy val pGuardedStatement: Parser[(BoolExpr[IsProgram], Statement)] =
+  lazy val pGuardedStatement: Parser[(BoolExpr[IsProgram.type], Statement)] =
     (pBoolExpr <~ pArrowOp) ~ pStatement ^^ { (_,_) }
 
   lazy val pArrowOp: Parser[String] =

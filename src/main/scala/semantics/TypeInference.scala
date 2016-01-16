@@ -20,11 +20,11 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
   }
 
   // TODO Do this more safely
-  def inferType(e : BasicExpr[IsSymbolic], h : SHeap) : Class = e match {
+  def inferType(e : BasicExpr[IsSymbolic.type], h : SHeap) : Class = e match {
     case Symbol(id) => SpatialDesc._sd_c.get(h.spatial(id))
   }
 
-  def inferType(e : SetExpr[IsSymbolic], h : SHeap) : Class = e match {
+  def inferType(e : SetExpr[IsSymbolic.type], h : SHeap) : Class = e match {
     case SetLit(es@_*) => es.foldLeft(Class("Nothing"))((c, e) =>
       lub(c, inferType(e, h)))
     case Union(e1, e2) => lub(inferType(e1, h), inferType(e2, h))

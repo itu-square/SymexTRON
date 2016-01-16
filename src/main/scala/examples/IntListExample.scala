@@ -11,13 +11,16 @@ object IntListExample extends Example {
     new ClassDefinition("IntList", Map("next" -> (Class("IntList"), Opt)),
                                    Map("data" -> (Class("Int"), Single)))
   )
-  override val pres: Set[SMem] = Set(SMem(Map("list" -> SetLit(Symbol(-1)), "elem" -> SetLit(Symbol(-2))),
+  override val pres: Set[SMem] = Set(SMem(Map("list" -> SetLit(), "elem" -> SetLit(Symbol(-2))),
+                                     SHeap(Map(-2 -> AbstractDesc(Class("Int"))),Set(),Set())),
+                                     SMem(Map("list" -> SetLit(Symbol(-1)), "elem" -> SetLit(Symbol(-2))),
                                      SHeap(Map(-1 -> AbstractDesc(Class("IntList")),
                                                -2 -> AbstractDesc(Class("Int"))), Set(), Set())))
   override val prog: Statement = stmtSeq(
      assignVar("containselem", SetLit())
-   , `for`("elem'", MatchStar(SetLit(Var("list")), Class("Int")), stmtSeq(
-        `if`(stmtSeq(), Eq(SetLit(Var("elem")), SetLit(Var("elem'"))) -> `new`("containselem", Class("Any")))
+   , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
+        loadField("sublist_data", SetLit(Var("sublist")), "data")
+        ,`if`(stmtSeq(), Eq(SetLit(Var("elem")), SetLit(Var("sublist_data"))) -> `new`("containselem", Class("Any")))
     ))
   )
 }

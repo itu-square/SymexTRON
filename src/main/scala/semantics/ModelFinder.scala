@@ -128,7 +128,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     bounds
   }
 
-  def evalBoolExpr(b : BoolExpr[IsSymbolic], th : Map[Symbols, Relation], isNegated: Boolean = false)
+  def evalBoolExpr(b : BoolExpr[IsSymbolic.type], th : Map[Symbols, Relation], isNegated: Boolean = false)
   : String \/ EvalRes[Formula] = b match {
     case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
     case SetMem(e1, e2) => for {
@@ -158,7 +158,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       } yield (rs1, is1, f1, r, th1)
   }
 
-  def evalBinaryBoolExpr(e1: SetExpr[IsSymbolic], op: (Expression, Expression) => Formula, e2: SetExpr[IsSymbolic],
+  def evalBinaryBoolExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Formula, e2: SetExpr[IsSymbolic.type],
                          th: Map[Symbols, Relation], isNegated: Boolean): String \/ EvalRes[Formula] = {
     for {
       ee1 <- evalSetExpr(e1, th)
@@ -174,7 +174,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     } yield (rs1 union rs2, is1 union is2, formula and f1 and f2, formula, th2)
   }
 
-  def evalSetExpr(e : SetExpr[IsSymbolic], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
+  def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
     case SetLit(es@_*) =>
       val s = freshSet
       val formula = {
@@ -216,7 +216,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       }
   }
 
-  def evalBinarySetExpr(e1: SetExpr[IsSymbolic], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic],
+  def evalBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
                         th : Map[Symbols, Relation]): String \/ EvalRes[Relation] = {
     for {
       ee1 <- evalSetExpr(e1,th)
@@ -233,13 +233,13 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
   }
 
-  def relevantConstraints(e: SetExpr[IsSymbolic], p: Prop): (Prop, Prop) = {
+  def relevantConstraints(e: SetExpr[IsSymbolic.type], p: Prop): (Prop, Prop) = {
     val (disj, norm) = p partition {
       case Eq(ISect(_,_), SetLit()) => true
       case _ => false
     }
     def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
-      val relevant = norm.filter((b : BoolExpr[IsSymbolic]) => !(b.symbols.ids intersect syms).isEmpty)
+      val relevant = norm.filter((b : BoolExpr[IsSymbolic.type]) => !(b.symbols.ids intersect syms).isEmpty)
       val relevantsyms = relevant.symbols.ids diff visited
       relevant ++ (if (!relevantsyms.isEmpty)
                         rlv(relevantsyms, visited ++ syms)
@@ -249,13 +249,13 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
   }
 
   def applySubst(th: Map[Symbols, Set[ast.Symbols]], mem: SMem): SMem = {
-    mem.subst_all(th.mapValues(s => SetLit[IsSymbolic](s.map(Symbol(_)).toSeq :_*))) |>
+    mem.subst_all(th.mapValues(s => SetLit[IsSymbolic.type](s.map(Symbol(_)).toSeq :_*))) |>
         (mem => SetNormalizer.normalize(mem.heap.pure)(mem) |> _sm_heap.modify(expand))
   }
 
   def ownershipConstraints(spatial: Spatial[Symbols]): Prop = {
     spatial.flatMap{ case (sym, sd) => sd match {
-      case AbstractDesc(c) => Set[BoolExpr[IsSymbolic]]()
+      case AbstractDesc(c) => Set[BoolExpr[IsSymbolic.type]]()
       case ConcreteDesc(c, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
     }}.toSet
   }
@@ -266,7 +266,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
   }
 
-  def findSet(e : SetExpr[IsSymbolic], heap: SHeap, minSymbols : Int):
+  def findSet(e : SetExpr[IsSymbolic.type], heap: SHeap, minSymbols : Int):
       Process[Task, String \/ (Map[Symbols, Set[ast.Symbols]], Set[ast.Symbols])] = {
     def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): Set[ast.Symbols] = {
       val rval = rels(r).iterator.next.atom(0)
@@ -276,7 +276,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       rsymids.toSet
     }
     SetNormalizer.normalize(heap.pure)(e) match {
-      case lit: SetLit[IsSymbolic] =>
+      case lit: SetLit[IsSymbolic.type] =>
         Process((Map[Symbols, Set[ast.Symbols]](), lit.es.map { case Symbol(ident) => ident}.toSet).right[String])
       case _ =>
         logger.debug(s"finding set for ${PrettyPrinter.pretty(e)}...")
@@ -343,7 +343,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       val defc = defs(c)
       defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
     }
-    def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic], Spatial[Symbols], Set[QSpatial])] = {
+    def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial[Symbols], Set[QSpatial])] = {
       // TODO encode cardinality constraints in KodKod instead
       card match {
         case Single => {
@@ -417,7 +417,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                             } yield (cexs ++ rexs)
                             allExprs.cata(_.right, s"Error: $sym doesn't have a concrete desc".left).traverse[TProcess, String, String \/ Map[Symbols, Set[Symbols]]]({ ownedExprs =>
                               val finalConstraints = ownedExprs.map(Eq(_, SetLit()))
-                              findSet(ownedExprs.foldLeft(SetLit() : SetExpr[IsSymbolic])(Union(_,_)),
+                              findSet(ownedExprs.foldLeft(SetLit() : SetExpr[IsSymbolic.type])(Union(_,_)),
                                   _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
                             })(pmt).map(_.join)
                          } else Process()

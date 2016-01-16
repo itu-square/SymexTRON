@@ -40,7 +40,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
 
   def convertMem(sMem: SMem): (String, String) \/ CMem = {
     val maxDepth = 3
-    def sbexpr2sinstance(es : Seq[BasicExpr[IsSymbolic]]) =
+    def sbexpr2sinstance(es : Seq[BasicExpr[IsSymbolic.type]]) =
       es.map { case Symbol(ident) => ident }.toSet
     def symbolic2concrete(csMem : SMem): (String, String) \/ CMem =  {
           val cStackr = csMem.stack.toList.traverseU {
