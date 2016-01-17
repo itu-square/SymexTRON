@@ -181,27 +181,29 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     case SetVar(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 
-  private def evalBoolExpr(b: BoolExpr[IsProgram.type], stack: CStack): String \/ Boolean = b match {
-    case Eq(e1, e2) => for {
-      os1 <- evalExpr(e1, stack)
-      os2 <- evalExpr(e2, stack)
-    } yield e1 == e2
-    case SetMem(be1, e2) => for {
-      o <- evalBasicExpr(be1, stack)
-      os <- evalExpr(e2, stack)
-    } yield os.contains(o)
-    case SetSubEq(e1, e2) => for {
-      os1 <- evalExpr(e1, stack)
-      os2 <- evalExpr(e2, stack)
-    } yield os1 subsetOf os2
-    case True() => true.right
-    case And(b1, b2) => for {
-      bb1 <- evalBoolExpr(b1, stack)
-      bb2 <- evalBoolExpr(b2, stack)
-    } yield bb1 && bb2
-    case Not(b) => for {
-      bb <- evalBoolExpr(b, stack)
-    } yield !bb
+  private def evalBoolExpr(b: BoolExpr[IsProgram.type], stack: CStack): String \/ Boolean = {
+    b match {
+      case Eq(e1, e2) => for {
+        os1 <- evalExpr(e1, stack)
+        os2 <- evalExpr(e2, stack)
+      } yield os1 == os2
+      case SetMem(be1, e2) => for {
+        o <- evalBasicExpr(be1, stack)
+        os <- evalExpr(e2, stack)
+      } yield os.contains(o)
+      case SetSubEq(e1, e2) => for {
+        os1 <- evalExpr(e1, stack)
+        os2 <- evalExpr(e2, stack)
+      } yield os1 subsetOf os2
+      case True() => true.right
+      case And(b1, b2) => for {
+        bb1 <- evalBoolExpr(b1, stack)
+        bb2 <- evalBoolExpr(b2, stack)
+      } yield bb1 && bb2
+      case Not(b) => for {
+        bb <- evalBoolExpr(b, stack)
+      } yield !bb
+    }
   }
 
   // TODO Convert use of set to use of Process (making it lazy)
