@@ -13,11 +13,13 @@ object GarbageCollection {
         if (refs.contains(current)) {
           val orefs = refs(current).values.toSet.flatten
           orefs.foldLeft(marked) { (marked, o) =>
-            if (marked.contains(o)) mark(marked, o) else marked
+            if (!marked.contains(o)) mark(marked + o, o) else marked
           }
         } else marked
       }
-      markRefs(markRefs(marked, cmem.heap.childenv), cmem.heap.refenv)
+      val childsmarked = markRefs(marked, cmem.heap.childenv)
+      val refsmarked = markRefs(childsmarked, cmem.heap.refenv)
+      refsmarked
     }
     def sweep[V](marked: Set[Instances], m: Map[Instances, V]): Map[Instances, V] = {
       m.filterKeys(marked.contains)
@@ -25,9 +27,9 @@ object GarbageCollection {
     val newstack = cmem.stack.filterKeys(v => retained.contains(v))
     val marked = newstack.values.toSet.flatten
     val marked_ = marked.foldLeft(marked)(mark)
-    val newheap = CHeap(sweep(marked, cmem.heap.typeenv),
-                        sweep(marked, cmem.heap.childenv),
-                        sweep(marked, cmem.heap.childenv))
+    val newheap = CHeap(sweep(marked_, cmem.heap.typeenv),
+                        sweep(marked_, cmem.heap.childenv),
+                        sweep(marked_, cmem.heap.childenv))
     CMem(newstack, newheap)
   }
 

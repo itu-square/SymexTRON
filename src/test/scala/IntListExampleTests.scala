@@ -19,7 +19,7 @@ class IntListExampleTests extends FlatSpec
     val pre = CMem(Map("list" -> Set(), "elem" -> Set(-2)), CHeap(Map(-2 -> Class("Int")), Map(-2 -> Map()), Map(-2 -> Map())))
     val expected = _cm_stack.modify(_ + ("containselem" -> Set()))(pre)
     val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
-    actual should equal (\/-(expected))
+    actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
   it should "find the element in a singleton list containing only that element" in {

@@ -1,0 +1,40 @@
+import org.scalatest.{Matchers, FlatSpec}
+import syntax.ast._
+import semantics._
+import examples._
+import scalaz._, Scalaz._, scalaz.stream._
+import CMem._
+import CHeap._
+/**
+  * Created by asal on 17/01/2016.
+  */
+class Class2TableExampleTests extends FlatSpec
+                              with Matchers {
+  def execFixture = new ConcreteExecutor(Class2TableExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
+                                         Class2TableExample.prog)
+
+  def retainedVars(mem: CMem) = GarbageCollection.retainVars(mem, Set("class", "table"))
+
+  "The class-to-table transformation" should "transform a class with no attributes to a table with only an identity column" in {
+    val exec = execFixture
+    val pre = CMem(Map("class" -> Set(-1)), CHeap(Map(-1 -> Class("Class")), Map(-1 -> Map("attributes" -> Set())), Map(-1 -> Map())))
+    val expected = (_cm_stack.modify(_ + ("table" -> Set(0))) andThen
+      (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn"))) andThen
+      (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1))) + (1 -> Map())) andThen
+      (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map()))) (pre)
+    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
+  }
+
+  it should "transform a class with one attribute to a table with a corresponding data column, in addition to an identity column" in {
+    val exec = execFixture
+    val pre = CMem(Map("class" -> Set(-1)), CHeap(Map(-1 -> Class("Class"), -2 -> Class("Attribute"), -3 -> Class("String")),
+                   Map(-1 -> Map("attributes" -> Set(-2)), -2 -> Map(), -3 -> Map()), Map(-1 -> Map(), -2 -> Map("type" -> Set(-3)), -3 -> Map())))
+    val expected = (_cm_stack.modify(_ + ("table" -> Set(0))) andThen
+      (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn")) + (2 -> Class("DataColumn"))) andThen
+      (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1,2))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map[Fields,Set[Instances]]())) andThen
+      (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map("type" -> Set(-3))))) (pre)
+    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
+  }
+}
