@@ -37,4 +37,17 @@ class Class2TableExampleTests extends FlatSpec
     val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
+
+
+  it should "transform a class with two attributes to a table with two corresponding data columns, in addition to an identity column" in {
+    val exec = execFixture
+    val pre = CMem(Map("class" -> Set(-1)), CHeap(Map(-1 -> Class("Class"), -2 -> Class("Attribute"), -3 -> Class("String"), -4 -> Class("Attribute"), -5 -> Class("String")),
+      Map(-1 -> Map("attributes" -> Set(-2, -4)), -2 -> Map(), -3 -> Map(), -4 -> Map(), -5 -> Map()), Map(-1 -> Map(), -2 -> Map("type" -> Set(-3)), -3 -> Map(), -4 -> Map("type" -> Set(-5)), -5 -> Map())))
+    val expected = (_cm_stack.modify(_ + ("table" -> Set(0))) andThen
+      (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn")) + (2 -> Class("DataColumn")) + (3 -> Class("DataColumn"))) andThen
+      (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1,2,3))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map[Fields,Set[Instances]]()) + (3 -> Map[Fields, Set[Instances]]())) andThen
+      (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map("type" -> Set(-3))) + (3 -> Map("type" -> Set(-5))))) (pre)
+    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
+  }
 }
