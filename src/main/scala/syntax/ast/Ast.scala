@@ -127,27 +127,22 @@ object MatchExpr {
     })
 }
 
-sealed abstract class SpatialDesc
-case class AbstractDesc(c : Class) extends SpatialDesc
-case class ConcreteDesc(c : Class, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]]) extends SpatialDesc
+sealed trait DescType
+case object ExactDesc extends DescType
+case object AbstractDesc extends DescType
+case class PartialDesc(hasExact: Boolean, possible: Set[Class]) extends DescType
+
+object DescType {
+  val _dt_partial = GenPrism[DescType, PartialDesc]
+}
+
+case class SpatialDesc(c : Class, typ : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]])
 
 object SpatialDesc {
-  val _sd_abstract = GenPrism[SpatialDesc, AbstractDesc]
-  val _sd_concrete = GenPrism[SpatialDesc, ConcreteDesc]
-  val _sd_c = Lens[SpatialDesc, Class]({ case ConcreteDesc(c, _, _) => c case AbstractDesc(c) => c })(newc => {
-    case ConcreteDesc(oldc, chld, refs) => ConcreteDesc(newc, chld, refs)
-    case AbstractDesc(oldc) => AbstractDesc(newc)
-  })
-}
-
-object AbstractDesc {
-  val _ad_c = GenLens[AbstractDesc](_.c)
-}
-
-object ConcreteDesc {
-  val _cd_c = GenLens[ConcreteDesc](_.c)
-  val _cd_children = GenLens[ConcreteDesc](_.children)
-  val _cd_refs = GenLens[ConcreteDesc](_.refs)
+  val _sd_c = GenLens[SpatialDesc](_.c)
+  val _sd_typ = GenLens[SpatialDesc](_.typ)
+  val _sd_children = GenLens[SpatialDesc](_.children)
+  val _sd_refs = GenLens[SpatialDesc](_.refs)
 }
 
 case class QSpatial(e : SetExpr[IsSymbolic.type], c : Class)

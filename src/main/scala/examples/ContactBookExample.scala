@@ -17,7 +17,7 @@ object ContactBookExample extends Example {
   , new ClassDefinition("Invited", Map("name" -> (Class("String"), Single)), Map())
   )
   override val pres: Set[SMem] = Set(SMem(Map("contactbook" -> SetLit(Symbol(-1))),
-                                     SHeap(Map(-1 -> AbstractDesc(Class("ContactBook"))), Set(), Set())))
+                                     SHeap(Map(-1 -> SpatialDesc(Class("ContactBook"), AbstractDesc, Map(), Map())), Set(), Set())))
   override val prog: Statement = stmtSeq(
      assignVar("invitationlist", SetLit())
    , `for`("person'", MatchStar(SetLit(Var("contactbook")), Class("Person")), stmtSeq(

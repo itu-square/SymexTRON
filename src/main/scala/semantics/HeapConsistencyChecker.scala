@@ -61,7 +61,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
                        })))
       else List()
     val directAcyclicity = heap.spatial.collect {
-      case (symid, ConcreteDesc(_, children, _)) =>
+      case (symid, SpatialDesc(_, _, children, _)) =>
         children.values.toList.map(e =>
             Assert(Not(Member(
               QualifiedIdentifier(Identifier(symsmap(symid)._1)),
@@ -79,8 +79,8 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   def checkTypeConsistency(heap : syntax.ast.SHeap): Boolean = {
     val typeConsistentAssigniments = heap.spatial forall {
       case (id, sd) => sd match {
-        case AbstractDesc(_) => true
-        case ConcreteDesc(c, children, refs) =>
+        // TODO check type consistency of partialdesc possibilities
+        case SpatialDesc(c, _, children, refs) =>
           (children ++ refs).forall {
             case (f, e) =>
               // TODO handle safely

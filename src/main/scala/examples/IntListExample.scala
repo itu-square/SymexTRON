@@ -12,10 +12,10 @@ object IntListExample extends Example {
                                    Map("data" -> (Class("Int"), Single)))
   )
   override val pres: Set[SMem] = Set(SMem(Map("list" -> SetLit(), "elem" -> SetLit(Symbol(-2))),
-                                     SHeap(Map(-2 -> AbstractDesc(Class("Int"))),Set(),Set())),
+                                     SHeap(Map(-2 -> SpatialDesc(Class("Int"), ExactDesc, Map(), Map())),Set(),Set())),
                                      SMem(Map("list" -> SetLit(Symbol(-1)), "elem" -> SetLit(Symbol(-2))),
-                                     SHeap(Map(-1 -> AbstractDesc(Class("IntList")),
-                                               -2 -> AbstractDesc(Class("Int"))), Set(), Set())))
+                                     SHeap(Map(-1 -> SpatialDesc(Class("IntList"), AbstractDesc, Map(), Map()),
+                                               -2 -> SpatialDesc(Class("Int"), ExactDesc, Map(), Map())), Set(), Set())))
   override val prog: Statement = stmtSeq(
      assignVar("containselem", SetLit())
    , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(

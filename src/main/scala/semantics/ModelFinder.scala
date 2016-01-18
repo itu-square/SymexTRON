@@ -10,7 +10,6 @@ import kodkod.instance.{Bounds, TupleSet, Universe}
 import _root_.syntax.{ast, PrettyPrinter}
 import syntax.ast._
 import syntax.ast.SpatialDesc._
-import syntax.ast.ConcreteDesc._
 import syntax.ast.SHeap._
 import syntax.ast.SMem._
 import semantics.Subst._
@@ -255,14 +254,12 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
   def ownershipConstraints(spatial: Spatial[Symbols]): Prop = {
     spatial.flatMap{ case (sym, sd) => sd match {
-      case AbstractDesc(c) => Set[BoolExpr[IsSymbolic.type]]()
-      case ConcreteDesc(c, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
+      case SpatialDesc(c, typ, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
     }}.toSet
   }
 
   def typeConstraints(heap: SHeap) = heap.spatial.map { case (sym, sd) => sd match {
-    case AbstractDesc(c) =>
-    case ConcreteDesc(c, children, refs) =>
+    case SpatialDesc(c, typ, children, refs) => ???
     }
   }
 
@@ -325,7 +322,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
           val expanded: Map[Symbols, SpatialDesc] =
-            as.map(_.asInstanceOf[Symbol]).map(_.id -> _sd_abstract.reverseGet(AbstractDesc(qs.c))).toMap
+            // TODO: REALLY: Create new symbols for fields of super classes of qs.c
+            as.map(_.asInstanceOf[Symbol]).map(_.id -> SpatialDesc(qs.c, AbstractDesc, Map(), Map())).toMap
           // TODO: Consider a good way to merge things
           (part._1 ++ expanded, part._2)
         case _ => (part._1, part._2 + qs)

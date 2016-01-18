@@ -22,18 +22,18 @@ object Refactoring {
         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
                              "old_field" -> SetLit(Symbol(oldFieldId)), "new_field" -> SetLit(Symbol(newFieldId)))
         val inputHeap = SHeap(Map(packageId ->
-                                    ConcreteDesc(Class("Package"),
+                                    SpatialDesc(Class("Package"), ExactDesc,
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
                                                  Map()),
                                   classId ->
-                                    ConcreteDesc(Class("Class"),
+                                     SpatialDesc(Class("Class"), ExactDesc,
                                                  Map("fields" -> Union(SetSymbol((Class("Field"), Many), classFieldsId), SetLit(Symbol(oldFieldId))),
                                                      "methods" -> SetSymbol((Class("Method"), Many), classMethodsId))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol((Class("Class"), Opt), classSuperId))),
-                                   oldFieldId -> AbstractDesc(Class("Field")),
-                                   newFieldId -> AbstractDesc(Class("Field")),
-                                   classNameId -> ConcreteDesc(Class("String"), Map(), Map())),
+                                   oldFieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
+                                   newFieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
+                                   classNameId -> SpatialDesc(Class("String"), ExactDesc, Map(), Map())),
                               Set(QSpatial(SetSymbol((Class("Class"), Many),  packageClassesId), Class("Class")),
                                   QSpatial(SetSymbol((Class("Field"), Many),  classFieldsId), Class("Field")),
                                   QSpatial(SetSymbol((Class("Method"), Many), classMethodsId), Class("Method"))),
@@ -72,17 +72,17 @@ object Refactoring {
         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
                              "old_method" -> SetLit(Symbol(oldMethodId)), "new_method" -> SetLit(Symbol(newMethodId)))
         val inputHeap = SHeap(Map(packageId ->
-                                    ConcreteDesc(Class("Package"),
+                                    SpatialDesc(Class("Package"), ExactDesc,
                                                  Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(classId)))),
                                                  Map()),
                                   classId ->
-                                    ConcreteDesc(Class("Class"),
+                                    SpatialDesc(Class("Class"), ExactDesc,
                                                  Map("fields" -> SetSymbol((Class("Field"), Many) , classFieldsId),
                                                      "methods" -> Union(SetSymbol((Class("Method"), Many), classMethodsId), SetLit(Symbol(oldMethodId))))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol((Class("Class"), Opt), classSuperId))),
-                                   oldMethodId -> AbstractDesc(Class("Method")),
-                                   newMethodId -> AbstractDesc(Class("Method"))),
+                                   oldMethodId -> SpatialDesc(Class("Method"), AbstractDesc, Map(), Map()),
+                                   newMethodId -> SpatialDesc(Class("Method"), AbstractDesc, Map(), Map())),
                               Set(QSpatial(SetSymbol((Class("Class"), Many), packageClassesId), Class("Class")),
                                   QSpatial(SetSymbol((Class("Field"), Many), classFieldsId), Class("Field")),
                                   QSpatial(SetSymbol((Class("Method"), Many), classMethodsId), Class("Method"))),
@@ -135,11 +135,11 @@ object Refactoring {
          val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class1" -> SetLit(Symbol(class1Id)),
                               "class2" -> SetLit(Symbol(class2Id)), "sc_name" -> SetLit(Symbol(scnameId)))
          val inputHeap = SHeap(Map(packageId ->
-                                     ConcreteDesc(Class("Package"),
+                                     SpatialDesc(Class("Package"), ExactDesc,
                                                   Map("classes" -> Union(SetSymbol((Class("Class"), Many), packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
                                                   Map()),
-                                    class1Id -> AbstractDesc(Class("Class")),
-                                    class2Id -> AbstractDesc(Class("Class"))),
+                                    class1Id -> SpatialDesc(Class("Class"), AbstractDesc, Map(), Map()),
+                                    class2Id -> SpatialDesc(Class("Class"), AbstractDesc, Map(), Map())),
                                Set(QSpatial(SetSymbol((Class("Class"), Many), packageClassesId), Class("Class"))),
                                Set())
          SMem(inputStack, inputHeap)
@@ -193,13 +193,13 @@ object Refactoring {
         val inputStack = Map("class" -> SetLit(Symbol(classId)),
                              "field" -> SetLit(Symbol(fieldId)))
         val inputHeap = SHeap(Map(classId ->
-                                    ConcreteDesc(Class("Class"),
+                                    SpatialDesc(Class("Class"), ExactDesc,
                                                  Map("fields" -> Union(SetSymbol((Class("Field"), Many), classFieldsId), SetLit(Symbol(fieldId))),
                                                      "methods" -> SetSymbol((Class("Method"), Many), classMethodsId))
                                                 , Map("name" -> SetLit(Symbol(classNameId)),
                                                       "super" -> SetSymbol((Class("Class"), Opt), classSuperId))),
-                                   fieldId -> AbstractDesc(Class("Field")),
-                                   classNameId -> ConcreteDesc(Class("String"), Map(), Map())),
+                                   fieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
+                                   classNameId -> SpatialDesc(Class("String"), ExactDesc, Map(), Map())),
                               Set(QSpatial(SetSymbol((Class("Field"), Many), classFieldsId), Class("Field")),
                                   QSpatial(SetSymbol((Class("Method"), Many), classMethodsId), Class("Method"))),
                               Set())
