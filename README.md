@@ -1,2 +1,2 @@
-# VeriTRAN
-Verification of TRAN
+# VeriTRON
+Verification of TRON
