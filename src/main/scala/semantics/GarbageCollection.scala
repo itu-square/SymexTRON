@@ -1,6 +1,7 @@
 package semantics
 
 import syntax.ast._
+import semantics.domains._
 
 /**
   * Created by asal on 16/01/2016.

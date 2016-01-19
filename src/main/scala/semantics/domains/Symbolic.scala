@@ -1,6 +1,9 @@
-package syntax.ast
+package semantics.domains
 
-import scalaz._, Scalaz._
+import syntax.ast._
+
+import scalaz.Scalaz._
+import scalaz._
 
 trait Symbolic {
   val symbols: Set[SetSymbol \/ Symbol]

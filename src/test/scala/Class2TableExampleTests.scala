@@ -1,5 +1,6 @@
 import org.scalatest.{Matchers, FlatSpec}
 import syntax.ast._
+import semantics.domains._
 import semantics._
 import examples._
 import scalaz._, Scalaz._, scalaz.stream._

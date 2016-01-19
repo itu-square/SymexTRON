@@ -1,6 +1,7 @@
 package semantics
 
 import syntax.ast._
+import semantics.domains._
 import scalaz.State, scalaz.syntax.applicative._
 import helper._
 
@@ -29,7 +30,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   private def makeScript(subscripts: List[Command]*) =
     Script(prelogue ++ subscripts.fold(List())(_ ++ _) ++ epilogue)
 
-  def isConsistent(heap : syntax.ast.SHeap): Boolean = {
+  def isConsistent(heap : semantics.domains.SHeap): Boolean = {
     this.synchronized {
       var interpreter: ScriptInterpreter = null
       try {
@@ -44,7 +45,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     }
   }
 
-  def checkConstraintConsistency(interpreter : ScriptInterpreter, heap : syntax.ast.SHeap): Boolean = {
+  def checkConstraintConsistency(interpreter : ScriptInterpreter, heap : semantics.domains.SHeap): Boolean = {
     val syms = heap.symbols
     val symsmap = syms.map(_.fold(
             ss => (ss.id, makeSSymbol("X", "Y", ss.id, SetSort(IntSort())))
@@ -76,7 +77,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     }
   }
 
-  def checkTypeConsistency(heap : syntax.ast.SHeap): Boolean = {
+  def checkTypeConsistency(heap : semantics.domains.SHeap): Boolean = {
     val typeConsistentAssigniments = heap.spatial forall {
       case (id, sd) => sd match {
         // TODO check type consistency of partialdesc possibilities
@@ -167,7 +168,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     }
   }
 
-  def evalProp(th: SymbolMap, p : syntax.ast.Prop): List[Term] = {
+  def evalProp(th: SymbolMap, p : semantics.domains.Prop): List[Term] = {
     val bs = p.foldLeft(List[Term]())((st, b) => {
        val bres = evalBoolExpr(th, b)
        bres :: st

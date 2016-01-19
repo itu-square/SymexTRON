@@ -1,7 +1,8 @@
 package semantics
 
-import syntax.ast.QSpatial._
 import syntax.ast._
+import semantics.domains._
+import semantics.domains.QSpatial._
 
 trait Subst[T] {
   def toT : T

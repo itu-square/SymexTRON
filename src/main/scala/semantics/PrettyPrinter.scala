@@ -1,5 +1,6 @@
-package syntax
+package semantics
 
+import domains._
 import syntax.ast._
 
 object PrettyPrinter {

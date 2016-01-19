@@ -1,114 +1,50 @@
 package syntax.ast
 
-import monocle.{POptional, Lens, PLens, Iso}
-import monocle.macros.{GenIso, GenLens, GenPrism}
-import monocle.std.tuple2._
-import monocle.function.Field2._
-import language.higherKinds
-import scalaz.{Node => _, _}, Scalaz._
+import scala.language.higherKinds
+
 import helper.Counter
-import com.codecommit.gll.ast._
+import monocle.Lens
+import monocle.function.Field2._
+import monocle.macros.{GenLens, GenPrism}
+import monocle.std.tuple2._
 
-trait NAryNode extends com.codecommit.gll.ast.Node {
-  import com.codecommit.gll.ast._
+import scalaz.{Node => _}
 
-  def startSym: Option[scala.Symbol]
-  def endSym:   Option[scala.Symbol]
-  def sepSym:   Option[scala.Symbol]
-
-  override def form: FormSpec = {
-    assert(!children.isEmpty || !startSym.isEmpty, "startSym required when there are no children")
-    assert(!(startSym.isEmpty && endSym.isEmpty && sepSym.isEmpty), "at least one of startSym, endSym or sepSym is required")
-    if (children.isEmpty) {
-      val sf = startSym.get
-      endSym.fold[FormSpec](sf)(sf ~ _)
-    } else {
-      val cf = children.tail.foldLeft[FormSpec](children.head)((fs, n) => fs ~ sepSym.fold[FormSpec](n)(_ ~ n))
-      val ef = endSym.fold[FormSpec](cf)(cf ~ _)
-      startSym.fold[FormSpec](ef)(_ ~ ef)
-    }
-  }
-}
-
-case class Class(name: String) extends LeafNode // To be defined later
+case class Class(name: String)
 
 sealed trait Cardinality { def isOptional: Boolean }
-case object Single extends Cardinality {
-  def isOptional = false
-}
-case object Many extends Cardinality {
-  def isOptional = true
-}
-case object Opt extends Cardinality {
-  def isOptional = true
-}
+case object Single extends Cardinality { def isOptional = false }
+case object Many extends Cardinality { def isOptional = true }
+case object Opt extends Cardinality { def isOptional = true }
 
-sealed trait ASTType
-case object IsSymbolic extends ASTType
-case object IsProgram extends ASTType
 
 // We only support single inheritance
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
                            refs: Map[Fields, (Class, Cardinality)], superclass: Option[Class] = None)
 
-sealed trait BasicExpr[T <: ASTType] extends Node
-case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic.type] with LeafNode
-case class Var(name: Vars) extends BasicExpr[IsProgram.type] with LeafNode
+sealed trait ASTType
+case object IsSymbolic extends ASTType
+case object IsProgram extends ASTType
 
-sealed trait SetExpr[T <: ASTType] extends Node
-case class SetLit[T <: ASTType](es: BasicExpr[T]*) extends SetExpr[T] with NAryNode {
-  override val children = es.toList
-  override val startSym = 'sl_start.some
-  override val endSym   = 'sl_end.some
-  override val sepSym   = 'sl_sep.some
-}
-case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left  = e1
-  override val right = e2
-  override val sym   = 'union
-}
-case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left      = e1
-  override val right     = e2
-  override val sym       = 'diff
-}
-case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left      = e1
-  override val right     = e2
-  override val sym       = 'isect
-}
-case class SetVar(name: Vars) extends SetExpr[IsProgram.type] with LeafNode
-case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr[IsSymbolic.type] with LeafNode
+sealed trait BasicExpr[T <: ASTType]
+case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic.type]
+case class Var(name: Vars) extends BasicExpr[IsProgram.type]
 
-sealed trait BoolExpr[T <: ASTType] extends Node
-case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with LeafNode
-case class SetMem[T <: ASTType](e1: BasicExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left      = e1
-  override val right     = e2
-  override val sym       = 'setmem
-}
-case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left      = e1
-  override val right     = e2
-  override val sym       = 'setsubeq
-}
-case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T] with BinaryNode {
-  override val assocLeft = true
-  override val left      = b1
-  override val right     = b2
-  override val sym       = 'and
-}
-case class True[T <: ASTType]() extends BoolExpr[T] with LeafNode
-case class Not[T <: ASTType](b: BoolExpr[T]) extends BoolExpr[T] with UnaryNode {
-  override val isPrefix = true
-  override val child    = b
-  override val sym      = 'not
-}
+sealed trait SetExpr[T <: ASTType]
+case class SetLit[T <: ASTType](es: BasicExpr[T]*) extends SetExpr[T]
+case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
+case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
+case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
+case class SetVar(name: Vars) extends SetExpr[IsProgram.type]
+case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr[IsSymbolic.type]
+
+sealed trait BoolExpr[T <: ASTType]
+case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
+case class SetMem[T <: ASTType](e1: BasicExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
+case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
+case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T]
+case class True[T <: ASTType]() extends BoolExpr[T]
+case class Not[T <: ASTType](b: BoolExpr[T]) extends BoolExpr[T]
 
 sealed trait MatchExpr
 case class MSet(e : SetExpr[IsProgram.type]) extends MatchExpr
@@ -127,72 +63,6 @@ object MatchExpr {
     })
 }
 
-sealed trait DescType
-case object ExactDesc extends DescType
-case object AbstractDesc extends DescType
-case class PartialDesc(hasExact: Boolean, possible: Set[Class]) extends DescType
-
-object DescType {
-  val _dt_partial = GenPrism[DescType, PartialDesc]
-}
-
-case class SpatialDesc(c : Class, typ : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]])
-
-object SpatialDesc {
-  val _sd_c = GenLens[SpatialDesc](_.c)
-  val _sd_typ = GenLens[SpatialDesc](_.typ)
-  val _sd_children = GenLens[SpatialDesc](_.children)
-  val _sd_refs = GenLens[SpatialDesc](_.refs)
-}
-
-case class QSpatial(e : SetExpr[IsSymbolic.type], c : Class)
-
-object QSpatial {
-  val _qs_e = GenLens[QSpatial](_.e)
-  val _qs_c = GenLens[QSpatial](_.c)
-}
-
-case class QJump(source : SetExpr[IsSymbolic.type], c : Class, target : SetExpr[IsSymbolic.type])
-
-object QJump {
-  val _qj_source = GenLens[QJump](_.source)
-  val _qj_c = GenLens[QJump](_.c)
-  val _qj_target = GenLens[QJump](_.target)
-}
-
-case class SHeap(spatial: Spatial[Symbols], qspatial: Set[QSpatial], pure : Prop)
-
-object SHeap {
-  val _sh_spatial  = GenLens[SHeap](_.spatial)
-  val _sh_qspatial = GenLens[SHeap](_.qspatial)
-  val _sh_pure     = GenLens[SHeap](_.pure)
-}
-
-case class SMem(stack: SStack, heap: SHeap)
-
-object SMem {
-  val _sm_stack = GenLens[SMem](_.stack)
-  val _sm_heap = GenLens[SMem](_.heap)
-}
-
-case class CHeap(typeenv: Map[Instances, Class],
-                 childenv: Map[Instances, Map[Fields, Set[Instances]]],
-                 refenv: Map[Instances, Map[Fields, Set[Instances]]])
-
-object CHeap {
-  val _ch_typeenv  = GenLens[CHeap](_.typeenv)
-  val _ch_childenv = GenLens[CHeap](_.childenv)
-  val _ch_refenv   = GenLens[CHeap](_.refenv)
-}
-
-case class CMem(stack: CStack, heap: CHeap)
-
-object CMem {
-  val _cm_stack = GenLens[CMem](_.stack)
-  val _cm_heap  = GenLens[CMem](_.heap)
-}
-
-case class BranchPoint(stmt_uid: Integer, branch_number: Integer)
 
 sealed trait Statement
 case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
@@ -267,6 +137,8 @@ object Statement {
     }
     annotateUidH(s)
   }
+
+  case class BranchPoint(stmt_uid: Integer, branch_number: Integer)
 
   def branches(s : Statement) : Map[Integer, List[BranchPoint]] = {
     val uid = _stmt_uid.getOption(s).get

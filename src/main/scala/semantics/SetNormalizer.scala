@@ -3,6 +3,7 @@ package semantics
 import org.kiama.rewriting.Rewriter._
 import org.kiama.rewriting.Strategy
 import syntax.ast._
+import semantics.domains._
 
 object SetNormalizer {
   def normalize[T](prop: Prop)(t : T): T = {

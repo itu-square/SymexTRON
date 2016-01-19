@@ -1,5 +1,6 @@
 package examples
 
+import semantics.domains._
 import syntax.ast._
 import syntax.ast.Statement._
 

@@ -1,10 +1,12 @@
 package examples
 
-import syntax.ast.{Class, SMem, ClassDefinition, Statement}
+import syntax.ast.{Class,ClassDefinition, Statement}
+import semantics.domains._
 import testing.TestGenerator
 
 import scalaz.concurrent.Task
 import scalaz.stream.io
+
 
 /**
   * Created by asal on 15/01/2016.

@@ -7,11 +7,12 @@ import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
 import kodkod.instance.{Bounds, TupleSet, Universe}
 
-import _root_.syntax.{ast, PrettyPrinter}
+import _root_.syntax.ast
 import syntax.ast._
-import syntax.ast.SpatialDesc._
-import syntax.ast.SHeap._
-import syntax.ast.SMem._
+import semantics.domains._
+import semantics.domains.SpatialDesc._
+import semantics.domains.SHeap._
+import semantics.domains.SMem._
 import semantics.Subst._
 import helper._
 

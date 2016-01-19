@@ -3,11 +3,11 @@ package semantics
 import scala.language.postfixOps
 
 import syntax.ast.MatchExpr._
-import syntax.PrettyPrinter
-import syntax.ast.QSpatial._
-import syntax.ast.SHeap._
-import syntax.ast.SMem._
-import syntax.ast.SpatialDesc._
+import semantics.domains._
+import semantics.domains.QSpatial._
+import semantics.domains.SHeap._
+import semantics.domains.SMem._
+import semantics.domains.SpatialDesc._
 import helper._
 import semantics.Subst._
 import syntax.ast._

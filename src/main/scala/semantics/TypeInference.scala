@@ -1,6 +1,8 @@
 package semantics
 
 import syntax.ast._
+import semantics.domains._
+
 
 class TypeInference(defs: Map[Class, ClassDefinition]) {
 

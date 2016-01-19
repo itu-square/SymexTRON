@@ -1,9 +1,9 @@
 package examples
 package evaluation
 
-import syntax._
-import syntax.ast.Statement._
+import semantics.domains._
 import syntax.ast._
+import Statement._
 
 object Refactoring {
 

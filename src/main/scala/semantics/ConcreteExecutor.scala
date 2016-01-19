@@ -3,9 +3,13 @@ package semantics
 import scala.language.postfixOps
 import scala.language.higherKinds
 
+import semantics.domains._
+import semantics.domains.CMem._
+import semantics.domains.CHeap._
+
 import syntax.ast._
-import syntax.ast.CMem._
-import syntax.ast.CHeap._
+import syntax.ast.Statement.BranchPoint
+
 import scalaz._, Scalaz._
 import scalaz.stream._, scalaz.concurrent.Task
 import scala.concurrent.stm._

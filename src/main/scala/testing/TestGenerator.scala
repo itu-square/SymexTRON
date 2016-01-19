@@ -1,8 +1,9 @@
 package testing
 
+import semantics.{SymbolicExecutor, SetNormalizer, ConcreteExecutor, PrettyPrinter}
+import semantics.domains._
+
 import syntax.ast._
-import syntax.PrettyPrinter
-import semantics.{SymbolicExecutor, SetNormalizer, ConcreteExecutor}
 import scalaz._, Scalaz._
 import scalaz.stream._, scalaz.stream.time._
 import scala.concurrent.duration._

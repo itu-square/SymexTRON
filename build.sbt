@@ -32,10 +32,7 @@ libraryDependencies ++= Seq(
 libraryDependencies += "org.scalactic" %% "scalactic" % "2.2.6"
 libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 
-libraryDependencies += "com.codecommit" %% "gll-combinators" % "2.2"
-
 libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
-
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
 
 fork in Test := true
