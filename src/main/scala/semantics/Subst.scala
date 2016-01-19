@@ -84,13 +84,11 @@ object Subst {
     override def toT = sd
 
     override def subst(x: Symbols, e: BasicExpr[IsSymbolic.type]): SpatialDesc = sd match {
-      case AbstractDesc(c) => AbstractDesc(c)
-      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
+      case SpatialDesc(c, typ, children, refs) => SpatialDesc(c, typ, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
     }
 
     override def subst(x: Symbols, e: SetExpr[IsSymbolic.type]): SpatialDesc = sd match {
-      case AbstractDesc(c) => AbstractDesc(c)
-      case ConcreteDesc(c, children, refs) => ConcreteDesc(c, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
+      case SpatialDesc(c, typ, children, refs) => SpatialDesc(c, typ, children.mapValues(_.subst(x, e)), refs.mapValues(_.subst(x, e)))
     }
   }
 

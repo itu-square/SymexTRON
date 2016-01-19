@@ -5,11 +5,10 @@ import scala.annotation.elidable.ASSERTION
 import monocle.Getter
 
 import scalaz.Leibniz.===
-import scalaz.{Unapply, Functor, Applicative, Monoid, Monad}
+import scalaz._
 import scalaz.stream.Process
 import scala.concurrent.stm._
 import scalaz.concurrent.Task
-import scalaz.\/
 import scalaz.stream.Process
 
 sealed trait BlackHole
@@ -72,6 +71,7 @@ package object helper {
 
   /**
    * An expression that fails if ever reached
+ *
    * @return no value, since it will always fail if called
    */
   @elidable(ASSERTION)
@@ -124,5 +124,10 @@ package object helper {
 
   implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
     val interleaved: Interleaved[F, O] = Interleaved(p)
+  }
+
+  implicit class LiftMatch[A](a : A) {
+    def liftMatch[B,M[_]](f : PartialFunction[A,B])(implicit monadPlus: MonadPlus[M]): M[B] =
+      if (f.isDefinedAt(a)) monadPlus.point(f(a)) else monadPlus.empty
   }
 }

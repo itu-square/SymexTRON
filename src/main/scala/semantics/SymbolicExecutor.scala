@@ -4,7 +4,6 @@ import scala.language.postfixOps
 
 import syntax.ast.MatchExpr._
 import syntax.PrettyPrinter
-import syntax.ast.ConcreteDesc._
 import syntax.ast.QSpatial._
 import syntax.ast.SHeap._
 import syntax.ast.SMem._
@@ -30,14 +29,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     for {
       symv <- heap.spatial.get(sym).cata(_.right, s"Unknown symbol: $sym".left)
       stc <- defs.subtypesOrSelf.get(c).cata(cs => cs.right, s"Unknown class: $c".left)
-    } yield if (stc.contains(_sd_c.get(symv))) Set[Symbols](sym) else Set[Symbols]()
+    } yield if (stc.contains(symv.c)) Set[Symbols](sym) else Set[Symbols]()
   ).map(_.flatMap(identity))
 
   def descendants_or_self(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = {
     set.traverseU { ident =>
       for {
         symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
-        cd <- _sd_concrete.getOption(symv).cata(_.right, s"Not a concrete value: ${PrettyPrinter.pretty(Map(ident -> symv))} in heap \n\n${PrettyPrinter.pretty(heap)}\n\n".left)
+        cd <- symv.typ match { case ExactDesc => symv.right; case _ => s"Not a concrete value: ${PrettyPrinter.pretty(Map(ident -> symv))} in heap \n\n${PrettyPrinter.pretty(heap)}\n\n".left }
         res <- if (defs.canContain(cd.c, c)) cd.children.values.toSet.traverseU({
           case SetLit(es@_*) => descendants_or_self(es.map { case Symbol(ident) => ident }.toSet, c, heap)
           case e2 => s"Not a concrete set: $e2".left
@@ -70,7 +69,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def disown(heap: SHeap, ee: SetExpr[IsSymbolic.type]) : SHeap = {
     def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
-      case cd@ConcreteDesc(c, children, refs) => {
+      case sd@SpatialDesc(c, _, children, refs) => {
         val (newchildren, newconstrs) =
           children.foldLeft((Map[String, SetExpr[IsSymbolic.type]](), Set[BoolExpr[IsSymbolic.type]]()))(
             (st, chld) => {
@@ -90,9 +89,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           )
         _sh_pure.modify(_ ++ newconstrs) `andThen`
               _sh_spatial.modify(_.updated(sym,
-                   cd.applyLens(_cd_children).set(newchildren)))
+                   sd.applyLens(_sd_children).set(newchildren)))
       }
-      case _ => identity
     }
 
     // desc match {
@@ -113,11 +111,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         if (defs.childfields.contains(f)) for {
           _ <- df.children.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield (newiheap,
-            _sh_spatial.modify(_.updated(sym, _cd_children.modify(_.updated(f, ee2))(df)))(disown(newcheap, ee2)))
+            _sh_spatial.modify(_.updated(sym, _sd_children.modify(_.updated(f, ee2))(df)))(disown(newcheap, ee2)))
         else if (defs.reffields.contains(f)) for {
           _ <- df.refs.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
         } yield (newiheap,
-            _sh_spatial.modify(_.updated(sym, _cd_refs.modify(_.updated(f, ee2))(df)))(newcheap))
+            _sh_spatial.modify(_.updated(sym, _sd_refs.modify(_.updated(f, ee2))(df)))(newcheap))
         else s"Field $f is neither a child nor a reference field".left
       }
     } yield res.join
@@ -150,7 +148,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
           xsym = freshSym
           alloced =
-              xsym -> ConcreteDesc(c, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
+              xsym -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
         } yield (initMem, (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) `andThen`
                       (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(pre)))
         case LoadField(_, x, e, f) => for {

@@ -49,7 +49,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
             case (x, e) => (PrettyPrinter.pretty(csMem), s"${PrettyPrinter.pretty(e)} is not a concrete value").left
           }.map(_.toMap)
           val cHeapr = csMem.heap.spatial.toList.traverseU {
-            case (symid, ConcreteDesc(c, schildren, srefs)) => {
+            case (symid, SpatialDesc(c, ExactDesc,schildren, srefs)) => {
               for {
                 cchildren <- schildren.toList.traverseU {
                   case (f, SetLit(es@_*)) => (f, sbexpr2sinstance(es)).right
@@ -61,7 +61,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
                 }.map(_.toMap)
               } yield ((symid, c), (symid, cchildren), (symid, crefs))
             }
-            case (symid, AbstractDesc(c)) =>
+            case (symid, _) =>
               (PrettyPrinter.pretty(csMem), s"${PrettyPrinter.pretty(Symbol(symid))} is not concrete").left
           }.map(_.unzip3(identity).|> {
             case (tm, chldm, refm) => CHeap(tm.toMap, chldm.toMap, refm.toMap)

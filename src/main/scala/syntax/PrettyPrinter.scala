@@ -63,10 +63,16 @@ object PrettyPrinter {
   def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic.type]).mkString(" ∧ ")
 
   def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case AbstractDesc(c) => s"inst⟨${c.name}⟩ ${pretty(Symbol(sym))}"
-    case ConcreteDesc(c, children, refs) => sep(s"${pretty(Symbol(sym))} : ${c.name}", "★",
-                                            sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
-                                                s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
+    case SpatialDesc(c, typ, children, refs) => {
+      val prettytyp = typ match {
+        case ExactDesc => s"${pretty(Symbol(sym))} : ${c.name}"
+        case AbstractDesc => s"inst〈${c.name}〉 ${pretty(Symbol(sym))}"
+        case PartialDesc(hasExact, possible) => s"inst〈${sep(if (hasExact) s"☐${c.name}" else "", ",", possible.map(_.name).mkString(", "))}〉 ${pretty(Symbol(sym))}"
+      }
+      sep(prettytyp, "★",
+        sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
+          s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
+    }
   }
 
   def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =

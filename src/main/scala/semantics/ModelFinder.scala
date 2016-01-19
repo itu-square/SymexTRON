@@ -332,7 +332,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     SHeap(newspatial, newqspatial, heap.pure)
   }
 
-  def unfold(sym : Symbols, sd : SpatialDesc, initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (ConcreteDesc, SHeap, SHeap)] = {
+  def unfold(sym : Symbols, sd : SpatialDesc, initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SpatialDesc, SHeap, SHeap)] = {
     def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
       val defc = defs(c)
       defc.children ++ defc.superclass.map(all_children).getOrElse(Map())
@@ -346,7 +346,8 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       card match {
         case Single => {
           val sym = symcounter.++
-          List((SetLit(Symbol(sym)), Map(sym -> AbstractDesc(cl)), Set[QSpatial]()))
+          // TODO: REALLY: Add superclass fields
+          List((SetLit(Symbol(sym)), Map(sym -> SpatialDesc(cl, AbstractDesc, Map(), Map())), Set[QSpatial]()))
         }
         case Many => {
           val sym = SetSymbol((cl, Many), symcounter.++)
@@ -360,14 +361,16 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
 
     sd match {
-      case AbstractDesc(c) =>
+      case sd@SpatialDesc(c, ExactDesc, children, refs) => Process((sd, initHeap, currentHeap).right)
+      case sd@SpatialDesc(c, AbstractDesc, children, refs) =>
         logger.debug(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
+        //TODO Fix this to be partial concretisation instead
         (for {
            defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)).interleaved
            // Type inference is a bit limited for higher-kinded types
            sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name)))
                       .toList.filter(_ != Class("Nothing")) : _*))(pmn).interleaved
-           cdc <- sts.traverse[Process0, String, (ConcreteDesc, SHeap, SHeap)](st => for {
+           cdc <- sts.traverse[Process0, String, (SpatialDesc, SHeap, SHeap)](st => for {
                      cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
                      rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
                      chlds = cs.mapValues(_._1)
@@ -376,11 +379,11 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                      (_, newspatials, newqspatials) = all.unzip3(identity)
                      newspatial = newspatials.foldLeft(Map[Symbols, SpatialDesc]())(_ ++ _)
                      newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
-                     cd = ConcreteDesc(st, chlds, refs)
+                     cd =  SpatialDesc(st, ExactDesc, chlds, refs)
                      upd = _sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial)
                    } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn).interleaved
         } yield cdc).toProcess
-      case cd@ConcreteDesc(c, children, refs) => Process((cd, initHeap, currentHeap).right)
+      case _ => ??? // TODO Implement this for partial descs
     }
   }
 
@@ -403,21 +406,16 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           mem <- memr
           res <- mem.traverse[TProcess, String, String \/ (SMem, SMem)]({ case (initMem, curMem) => for {
               symv <- Process(curMem.heap.spatial.get(sym).toSeq :_*)
-              cd <- Process(_sd_concrete.getOption(symv).toSeq :_*)
+              cd <- symv.typ liftMatch[SpatialDesc, ({ type l[A] = Process[Task, A]})#l] { case ExactDesc => symv }
               defc <- Process(defs.get(cd.c).toSeq : _*)
               thr <- if (defc.children.values.forall(_._2.isOptional)
                           && (if (alsoReferences) defc.refs.values.forall(_._2.isOptional) else true)) {
-                            val childExprs = (_sd_concrete ^|-> _cd_children).getOption(curMem.heap.spatial(sym)).map(_.values)
-                            val refExprs = (_sd_concrete ^|-> _cd_refs).getOption(curMem.heap.spatial(sym)).map(_.values)
-                            val allExprs = for {
-                              cexs <- childExprs
-                              rexs <- if (alsoReferences) refExprs else Set().some
-                            } yield (cexs ++ rexs)
-                            allExprs.cata(_.right, s"Error: $sym doesn't have a concrete desc".left).traverse[TProcess, String, String \/ Map[Symbols, Set[Symbols]]]({ ownedExprs =>
-                              val finalConstraints = ownedExprs.map(Eq(_, SetLit()))
-                              findSet(ownedExprs.foldLeft(SetLit() : SetExpr[IsSymbolic.type])(Union(_,_)),
-                                  _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
-                            })(pmt).map(_.join)
+                            val childExprs = symv.children.values.toSet
+                            val refExprs = symv.refs.values.toSet
+                            val allExprs = childExprs ++ (if (alsoReferences) refExprs else Set())
+                            val finalConstraints = allExprs.map(Eq(_, SetLit()))
+                            findSet(allExprs.foldLeft(SetLit() : SetExpr[IsSymbolic.type])(Union(_,_)),
+                                _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
                          } else Process()
               res = thr.map { th =>
                   (applySubst(th, initMem), applySubst(th, initMem))
@@ -438,10 +436,10 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         res <- unfolded.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ih, ch) => {
           // TODO handle safely
           val childes = el.toList.flatMap(_.|>(ch.spatial.get)
-              .flatMap(_sd_concrete.getOption)
+              .flatMap(_ liftMatch[SpatialDesc, Option] { case sd@SpatialDesc(_, ExactDesc, _, _) => sd })
               .map(cd => if (typeFilter(cd.c)) cd.children.values else Set()).get)
           val refes = el.toList.flatMap(_.|>(ch.spatial.get)
-              .flatMap(_sd_concrete.getOption)
+              .flatMap(_ liftMatch[SpatialDesc, Option] { case sd@SpatialDesc(_, ExactDesc, _, _) => sd })
               .map(cd => if(typeFilter(cd.c)) cd.refs.values else Set()).get)
           val alles = childes ++ (if (alsoReferences) refes else Set())
           val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
