@@ -50,11 +50,13 @@ object Refactoring {
           , loadField("old_field_name", SetLit(Var("old_field")), "name")
           , loadField("faexpr_target", SetLit(Var("faexpr")), "target")
           , loadField("faexpr_target_type", SetLit(Var("faexpr_target")), "type")
-          , `if`(stmtSeq(), And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
-                   Eq(SetVar("class"), SetVar("faexpr_target_type"))) -> stmtSeq(
-                 loadField("new_field_name", SetLit(Var("new_field")), "name")
-               , assignField(SetLit(Var("faexpr")), "name", SetLit(Var("new_field_name")))
-             ))
+          , `if`(And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
+                   Eq(SetVar("class"), SetVar("faexpr_target_type")))
+                 , stmtSeq(
+                       loadField("new_field_name", SetLit(Var("new_field")), "name")
+                     , assignField(SetLit(Var("faexpr")), "name", SetLit(Var("new_field_name"))))
+                 , stmtSeq()
+               )
       ))
   )
 
@@ -108,21 +110,22 @@ object Refactoring {
             , loadField("omp_name", SetLit(Var("omp")), "name")
             , `for`("mcea", MSet(SetVar("mcexpr_args")), stmtSeq(
                  loadField("mcea_name", SetLit(Var("mcea")), "name"),
-                 `if`(stmtSeq(), Eq(SetLit(Var("omp_name")), SetLit(Var("mcea_name"))) -> stmtSeq(
-                    assignVar("parammatched", SetVar("paramsmatched"))
-                 ))
+                 `if`(Eq(SetLit(Var("omp_name")), SetLit(Var("mcea_name"))),
+                      assignVar("parammatched", SetVar("paramsmatched"))
+                    , stmtSeq())
                ))
-            , `if`(stmtSeq(), Eq(SetVar("parammatched"), SetLit()) -> stmtSeq(
-                  assignVar("paramsmatched", SetLit())
-              ))
+            , `if`(Eq(SetVar("parammatched"), SetLit())
+                  , assignVar("paramsmatched", SetLit())
+                  , stmtSeq())
           ))
-        , `if`(stmtSeq(), And(And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
+        , `if`(And(And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
                 Eq(SetVar("class"), SetVar("mcexpr_target_type"))),
                   or(And(Eq(SetVar("old_method_params"), SetLit()), Eq(SetVar("mcexpr_args"), SetLit())),
-                     Not(Eq(SetVar("paramsmatched"), SetLit())))) -> stmtSeq(
-                  loadField("new_method_name", SetLit(Var("new_method")), "name")
-                , assignField(SetLit(Var("mcexpr")), "name", SetLit(Var("new_method_name")))
-            ))
+                     Not(Eq(SetVar("paramsmatched"), SetLit()))))
+              , stmtSeq(loadField("new_method_name", SetLit(Var("new_method")), "name")
+                       , assignField(SetLit(Var("mcexpr")), "name", SetLit(Var("new_method_name"))))
+              , stmtSeq()
+              )
         ))
    )
    val extractSuperclassInput: SMem = {
@@ -165,16 +168,17 @@ object Refactoring {
                    , loadField("c2f_name", SetLit(Var("c2f")), "name")
                    , loadField("c1f_type", SetLit(Var("c1f")), "type")
                    , loadField("c2f_type", SetLit(Var("c2f")), "type")
-                   , `if`(stmtSeq(),
-                         And(Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name"))),
-                             Eq(SetLit(Var("c2f_type")), SetLit(Var("c2f_type")))) -> stmtSeq(
-                          `new`("scf", Class("Field"))
-                         , assignField(SetLit(Var("scf")), "name", SetLit(Var("c1f_name")))
-                         , assignField(SetLit(Var("scf")), "type", SetLit(Var("c1f_type")))
-                         , assignVar("new_sclass_fields", Union(SetVar("new_sclass_fields"), SetLit(Var("scf"))))
-                         , assignVar("rem_class1_fields", Union(SetVar("rem_class1_fields"), SetLit(Var("c1f"))))
-                         , assignVar("rem_class2_fields", Union(SetVar("rem_class2_fields"), SetLit(Var("c2f"))))
-                        ))
+                   , `if`(And(Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name"))),
+                             Eq(SetLit(Var("c2f_type")), SetLit(Var("c2f_type"))))
+                         , stmtSeq(
+                            `new`("scf", Class("Field"))
+                           , assignField(SetLit(Var("scf")), "name", SetLit(Var("c1f_name")))
+                           , assignField(SetLit(Var("scf")), "type", SetLit(Var("c1f_type")))
+                           , assignVar("new_sclass_fields", Union(SetVar("new_sclass_fields"), SetLit(Var("scf"))))
+                           , assignVar("rem_class1_fields", Union(SetVar("rem_class1_fields"), SetLit(Var("c1f"))))
+                           , assignVar("rem_class2_fields", Union(SetVar("rem_class2_fields"), SetLit(Var("c2f"))))
+                          )
+                         , stmtSeq())
                 ))
          ))
    , assignField(SetLit(Var("class1")), "fields", Diff(SetVar("class1_fields"), SetVar("rem_class1_fields")))
@@ -220,9 +224,9 @@ object Refactoring {
         `for`("cm", MSet(SetVar("class_methods")), stmtSeq(
               loadField("ftm_name", SetLit(Var("ftm")), "name")
             , loadField("cm_name", SetLit(Var("cm")), "name")
-            , `if`(stmtSeq(), Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name")))) -> stmtSeq(
-                assignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Var("cm"))))
-              ))
+            , `if`(Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name"))))
+                  , assignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Var("cm"))))
+                  , stmtSeq())
           ))
       ))
     , assignField(SetLit(Var("class")), "methods", SetVar("class_new_methods"))
@@ -233,16 +237,17 @@ object Refactoring {
         , `for`("mcx", Match(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")),
                   assignVar("MCEXPR_TARGET", SetLit(Var("mcx")))
            )
-        , `if`(stmtSeq(), not(Eq(SetVar("MCEXPR_TARGET"), SetLit())) -> stmtSeq(
-              loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
-            , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
-            , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
-            , loadField("field_name", SetLit(Var("field")), "name")
-            , `if`(stmtSeq(), And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
-                     Eq(SetLit(Var("class")), SetLit(Var("mcexpr_target_target_type")))) -> stmtSeq(
-                         assignField(SetLit(Var("mcexpr")), "target", SetLit(Var("mcexpr_target_target")))
-                       ))
-          ))
+        , `if`(not(Eq(SetVar("MCEXPR_TARGET"), SetLit()))
+              , stmtSeq(
+                  loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
+                , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
+                , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
+                , loadField("field_name", SetLit(Var("field")), "name")
+                , `if`(And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
+                         Eq(SetLit(Var("class")), SetLit(Var("mcexpr_target_target_type"))))
+                      , assignField(SetLit(Var("mcexpr")), "target", SetLit(Var("mcexpr_target_target")))
+                      , stmtSeq()))
+                , stmtSeq())
       ))
     // Remove the delegate field
     , assignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))

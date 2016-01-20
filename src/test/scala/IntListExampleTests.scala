@@ -19,7 +19,7 @@ class IntListExampleTests extends FlatSpec
     val exec = execFixture
     val pre = CMem(Map("list" -> Set(), "elem" -> Set(-2)), CHeap(Map(-2 -> Class("Int")), Map(-2 -> Map()), Map(-2 -> Map())))
     val expected = _cm_stack.modify(_ + ("containselem" -> Set()))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -34,7 +34,7 @@ class IntListExampleTests extends FlatSpec
                     (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Any"))) andThen
                       (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map())) andThen
                       (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map())))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -48,7 +48,7 @@ class IntListExampleTests extends FlatSpec
             -2 -> Map(),
             -3 -> Map()), Map(-1 -> Map("data" -> Set(-3)), -2 -> Map(), -3 -> Map())))
     val expected = _cm_stack.modify(_ + ("containselem" -> Set()))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -66,7 +66,7 @@ class IntListExampleTests extends FlatSpec
       (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Any"))) andThen
       (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map())) andThen
       (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map())))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -83,7 +83,7 @@ class IntListExampleTests extends FlatSpec
       (_cm_heap ^|-> _ch_typeenv).modify(_ + (1 -> Class("Any"))) andThen
       (_cm_heap ^|-> _ch_childenv).modify(_ + (1 -> Map())) andThen
       (_cm_heap ^|-> _ch_refenv).modify(_ + (1 -> Map())))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -100,7 +100,7 @@ class IntListExampleTests extends FlatSpec
         Map(-1 -> Map("data" -> Set(-3)), -3 -> Map(),
             -2 -> Map(), -4 -> Map("data" -> Set(-5)), -5 -> Map())))
     val expected = _cm_stack.modify(_ + ("containselem" -> Set()))(pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 }

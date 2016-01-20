@@ -165,20 +165,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               )(pmt).map(_.join)
           )(pmt).map(_.join)
         }
-        case If(_, ds, cs@_*) =>{
-          val ecs    = cs.map(p => evalBoolExpr(pre.stack, p._1).map((_, p._2))).toList
-          val elsecase = for {
-            other <- ecs.traverseU(_.map(_._1))
-          } yield other.map(not).foldLeft[BoolExpr[IsSymbolic.type]](True())(And(_,_)) -> ds
-          val newecs = Process((elsecase :: ecs) : _*)
-          for {
-            cstmt <- newecs
-            posts <- cstmt.traverse[TProcess, String, String \/ (SMem, SMem)](cst => {
-                val (eb, s) = cst
-                val newmem = (_sm_heap ^|-> _sh_pure).modify(_ + eb)(pre)
-                executeHelper(Process((initMem, newmem)), s)
-            }).map(_.join)
-          } yield posts
+        case If(_, cond, ts, fs) => {
+          val econdr = evalBoolExpr(pre.stack, cond)
+          (econdr traverseU { econd =>
+            val newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
+            val newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
+            executeHelper(Process((initMem, newtmem)), ts) ++ executeHelper(Process((initMem, newfmem)), fs)
+          }).map(_.join)
         }
         case For(_, x, m, sb) => for {
            // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references

@@ -21,7 +21,9 @@ object IntListExample extends Example {
      assignVar("containselem", SetLit())
    , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
         loadField("sublist_data", SetLit(Var("sublist")), "data")
-        ,`if`(stmtSeq(), Eq(SetLit(Var("elem")), SetLit(Var("sublist_data"))) -> `new`("containselem", Class("Any")))
+        ,`if`(Eq(SetLit(Var("elem")), SetLit(Var("sublist_data")))
+             , `new`("containselem", Class("Any"))
+             , stmtSeq())
     ))
   )
 }

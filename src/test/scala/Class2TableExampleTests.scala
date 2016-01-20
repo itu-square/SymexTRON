@@ -23,7 +23,7 @@ class Class2TableExampleTests extends FlatSpec
       (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn"))) andThen
       (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1))) + (1 -> Map())) andThen
       (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map()))) (pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -35,7 +35,7 @@ class Class2TableExampleTests extends FlatSpec
       (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn")) + (2 -> Class("DataColumn"))) andThen
       (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1,2))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map[Fields,Set[Instances]]())) andThen
       (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map("type" -> Set(-3))))) (pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 
@@ -48,7 +48,7 @@ class Class2TableExampleTests extends FlatSpec
       (_cm_heap ^|-> _ch_typeenv).modify(_ + (0 -> Class("Table")) + (1 -> Class("IdColumn")) + (2 -> Class("DataColumn")) + (3 -> Class("DataColumn"))) andThen
       (_cm_heap ^|-> _ch_childenv).modify(_ + (0 -> Map("columns" -> Set(1,2,3))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map[Fields,Set[Instances]]()) + (3 -> Map[Fields, Set[Instances]]())) andThen
       (_cm_heap ^|-> _ch_refenv).modify(_ + (0 -> Map("id" -> Set(1))) + (1 -> Map[Fields,Set[Instances]]()) + (2 -> Map("type" -> Set(-3))) + (3 -> Map("type" -> Set(-5))))) (pre)
-    val actual = exec.execute(pre).runLastOr(-\/("no result from execution")).run
+    val actual = exec.execute(pre)
     actual.map(retainedVars) should equal (\/-(expected).map(retainedVars))
   }
 }

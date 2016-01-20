@@ -28,11 +28,12 @@ object ContactBookExample extends Example {
     , `for`("age", Match(SetLit(Var("person_age")), Class("Adult")), stmtSeq(
         `new`("isadult", Class("Any"))
       ))
-    , `if`(stmtSeq(), Not(Eq(SetVar("isadult"), SetLit())) -> stmtSeq(
-        `new`("invited", Class("Invited"))
-      , assignField(SetLit(Var("invited")), "name", SetLit(Var("person_name")))
-      , assignVar("invitationlist", Union(SetVar("invitationlist"), SetLit(Var("invited"))))
-      ))
+    , `if`(Not(Eq(SetVar("isadult"), SetLit()))
+        , stmtSeq(
+            `new`("invited", Class("Invited"))
+          , assignField(SetLit(Var("invited")), "name", SetLit(Var("person_name")))
+          , assignVar("invitationlist", Union(SetVar("invitationlist"), SetLit(Var("invited")))))
+        , stmtSeq())
     ))
   )
 }

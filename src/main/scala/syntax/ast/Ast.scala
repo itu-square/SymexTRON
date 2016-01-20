@@ -63,7 +63,6 @@ object MatchExpr {
     })
 }
 
-
 sealed trait Statement
 case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
   extends Statement
@@ -75,7 +74,7 @@ case class New(metaInf: Statement.MetaInf, x : Vars, c : Class)
   extends Statement
 case class AssignField(metaInf: Statement.MetaInf, e1 : SetExpr[IsProgram.type], f : Fields, e2 : SetExpr[IsProgram.type])
   extends Statement
-case class If(metaInf: Statement.MetaInf, ds: Statement, cs : (BoolExpr[IsProgram.type], Statement)*)
+case class If(metaInf: Statement.MetaInf, cond: BoolExpr[IsProgram.type], ts : Statement, fs : Statement)
   extends Statement
 case class For(metaInf: Statement.MetaInf, x: Vars, m: MatchExpr, sb: Statement)
   extends Statement
@@ -89,20 +88,20 @@ object Statement {
 
   val _stmt_metaInf = Lens[Statement, MetaInf]({
         case StmtSeq(minf, _*) => minf
-        case AssignVar(minf, _, _) => minf
-        case LoadField(minf, _, _, _) => minf
-        case New(minf, _, _) => minf
-        case AssignField(minf, _, _, _) => minf
-        case If(minf, _, _*) => minf
-        case For(minf, _, _, _) => minf
-        case Fix(minf, _, _) => minf
+        case s: AssignVar => s.metaInf
+        case s: LoadField => s.metaInf
+        case s: New => s.metaInf
+        case s: AssignField => s.metaInf
+        case s: If => s.metaInf
+        case s: For => s.metaInf
+        case s: Fix => s.metaInf
   })(nminf => {
         case StmtSeq(_, ss@_*) => StmtSeq(nminf, ss:_*) // copy doesn't work on list arguments apparently
         case s: AssignVar => s.copy(metaInf = nminf)
         case s: LoadField => s.copy(metaInf = nminf)
         case s: New => s.copy(metaInf = nminf)
         case s: AssignField => s.copy(metaInf = nminf)
-        case If(_, ds, cs@_*) => If(nminf, ds, cs:_*) // copy doesn't work on list arguments apparently
+        case s: If => s.copy(metaInf = nminf)
         case s: For => s.copy(metaInf = nminf)
         case s: Fix => s.copy(metaInf = nminf)
     })
@@ -115,7 +114,7 @@ object Statement {
   def loadField(x : Vars, e : SetExpr[IsProgram.type], f : Fields) : Statement = LoadField(NoMI, x, e, f)
   def `new`(x : Vars, c : Class) : Statement = New(NoMI, x, c)
   def assignField(e1 : SetExpr[IsProgram.type], f : Fields, e2 : SetExpr[IsProgram.type]) : Statement = AssignField(NoMI, e1, f, e2)
-  def `if`(ds : Statement, css : (BoolExpr[IsProgram.type], Statement)*) : Statement = If(NoMI, ds, css :_*)
+  def `if`(cond: BoolExpr[IsProgram.type], ts : Statement, fs : Statement) : Statement = If(NoMI, cond, ts, fs)
   def `for`(x : Vars, m : MatchExpr, s : Statement) : Statement = For(NoMI, x, m, s)
   def fix(e : SetExpr[IsProgram.type], s : Statement) : Statement = Fix(NoMI, e, s)
 
@@ -129,8 +128,7 @@ object Statement {
         case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
         case New(_, x, c) => New(sMInf, x, c)
         case AssignField(_, e1, f, e2) => AssignField(sMInf, e1, f, e2)
-        case If(_, ds, cs@_*) => If(sMInf, annotateUidH(ds), cs.map(second[(BoolExpr[IsProgram.type], Statement), Statement]
-                                   .modify(annotateUidH _)) : _*)
+        case If(_, cond, ts, fs) => If(sMInf, cond, annotateUidH(ts), annotateUidH(fs))
         case For(_, x, m, sb) => For(sMInf, x, m, annotateUidH(sb))
         case Fix(_, e, sb) => Fix(sMInf, e, annotateUidH(sb))
       }
@@ -143,9 +141,7 @@ object Statement {
   def branches(s : Statement) : Map[Integer, List[BranchPoint]] = {
     val uid = _stmt_uid.getOption(s).get
     s match {
-      case If(_, ds, cs@_*) => Map(uid ->
-              (BranchPoint(uid, 0) :: cs.toList.zipWithIndex.map(p => BranchPoint(uid, p._2 + 1)))) ++
-                 cs.map(p => branches(p._2)).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
+      case If(_, cond, ts, fs) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++ branches(ts) ++ branches(fs)
       // TODO Figure out which branch metric should be used for loops
       case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)

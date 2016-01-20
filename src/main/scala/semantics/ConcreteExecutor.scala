@@ -32,98 +32,86 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     coveredBranches.size * 100 / allBranches.size
   }
 
-  def execute(mem: CMem): Process[Task, String \/ CMem] = executeStmt(mem, prog)
+  def execute(mem: CMem): String \/ CMem = executeStmt(mem, prog)
 
   //TODO Check for type and ownership constraints
-  private def executeStmt(mem: CMem, s: Statement): Process[Task, String \/ CMem] = {
-    //println(s"executeStmt($mem, $s)")
+  private def executeStmt(mem: CMem, s: Statement): String \/ CMem = {
     val uid = Statement._stmt_uid.getOption(s).get
     atomic { implicit txn =>
       _stmtCoverageMap.put(uid, true)
     }
     s match {
       case StmtSeq(_, ss @ _*) => {
-        ss.toList.foldLeft[Process[Task, String \/ CMem]](Process.emit(mem.right)) {
-          (pmem, s) =>
-            for {
-              memr <- pmem
-              res <- memr.traverseU(mem => executeStmt(mem, s)).map(_.join)
-            } yield res
+        ss.toList.foldLeft[String \/ CMem](mem.right) {
+          (memr, s) => memr flatMap { mem => executeStmt(mem, s) }
         }
       }
       case AssignVar(_, x, e) => {
         (for {
           os <- evalExpr(e, mem.stack)
-        } yield _cm_stack.modify(_.updated(x, os))(mem)) |> Process.emit
+        } yield _cm_stack.modify(_.updated(x, os))(mem))
       }
       case LoadField(_, x, e, f) => (for {
         os <- evalExpr(e, mem.stack)
         o <- os.single.cata(_.right, s"Not a single object $os".left)
         os2 <- access(o, f, mem.heap)
-      } yield _cm_stack.modify(_.updated(x, os2))(mem)) |> Process.emit
-      case New(_, x, c) => (for {
+      } yield _cm_stack.modify(_.updated(x, os2))(mem))
+      case New(_, x, c) => for {
         defc <- defs.get(c).cata(_.right, s"Unknown class $c".left)
         o = freshInstance
         ocs = defc.children.mapValues(_ => Set[Instances]())
         ors = defc.refs.mapValues(_ => Set[Instances]())
       } yield (_cm_stack.modify(_.updated(x, Set(o))) `andThen`
-        _cm_heap.modify(
-          _ch_typeenv.modify(_.updated(o, c)) `andThen`
-            _ch_childenv.modify(_.updated(o, ocs)) `andThen`
-            _ch_refenv.modify(_.updated(o, ors))
-        ))(mem)) |> Process.emit
-      case AssignField(_, e1, f, e2) => (for {
+                _cm_heap.modify(
+                  _ch_typeenv.modify(_.updated(o, c)) `andThen`
+                    _ch_childenv.modify(_.updated(o, ocs)) `andThen`
+                    _ch_refenv.modify(_.updated(o, ors))))(mem)
+      case AssignField(_, e1, f, e2) => for {
         os <- evalExpr(e1, mem.stack)
         o <- os.single.cata(_.right, s"Not a single object $os".left)
         os2 <- evalExpr(e2, mem.stack)
         h2 <- update(o, f, os2, mem.heap)
-      } yield mem |> _cm_heap.set(h2)) |> Process.emit
-      case If(_, ds, cs @ _*) => {
-        val elseB = (cs.map(_._1).map(not).foldLeft(True() : BoolExpr[IsProgram.type])(And(_,_)) , ds)
-        val cs2 = elseB +: cs
+      } yield mem |> _cm_heap.set(h2)
+      case If(_, cond, ts, fs) =>
         for {
-          gs <- Process.emitAll(cs2.zipWithIndex.map(p => (p._1._1, p._1._2, p._2)))
-          gr = evalBoolExpr(gs._1, mem.stack)
-          res <- gr.traverseU(g => if (g) {
-            _branchCoverageMap.updateValue(BranchPoint(uid, gs._3), _ => true)
-            executeStmt(mem, gs._2)
-          } else Process.empty).map(_.join)
+          econd <- evalBoolExpr(cond, mem.stack)
+          res <- if (econd) {
+            _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+            executeStmt(mem, ts)
+          } else {
+            _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+            executeStmt(mem, fs)
+          }
         } yield res
-      }
       case For(_, x, m, sb) => for {
-        osr <- evalMatchExpr(m, mem.stack, mem.heap) |> Process.emit
-        res <- osr.traverseU(os => {
+        os <- evalMatchExpr(m, mem.stack, mem.heap)
+        res <- {
           if (os.size == 0)
             _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
           else
             _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
-          os.foldLeft[Process[Task, String \/ CMem]](
-            Process.emit(mem.right)
-          ) { (pmem, o) =>
-              pmem.flatMap(_.traverseU(mem =>
-                executeStmt(mem |>
-                  _cm_stack.modify(_.updated(x, Set(o))), sb)).map(_.join))
+          os.foldLeft[String \/ CMem](mem.right) { (memr, o) =>
+            memr flatMap { mem =>
+              val newmem = mem |> _cm_stack.modify(_.updated(x, Set(o)))
+              executeStmt(newmem, sb)
             }
-        }).map(_.join)
+          }
+        }
       } yield res
       case Fix(_, e, sb) => {
-        def fix(mem: CMem): Process[Task, String \/ CMem] = for {
-          nmemr <- executeStmt(mem, sb)
-          res <- nmemr.flatMap(nmem => for {
-            eeb <- evalExpr(e, mem.stack)
-            eea <- evalExpr(e, nmem.stack)
-          } yield (nmem, eeb, eea)).traverseU({ (nmem: CMem, eeb: Set[Instances], eea: Set[Instances]) =>
-            if (eeb == eea) {
-              println("fixing")
-              _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
-              Process.emit(nmem.right)
-            } else {
-              _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
-              fix(nmem)
-            }
-          }.tupled).map(_.join)
+        def fix(prev: Option[Set[Instances]], mem: CMem): String \/ CMem = for {
+          nmem <- executeStmt(mem, sb)
+          ee <- evalExpr(e, nmem.stack)
+          ees = ee.some
+          res <- if (prev == ees) {
+            _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+            nmem.right
+          } else {
+            _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+            fix(ees, nmem)
+          }
         } yield res
-        fix(mem)
+        fix(none, mem)
       }
     }
   }
