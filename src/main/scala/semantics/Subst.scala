@@ -34,8 +34,8 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case SetSymbol(_,id) if id == x => e
-      case SetSymbol(c, id) => SetSymbol(c, id)
+      case SetSymbol(id) if id == x => e
+      case SetSymbol(id) => SetSymbol(id)
     }
 
     override def subst(x: Symbols, e: BasicExpr[IsSymbolic.type]): SetExpr[IsSymbolic.type] = e0 match {
@@ -43,7 +43,7 @@ object Subst {
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))
-      case SetSymbol(c, id) => SetSymbol(c, id)
+      case SetSymbol(id) => SetSymbol(id)
     }
   }
 

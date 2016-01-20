@@ -26,15 +26,9 @@ object PrettyPrinter {
     }
   }
 
-  def pretty(crd : Cardinality): String = crd match {
-    case Single => ""
-    case Many   => "*"
-    case Opt    => "?"
-  }
-
   def pretty[T <: ASTType](e : SetExpr[T]): String = {
     e match {
-      case SetSymbol((cl, crd),ident) => s"${prettySymb(ident).toUpperCase} ⟨${cl.name}${pretty(crd)}⟩"
+      case SetSymbol(ident) => s"${prettySymb(ident).toUpperCase}"
       case SetVar(name) => name
       case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
       case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"

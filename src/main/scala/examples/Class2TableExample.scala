@@ -20,8 +20,8 @@ object Class2TableExample extends Example {
   override val classDefs = Shared.stdClassDefs ++ sourceClassDefs ++ targetClassDefs
   override val pres = Set(SMem(Map("class" -> SetLit(Symbol(-1))),
                      SHeap(Map(-1 ->  SpatialDesc(Class("Class"), ExactDesc,
-                                                  Map("attributes" -> SetSymbol((Class("Attribute"), Many), -2)), Map())),
-                                                  Set(QSpatial(SetSymbol((Class("Attribute"), Many), -2), Class("Attribute"))),
+                                                  Map("attributes" -> SetSymbol(-2)), Map())),
+                                                  Set(QSpatial(SetSymbol(-2), Class("Attribute"))),
                                                   Set())))
   override val prog = stmtSeq(
     `new`("table", Class("Table")),

@@ -20,8 +20,6 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
 
   type SymbolMap = Map[syntax.ast.Symbols, (SSymbol, Sort)]
 
-  private val typeInference = new TypeInference(defs)
-
   private val prelogue =
       List(SetLogic(NonStandardLogic(SSymbol("ALL_SUPPORTED"))))
 
@@ -35,10 +33,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       var interpreter: ScriptInterpreter = null
       try {
         interpreter = ScriptInterpreter(CVCInterpreter.build(CVCInterpreter.defaultArgs))
-        val constraintconsistent = checkConstraintConsistency(interpreter, heap)
-        //TODO Do QSPatial and pure type constraints as well
-        val typeconsistent = checkTypeConsistency(heap)
-        constraintconsistent && typeconsistent
+        checkConstraintConsistency(interpreter, heap)
       } finally {
           Option(interpreter).map (_.free)
       }
@@ -77,27 +72,6 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     }
   }
 
-  def checkTypeConsistency(heap : semantics.domains.SHeap): Boolean = {
-    val typeConsistentAssigniments = heap.spatial forall {
-      case (id, sd) => sd match {
-        // TODO check type consistency of partialdesc possibilities
-        case SpatialDesc(c, _, children, refs) =>
-          (children ++ refs).forall {
-            case (f, e) =>
-              // TODO handle safely
-              val (expectedType,_) = defs.fieldType(c, f).get
-              val actualType = typeInference.inferType(e, heap)
-                val isNothing = actualType == Class("Nothing")
-                val isSame = actualType == expectedType
-                val isSubtype = defs.supertypes(actualType).contains(expectedType)
-                isNothing || isSame || isSubtype
-          }
-      }
-    }
-    type StateCM[A] =  State[Map[syntax.ast.Symbols, Class], A]
-    typeConsistentAssigniments
-  }
-
   def makeSSymbol(npref: String, ppref: String, id : syntax.ast.Symbols, symsort : Sort) = {
     (SSymbol(if (id < 0) s"$npref${id.abs}" else s"$ppref$id"), symsort)
   }
@@ -134,7 +108,7 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
       val e2res = evalSetExpr(th, e2)
       Intersection(e1res, e2res)
     }
-    case syntax.ast.SetSymbol(c, id) => {
+    case syntax.ast.SetSymbol(id) => {
       val sym = th(id)
       QualifiedIdentifier(Identifier(sym._1))
     }

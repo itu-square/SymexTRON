@@ -36,7 +36,7 @@ case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr
 case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class SetVar(name: Vars) extends SetExpr[IsProgram.type]
-case class SetSymbol(c : (Class, Cardinality), id: Symbols) extends SetExpr[IsSymbolic.type]
+case class SetSymbol(id: Symbols) extends SetExpr[IsSymbolic.type]
 
 sealed trait BoolExpr[T <: ASTType]
 case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]

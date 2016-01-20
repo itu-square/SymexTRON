@@ -76,8 +76,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               val preve = chld._2
               //TODO Handle safely and find more precise type by infering on preve
               val symt = defs.fieldType(c, chld._1).get
-              val ssym1 = SetSymbol(symt, freshSym)
-              val ssym2 = SetSymbol(symt, freshSym)
+              val ssym1 = SetSymbol(freshSym)
+              val ssym2 = SetSymbol(freshSym)
               val cstrs =
                    Set(Eq(preve, Union(ssym1, ssym2)),
                     Eq(ISect(ssym1, ssym2), SetLit()),

@@ -197,21 +197,11 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       evalBinarySetExpr(e1, _ difference _, e2, th)
     case ISect(e1, e2) =>
       evalBinarySetExpr(e1, _ intersection _, e2, th)
-    case SetSymbol((cl, crd), ident) =>
+    case SetSymbol(ident) =>
       if (th.contains(ident)) (Set[Relation](), Set[Integer](), Formula.TRUE, th(ident), th).right[String]
       else {
         val s = freshSet
-        val formula = crd match {
-          case Many => Formula.TRUE
-          case Opt => {
-            val ss = Variable.unary("ss")
-            (ss.join(syms).count lte IntConstant.constant(1)) forAll (ss oneOf s)
-          }
-          case Single => {
-            val ss = Variable.unary("ss")
-            (ss.join(syms).count eq IntConstant.constant(1)) forAll (ss oneOf s)
-          }
-        }
+        val formula = Formula.TRUE
         (Set[Relation](s), Set[Integer](), formula, s, th + (ident -> s)).right[String]
       }
   }
@@ -351,12 +341,13 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           List((SetLit(Symbol(sym)), Map(sym -> SpatialDesc(cl, AbstractDesc, Map(), Map())), Set[QSpatial]()))
         }
         case Many => {
-          val sym = SetSymbol((cl, Many), symcounter.++)
+          val sym = SetSymbol(symcounter.++)
           List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
         }
         case Opt => {
-          val sym = SetSymbol((cl, Opt), symcounter.++)
-          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
+          val sym = symcounter.++
+          List((SetLit(Symbol(sym)), Map(sym -> SpatialDesc(cl, AbstractDesc, Map(), Map())), Set[QSpatial]()),
+               (SetLit(), Map[Symbols, SpatialDesc](), Set[QSpatial]()))
         }
       }
     }
