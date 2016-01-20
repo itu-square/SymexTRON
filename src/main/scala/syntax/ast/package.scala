@@ -22,23 +22,28 @@ package object ast {
 
     // Consolidate supertypes and subtypes fields
 
-    def fieldType(c : Class, f : Fields): Option[(Class, Cardinality)] =
-      (Set(c) ++ supertypes(c)).map(defs).find(cdef =>
-        cdef.children.contains(f) || cdef.refs.contains(f)
-      ).flatMap(cdef => cdef.children.get(f)
-                            .orElse(cdef.refs.get(f)))
+    def childrenOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.children).toMap
+
+    def refsOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.refs).toMap
+
+    def fieldType(c : Class, f : Fields): Option[(Class, Cardinality)] = {
+      val selforsupers = Set(c) ++ supertypes(c)
+      (childrenOf(selforsupers) ++ refsOf(selforsupers)).get(f)
+    }
 
     def supertypes(c : Class): Set[Class] =
      (if (c == Class("Nothing")) defs.keys.toSet
      else defs(c).superclass.toSet.|>(s =>
-      s ++ s.flatMap(supertypes _)
+      s ++ s.flatMap(supertypes)
     )) + Class("Any")
 
-    val subtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
+    val directSubtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
       defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
         cd.superclass.cata(sup => m.adjust(sup)(_ + Class(cd.name) + Class("Nothing")), m)
-      ).trans
-    } + (Class("Any") -> defs.keys.toSet)
+      )
+    } + (Class("Any") -> defs.values.toSet.filter(c => c.name != "Any" && c.superclass.isEmpty).map(c => Class(c.name)))
+
+    val subtypes: Map[Class, Set[Class]] = directSubtypes.trans
 
     val subtypesOrSelf: Map[Class, Set[Class]] =
       subtypes.map(((c : Class, sts : Set[Class]) => (c, sts + c)).tupled)
@@ -56,7 +61,7 @@ package object ast {
 
     def canContain(c1 : Class, c2 : Class): Boolean = {
       val cts = containing
-      val supertypesOrSelf = (Set(c2) ++ defs.supertypes(c2))
+      val supertypesOrSelf = Set(c2) ++ defs.supertypes(c2)
       supertypesOrSelf.exists(ct => cts(c1).contains(ct))
     }
 

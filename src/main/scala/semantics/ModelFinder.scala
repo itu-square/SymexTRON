@@ -307,14 +307,40 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     }
   }
 
+  def mkAbstractSpatialDesc(cl : Class): SpatialDesc = {
+    val clSupers = defs.supertypes(cl)
+    val children = defs.childrenOf(clSupers) mapValues { _ => SetSymbol(symcounter.++) }
+    val refs = defs.refsOf(clSupers) mapValues  { _ => SetSymbol(symcounter.++) }
+    // TODO: REALLY: Add meta information in setsymbol map
+    SpatialDesc(cl, AbstractDesc, children, refs)
+  }
+
+  def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial[Symbols], Set[QSpatial])] = {
+    // TODO encode cardinality constraints in KodKod instead
+    card match {
+      case Single => {
+        val sym = symcounter.++
+        List((SetLit(Symbol(sym)), Map(sym -> mkAbstractSpatialDesc(cl)), Set[QSpatial]()))
+      }
+      case Many => {
+        val sym = SetSymbol(symcounter.++)
+        List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
+      }
+      case Opt => {
+        val sym = symcounter.++
+        List((SetLit(Symbol(sym)), Map(sym -> mkAbstractSpatialDesc(cl)), Set[QSpatial]()),
+          (SetLit(), Map[Symbols, SpatialDesc](), Set[QSpatial]()))
+      }
+    }
+  }
+
   def expand(heap: SHeap): SHeap = {
     val (newspatial, newqspatial) = heap.qspatial.foldLeft((heap.spatial, Set[QSpatial]())) {
       (part : (Spatial[Symbols], Set[QSpatial]), qs : QSpatial) => qs.e match {
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
           val expanded: Map[Symbols, SpatialDesc] =
-            // TODO: REALLY: Create new symbols for fields of super classes of qs.c
-            as.map(_.asInstanceOf[Symbol]).map(_.id -> SpatialDesc(qs.c, AbstractDesc, Map(), Map())).toMap
+            (as map { case s: Symbol => s } map { _.id -> mkAbstractSpatialDesc(qs.c) }).toMap
           // TODO: Consider a good way to merge things
           (part._1 ++ expanded, part._2)
         case _ => (part._1, part._2 + qs)
@@ -332,26 +358,6 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       val defc = defs(c)
       defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
     }
-    def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial[Symbols], Set[QSpatial])] = {
-      // TODO encode cardinality constraints in KodKod instead
-      card match {
-        case Single => {
-          val sym = symcounter.++
-          // TODO: REALLY: Add superclass fields
-          List((SetLit(Symbol(sym)), Map(sym -> SpatialDesc(cl, AbstractDesc, Map(), Map())), Set[QSpatial]()))
-        }
-        case Many => {
-          val sym = SetSymbol(symcounter.++)
-          List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
-        }
-        case Opt => {
-          val sym = symcounter.++
-          List((SetLit(Symbol(sym)), Map(sym -> SpatialDesc(cl, AbstractDesc, Map(), Map())), Set[QSpatial]()),
-               (SetLit(), Map[Symbols, SpatialDesc](), Set[QSpatial]()))
-        }
-      }
-    }
-
     sd match {
       case sd@SpatialDesc(c, ExactDesc, children, refs) => Process((sd, initHeap, currentHeap).right)
       case sd@SpatialDesc(c, AbstractDesc, children, refs) =>
@@ -375,7 +381,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
                      upd = _sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial)
                    } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn).interleaved
         } yield cdc).toProcess
-      case _ => ??? // TODO Implement this for partial descs
+      case _ => ??? // TODO: REALLY: Implement this for partial descs
     }
   }
 

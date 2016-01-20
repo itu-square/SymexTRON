@@ -11,19 +11,6 @@ import scala.concurrent.stm._
 import scalaz.concurrent.Task
 import scalaz.stream.Process
 
-sealed trait BlackHole
-case class HoleError() extends Error
-
-case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
-  def map[O2](f : O => O2) = Interleaved(toProcess.map(f))
-
-  def flatMap[F2[x] >: F[x], O2](f: O => Interleaved[F2, O2])
-      : Interleaved[F2, O2] = Interleaved {
-    toProcess.fold(Process.halt : Process[F2, O2])((ps, o) =>
-      ps.tee((f(o).toProcess))(helper.teePlus.interleaveAll)
-    ).flatMap(identity)
-  }
-}
 
 package object helper {
   type StringE[B] = String \/ B
@@ -81,8 +68,6 @@ package object helper {
   def hole[T]: T = throw new HoleError()
   def blackHole(hole : BlackHole) : Nothing = throw new HoleError()
 
-  //TODO Implement these and use instead of List
-
   implicit class SetExtensions[A](s : Set[A]) {
     def sequenceU(implicit G: Unapply[Applicative, A]): G.M[Set[G.A]] = {
       s.traverseU(identity)
@@ -131,3 +116,18 @@ package object helper {
       if (f.isDefinedAt(a)) monadPlus.point(f(a)) else monadPlus.empty
   }
 }
+
+sealed trait BlackHole
+case class HoleError() extends Error
+
+case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
+  def map[O2](f : O => O2) = Interleaved(toProcess.map(f))
+
+  def flatMap[F2[x] >: F[x], O2](f: O => Interleaved[F2, O2])
+  : Interleaved[F2, O2] = Interleaved {
+    toProcess.fold(Process.halt : Process[F2, O2])((ps, o) =>
+      ps.tee((f(o).toProcess))(helper.teePlus.interleaveAll)
+    ).flatMap(identity)
+  }
+}
+
