@@ -39,7 +39,7 @@ object QJump {
   val _qj_target = GenLens[QJump](_.target)
 }
 
-case class SHeap(spatial: Spatial[Symbols], qspatial: Set[QSpatial], pure : Prop)
+case class SHeap(spatial: Spatial, qspatial: Set[QSpatial], pure : Prop)
 
 object SHeap {
   val _sh_spatial  = GenLens[SHeap](_.spatial)

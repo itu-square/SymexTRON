@@ -93,15 +93,15 @@ object Subst {
     }
   }
 
-  implicit class SubstSpatial[T](spatial: Spatial[T]) extends Subst[Spatial[T]] {
+  implicit class SubstSpatial(spatial: Spatial) extends Subst[Spatial] {
     override def toT = spatial
 
-    override def subst(x: Symbols, e: BasicExpr[IsSymbolic.type]): Spatial[T] = e match {
+    override def subst(x: Symbols, e: BasicExpr[IsSymbolic.type]): Spatial = e match {
       case Symbol(id) =>
         spatial.mapValues(_.subst(x, e))
     }
 
-    override def subst(x: Symbols, e: SetExpr[IsSymbolic.type]): Spatial[T] = spatial.mapValues(_.subst(x, e))
+    override def subst(x: Symbols, e: SetExpr[IsSymbolic.type]): Spatial = spatial.mapValues(_.subst(x, e))
   }
 
   implicit class SubstQSpatial(qspatial: Set[QSpatial]) extends Subst[Set[QSpatial]] {

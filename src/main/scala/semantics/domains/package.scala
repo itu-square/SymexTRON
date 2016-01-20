@@ -8,7 +8,7 @@ import scalaz._, Scalaz._
   * Created by asal on 19/01/2016.
   */
 package object domains extends SymbolicOps {
-  type Spatial[T] = Map[T, SpatialDesc]
+  type Spatial = Map[Symbols, SpatialDesc]
   type Prop = Set[BoolExpr[IsSymbolic.type]]
   type SStack = Map[Vars, SetExpr[IsSymbolic.type]]
   type Instances = Int

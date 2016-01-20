@@ -243,7 +243,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         (mem => SetNormalizer.normalize(mem.heap.pure)(mem) |> _sm_heap.modify(expand))
   }
 
-  def ownershipConstraints(spatial: Spatial[Symbols]): Prop = {
+  def ownershipConstraints(spatial: Spatial): Prop = {
     spatial.flatMap{ case (sym, sd) => sd match {
       case SpatialDesc(c, typ, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
     }}.toSet
@@ -315,7 +315,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     SpatialDesc(cl, AbstractDesc, children, refs)
   }
 
-  def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial[Symbols], Set[QSpatial])] = {
+  def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial, Set[QSpatial])] = {
     // TODO encode cardinality constraints in KodKod instead
     card match {
       case Single => {
@@ -336,7 +336,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
 
   def expand(heap: SHeap): SHeap = {
     val (newspatial, newqspatial) = heap.qspatial.foldLeft((heap.spatial, Set[QSpatial]())) {
-      (part : (Spatial[Symbols], Set[QSpatial]), qs : QSpatial) => qs.e match {
+      (part : (Spatial, Set[QSpatial]), qs : QSpatial) => qs.e match {
           // TODO: Use String \/ - instead
         case SetLit(as @_*) =>
           val expanded: Map[Symbols, SpatialDesc] =

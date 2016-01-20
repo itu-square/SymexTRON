@@ -49,7 +49,7 @@ trait SymbolicOps {
     }
   }
 
-  implicit class SymbolicSpatial(sp : Spatial[Symbols]) extends Symbolic {
+  implicit class SymbolicSpatial(sp : Spatial) extends Symbolic {
     override val symbols = sp.flatMap { case (s, sd) =>
           sd.symbols ++ Set(Symbol(s).right[SetSymbol]) }.toSet
   }

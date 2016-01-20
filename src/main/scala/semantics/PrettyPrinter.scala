@@ -73,7 +73,7 @@ object PrettyPrinter {
   def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =
     s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
 
-  def pretty(spatial : Spatial[Symbols])(implicit d : DummyImplicit) : String =
+  def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String =
     spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
 
   def pretty[T <: ASTType](v : Vars, f : Fields, sep : String, e : SetExpr[T]): String =
