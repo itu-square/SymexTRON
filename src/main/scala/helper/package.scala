@@ -73,15 +73,21 @@ package object helper {
   def hole[T]: T = throw new HoleError()
   def blackHole(hole : BlackHole) : Nothing = throw new HoleError()
 
-  implicit class SetExtensions[A](s : Set[A]) {
+  implicit class SetExtensions[A](sa : Set[A]) {
     def sequenceU(implicit G: Unapply[Applicative, A]): G.M[Set[G.A]] = {
-      s.traverseU(identity)
+      sa.traverseU(identity)
     }
 
     def traverseU[GB](f : A => GB)(implicit G: Unapply[Applicative, GB]): G.M[Set[G.A]] = {
-      s.foldLeft(G.TC.pure(Set[G.A]()))((ss : G.M[Set[G.A]], el : A) =>
+      sa.foldLeft(G.TC.pure(Set[G.A]()))((ss : G.M[Set[G.A]], el : A) =>
          G.TC.lift2[Set[G.A], G.A, Set[G.A]](_ + _)(ss, G.apply(f(el))))
     }
+
+    def pairings[B](sb: Set[B]): Set[(Set[(A, B)], Set[(A,B)])] = sa.foldLeft(Set[(Set[(A,B)], Set[A], Set[B])]((Set(), Set(), sb))) { (st, a) =>
+        st.flatMap { case (assignments, unassigned, rsb) =>
+          rsb.map { b => (assignments + ((a, b)), unassigned, rsb - b) } + ((assignments, unassigned + a, rsb))
+        }
+    } map { case (assignments, unassigneda, unassignedb) => (assignments, for (ua <- unassigneda; ub <- unassignedb) yield (ua, ub)) }
   }
 
   implicit def processMonad[F[_]]: Monad[({ type l[a] = Process[F, a] })#l] = new Monad[({ type l[a] = Process[F, a] })#l] {

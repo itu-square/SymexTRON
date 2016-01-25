@@ -262,12 +262,59 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
               case SetLit(es@_*) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
                 targetClass.cata(cl => partitionSet(ees, cl), Process((ees, heap).right))
-              case Union(e1, e2) => ???
-              case Diff(e1, e2) => ???
-              case ISect(e1, e2) => ???
-              case ssym@SetSymbol(id) => findExplicitCardSet(ssym, setBound, heap)
+              case Union(e1, e2) => (e1, e2) match {
+                case (x:SetSymbol, y: SetSymbol) => ???
+                case (x:SetSymbol,  _)           => ???
+                case (_, y: SetSymbol)           => ???
+                case _                           => ???
+              }
+              case ISect(e1, e2) => (e1, e2) match {
+                case (x:SetSymbol, y: SetSymbol) => ???
+                case (x:SetSymbol,  _)           => ???
+                case (_, y: SetSymbol)           => ???
+                case _                           => ???
+              }
+              case Diff(e1, e2) => (e1, e2) match {
+                case (x:SetSymbol, y: SetSymbol) => ???
+                case (x:SetSymbol,  _)           => ???
+                case (_, y: SetSymbol)           => ???
+                case _                           =>
+                  for {
+                    e1r <- findSet(e1, heap, setBound, targetClass)
+                    e12syms <- e1r traverseU { case (e1syms, nheap) =>
+                      findSet(e2, nheap, setBound, targetClass) map (_.map { case (e2syms, nnheap) => (e1syms, e2syms, nnheap) })
+                    } map (_.join)
+                    res <- e12syms traverseU { case (e1syms, e2syms, nnheap) =>
+                       for {
+                         skirmishr <- symSkirmish(e1syms, e2syms, nnheap)
+                         (diffsym, samesym, nnnheap) = skirmishr
+                       } yield (samesym, nnnheap)
+                    }
+                  } yield res
+              }
+              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, heap)
             }
           }
+
+  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): (Set[Symbol], SHeap) = ???
+
+  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Set[Symbol] = ???
+
+  def symSkirmish(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Process[Task, (Set[Symbol], Set[Symbol], SHeap)] = {
+    val (samesyms, uheap) = symSame(syms1, syms2, heap)
+    val (nsyms1, nsyms2) = (syms1 -- samesyms, syms2 -- samesyms)
+    val diffsyms = symDiff(nsyms1, nsyms2, uheap)
+    val (nnsyms1, nnsyms2) = (syms1 -- diffsyms, syms2 -- diffsyms)
+    if (nnsyms1.isEmpty || nnsyms2.isEmpty) Process((diffsyms, samesyms, uheap))
+    else {
+      Process.emitAll((nnsyms1 pairings nnsyms2 map { case (eqs, uneqs) =>
+        val diff = uneqs.flatMap { case (s1, s2) => Set(s1, s2) }
+        val same = eqs.map(_._1)
+        val nheap = _sh_pure.modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(s1), SetLit(s2))) })(heap.subst_all(eqs.map(_.swap).toMap))
+        (same, diff, nheap)
+      }).toSeq)
+    }
+  }
 
   def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, heap: SHeap): Process[Nothing, \/[Nothing, (Set[Symbol], SHeap)]] = {
     def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
@@ -337,14 +384,14 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
                 (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(nheap)).right)
+                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(antialias(sym, nheap, loc))).right)
           case SRef =>
             // Can alias all existing locs or create new locs with unknown owners
             val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(newLoc)))(nheap)).right)
+                (loc, _sh_svltion.modify(_ + (sym -> Loced(newLoc)))(antialias(sym, nheap, loc))).right)
           case SOwned(l, f) =>
             // Can alias existing locs with unknown owners or create new owned locs
             val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
@@ -352,7 +399,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
                 (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-                  _sh_locOwnership.modify(_ + (newLoc -> Owned(l,f))))(nheap)).right)
+                  _sh_locOwnership.modify(_ + (newLoc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
         }
         /*
         TODO: Possible optimization
@@ -362,6 +409,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         } else ??? */
       }
     }, Process(s"No such symbol: $sym".left))
+  }
+
+  def antialias(sym: Symbol, nheap: SHeap, loc: Loc): SHeap = {
+    nheap.svltion.filter(_._2 == loc).keySet.foldLeft(nheap) { (stheap, sym2) => stheap.subst(sym2, sym) }
   }
 
   def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, (Class, Cardinality)], owned: Boolean): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
