@@ -18,15 +18,21 @@ import helper._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scalaz._, Scalaz._
+import scalaz.{Scalaz, \/-, \/}
+import Scalaz.{none, unfold => generate}
+import scalaz.syntax.std.option._
+import scalaz.syntax.either._
+import scalaz.syntax.monad._
+import scalaz.syntax.traverse._
 import scalaz.concurrent.Task
 import scalaz.stream._
 
 import com.typesafe.scalalogging.LazyLogging
 
-class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
-                  beta: Int, delta: Int)
+class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition],
+                  beta: Int, delta: Int, optimistic: Boolean)
   extends LazyLogging {
+
   private type StringE[T] = String \/ T
   private type EvalRes[T] = (Set[Relation], Set[Integer], Formula, T, Map[Symbols, Relation])
 
@@ -108,7 +114,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
     bounds.boundExactly(Types, f setOf (types.values.toSeq :_*)) // TODO fix bounds
     val stBounds = f noneOf 2
     for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
-      stBounds.add((f tuple (types(sc))) product (f tuple (types(c))))
+      stBounds.add((f tuple types(sc)) product (f tuple types(c)))
     }
     bounds.boundExactly(isSubType, stBounds)
     val typeOfSUpper = f noneOf 2
@@ -140,7 +146,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
           val symInSyms = sym in x.join(syms)
           (e1 match {
             case Symbol(symident) => sym.join(name) eq IntConstant.constant(symident).toExpression
-          }) implies isNegated.fold(symInSyms.not, symInSyms) forAll ((sym oneOf SymbolsRel) and (x oneOf r2))
+          }) implies (if (isNegated) symInSyms.not else symInSyms) forAll ((sym oneOf SymbolsRel) and (x oneOf r2))
         }
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
@@ -151,7 +157,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         (rs1, is1, fs1, r1, th1) = eb1
         eb2 <- evalBoolExpr(b2, th1, isNegated)
         (rs2, is2, fs2, r2, th2) = eb2
-      } yield (rs1 union rs2, is1 union is2,  fs1 and fs2, isNegated.fold(r1 or r2, r1 and r2), th2)
+      } yield (rs1 union rs2, is1 union is2,  fs1 and fs2, if (isNegated) r1 or r2 else r1 and r2, th2)
     case Not(b) => for {
         eb <- evalBoolExpr(b, th, !isNegated)
         (rs1, is1, f1, r, th1) = eb
@@ -169,7 +175,7 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
         val x1 = Variable.unary("x1")
         val x2 = Variable.unary("x2")
         val res = op(x1.join(syms), x2.join(syms))
-        isNegated.fold(res.not, res) forAll ((x1 oneOf r1) and (x2 oneOf r2))
+        (if (isNegated) res.not else res) forAll ((x1 oneOf r1) and (x2 oneOf r2))
       }
     } yield (rs1 union rs2, is1 union is2, formula and f1 and f2, formula, th2)
   }
@@ -179,11 +185,11 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       val s = freshSet
       val formula = {
         val ss = Variable.unary("ss")
-        if (es.isEmpty) (ss.join(syms) eq Expression.NONE forAll (ss oneOf s))
+        if (es.isEmpty) ss.join(syms) eq Expression.NONE forAll (ss oneOf s)
         else {
           val sym = Variable.unary("sym")
           val ees = es.map {
-            case Symbol(ident) => (sym.join(name) eq IntConstant.constant(ident).toExpression)
+            case Symbol(ident) => sym.join(name) eq IntConstant.constant(ident).toExpression
           }.toList
           val ee1 :: ees1 = ees
           (ss.join(syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf SymbolsRel))) forAll (ss oneOf s)
@@ -229,245 +235,195 @@ class ModelFinder(symcounter: Counter, defs: Map[Class, ClassDefinition],
       case _ => false
     }
     def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
-      val relevant = norm.filter((b : BoolExpr[IsSymbolic.type]) => !(b.symbols.ids intersect syms).isEmpty)
+      val relevant = norm.filter((b : BoolExpr[IsSymbolic.type]) => (b.symbols.ids intersect syms).nonEmpty)
       val relevantsyms = relevant.symbols.ids diff visited
-      relevant ++ (if (!relevantsyms.isEmpty)
+      relevant ++ (if (relevantsyms.nonEmpty)
                         rlv(relevantsyms, visited ++ syms)
                   else Set())
     }
     (disj, rlv(e.symbols.ids, Set()))
   }
 
-  def applySubst(th: Map[Symbols, Set[ast.Symbols]], mem: SMem): SMem = {
-    mem.subst_all(th.mapValues(s => SetLit[IsSymbolic.type](s.map(Symbol(_)).toSeq :_*))) |>
-        (mem => SetNormalizer.normalize(mem.heap.pure)(mem) |> _sm_heap.modify(expand))
-  }
-
-  def ownershipConstraints(spatial: Spatial): Prop = {
+  def ownershipConstraints(spatial: Spatial): Prop = ??? /* {
     spatial.flatMap{ case (sym, sd) => sd match {
       case SpatialDesc(c, typ, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
     }}.toSet
-  }
+  } */
 
-  def typeConstraints(heap: SHeap) = heap.spatial.map { case (sym, sd) => sd match {
-    case SpatialDesc(c, typ, children, refs) => ???
-    }
-  }
+  def partitionSet(ees: Set[Symbol], cl: Class): Process[Task, String \/ (Set[Symbol], SHeap)] = ???
 
-  def findSet(e : SetExpr[IsSymbolic.type], heap: SHeap, minSymbols : Int):
-      Process[Task, String \/ (Map[Symbols, Set[ast.Symbols]], Set[ast.Symbols])] = {
-    def resolveSetLit(r: Relation, rels: mutable.Map[Relation, TupleSet]): Set[ast.Symbols] = {
-      val rval = rels(r).iterator.next.atom(0)
-      val rsyms = rels(syms).iterator.asScala.filter(_.atom(0) == rval).map(_.atom(1)).toSet
-      val rsymids = rels(name).iterator.asScala.filter(
-        t => rsyms.contains(t.atom(0))).map(_.atom(1).asInstanceOf[Integer].intValue)
-      rsymids.toSet
-    }
-    SetNormalizer.normalize(heap.pure)(e) match {
-      case lit: SetLit[IsSymbolic.type] =>
-        Process((Map[Symbols, Set[ast.Symbols]](), lit.es.map { case Symbol(ident) => ident}.toSet).right[String])
-      case _ =>
-        logger.debug(s"finding set for ${PrettyPrinter.pretty(e)}...")
-        val ee = evalSetExpr(e)
-        // TODO: Add spatial derived constraints
-        Process(ee).flatMap(t => (for {
-            tt <- t
-            (rs0, is0, fs0, r, th0) = tt
-            //typec = typeConstraints(heap)
-            ownershipc = ownershipConstraints(heap.spatial)
-            (disj, relv) = relevantConstraints(e, heap.pure ++ ownershipc)
-            ps = disj ++ relv
-            eps <- ps.foldLeftM[StringE, EvalRes[Formula]]((rs0, is0, fs0, Formula.TRUE, th0)) { (st, b) =>
-              val (rs, is, fs, f, th) = st
-              for {
-                eb <- evalBoolExpr(b, th)
-                (rs2, is2, fs2, f2, th2) = eb
-              } yield (rs ++ rs2, is ++ is2, fs and fs2, f and f2, th2)
-            } // TODO: Filter to only handle relevant constraints, perhaps handling disjointness conditions separately
-            (rs, is, fs, fs2, th) = eps
-            solver = new Solver()
-            _ = {
-              val fac = SATFactory.DefaultSAT4J
-              solver.options.setFlatten(true)
-              solver.options.setSolver(fac)
-              solver.options.setSymmetryBreaking(20)
+  def findSet(e : SetExpr[IsSymbolic.type], heap: SHeap, setBound: Int, targetClass : Option[Class] = none):
+      Process[Task, String \/ (Set[Symbol], SHeap)] =
+          if (targetClass.cata(cl =>
+                  typeInference.inferSetType(e, heap).cata(ec => defs.subtypesOrSelf(cl).contains(ec), true), false)) {
+            findSet(e, heap, setBound, targetClass = none)
+          } else {
+            e match {
+              case SetLit(es@_*) =>
+                val ees = es.map{ case s:Symbol => s }.toSet
+                targetClass.cata(cl => partitionSet(ees, cl), Process((ees, heap).right))
+              case Union(e1, e2) => ???
+              case Diff(e1, e2) => ???
+              case ISect(e1, e2) => ???
+              case ssym@SetSymbol(id) => findExplicitCardSet(ssym, setBound, heap)
             }
-            formula = this.constraints and fs and fs2
-            bounds = this.bounds(rs, is, minSymbols)
-            res = for {
-              sol <- io.iterator(Task(solver.solveAll(formula, bounds).asScala))
-              _ = println(sol)
-              if util.EnumSet.of(Solution.Outcome.SATISFIABLE, Solution.Outcome.TRIVIALLY_SATISFIABLE) contains sol.outcome
-              instance = sol.instance
-              rels = instance.relationTuples.asScala
-            } yield {
-              (th.filterKeys(k => !(disj.symbols.ids diff (relv.symbols.ids union e.symbols.ids)).contains(k)).mapValues(resolveSetLit(_, rels)), resolveSetLit(r, rels))
-            }
-          } yield res).sequenceU)
-    }
-  }
-
-  def mkAbstractSpatialDesc(cl : Class): SpatialDesc = {
-    val clSupers = defs.supertypes(cl)
-    val children = defs.childrenOf(clSupers) mapValues { _ => SetSymbol(symcounter.++) }
-    val refs = defs.refsOf(clSupers) mapValues  { _ => SetSymbol(symcounter.++) }
-    // TODO: REALLY: Add meta information in setsymbol map
-    SpatialDesc(cl, AbstractDesc, children, refs)
-  }
-
-  def freshSetSymbol(cl : Class, card : Cardinality) : List[(SetExpr[IsSymbolic.type], Spatial, Set[QSpatial])] = {
-    // TODO encode cardinality constraints in KodKod instead
-    card match {
-      case Single => {
-        val sym = symcounter.++
-        List((SetLit(Symbol(sym)), Map(sym -> mkAbstractSpatialDesc(cl)), Set[QSpatial]()))
-      }
-      case Many => {
-        val sym = SetSymbol(symcounter.++)
-        List((sym, Map[Symbols, SpatialDesc](), Set(QSpatial(sym, cl))))
-      }
-      case Opt => {
-        val sym = symcounter.++
-        List((SetLit(Symbol(sym)), Map(sym -> mkAbstractSpatialDesc(cl)), Set[QSpatial]()),
-          (SetLit(), Map[Symbols, SpatialDesc](), Set[QSpatial]()))
-      }
-    }
-  }
-
-  def expand(heap: SHeap): SHeap = {
-    val (newspatial, newqspatial) = heap.qspatial.foldLeft((heap.spatial, Set[QSpatial]())) {
-      (part : (Spatial, Set[QSpatial]), qs : QSpatial) => qs.e match {
-          // TODO: Use String \/ - instead
-        case SetLit(as @_*) =>
-          val expanded: Map[Symbols, SpatialDesc] =
-            (as map { case s: Symbol => s } map { _.id -> mkAbstractSpatialDesc(qs.c) }).toMap
-          // TODO: Consider a good way to merge things
-          (part._1 ++ expanded, part._2)
-        case _ => (part._1, part._2 + qs)
-      }
-    }
-    SHeap(newspatial, newqspatial, heap.pure)
-  }
-
-  def unfold(sym : Symbols, sd : SpatialDesc, initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SpatialDesc, SHeap, SHeap)] = {
-    def all_children(c : Class) : Map[Fields, (Class, Cardinality)] = {
-      val defc = defs(c)
-      defc.children ++ defc.superclass.map(all_children).getOrElse(Map())
-    }
-    def all_references(c : Class) : Map[Fields, (Class, Cardinality)] = {
-      val defc = defs(c)
-      defc.refs ++ defc.superclass.map(all_references).getOrElse(Map())
-    }
-    sd match {
-      case sd@SpatialDesc(c, ExactDesc, children, refs) => Process((sd, initHeap, currentHeap).right)
-      case sd@SpatialDesc(c, AbstractDesc, children, refs) =>
-        logger.debug(s"unfolding ${PrettyPrinter.pretty(Map(sym -> sd))}...")
-        //TODO Fix this to be partial concretisation instead
-        (for {
-           defc <- Process(defs.get(c).cata(_.right, s"Class definition of $c is unknown".left)).interleaved
-           // Type inference is a bit limited for higher-kinded types
-           sts <- defc.traverse(dc => Process((defs.subtypesOrSelf(Class(dc.name)))
-                      .toList.filter(_ != Class("Nothing")) : _*))(pmn).interleaved
-           cdc <- sts.traverse[Process0, String, (SpatialDesc, SHeap, SHeap)](st => for {
-                     cs <- Process(all_children(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
-                     rs  <- Process(all_references(st).mapValues(v => freshSetSymbol(v._1, v._2)).sequenceU :_*)
-                     chlds = cs.mapValues(_._1)
-                     refs  = rs.mapValues(_._1)
-                     all = cs.values.toList ++ rs.values.toList
-                     (_, newspatials, newqspatials) = all.unzip3(identity)
-                     newspatial = newspatials.foldLeft(Map[Symbols, SpatialDesc]())(_ ++ _)
-                     newqspatial = newqspatials.foldLeft(Set[QSpatial]())(_ ++ _)
-                     cd =  SpatialDesc(st, ExactDesc, chlds, refs)
-                     upd = _sh_spatial.modify(_.updated(sym, cd) ++ newspatial) `andThen` _sh_qspatial.modify(_ ++ newqspatial)
-                   } yield (cd, if (initHeap.spatial.contains(sym)) upd(initHeap) else initHeap, upd(currentHeap)))(pmn).interleaved
-        } yield cdc).toProcess
-      case _ => ??? // TODO: REALLY: Implement this for partial descs
-    }
-  }
-
-  def unfold_all(syms : Set[Symbols], initHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
-    syms.toList.foldLeft[Process0[String \/ (SHeap, SHeap)]](Process((initHeap, currentHeap).right))((heaps: Process0[String \/ (SHeap, SHeap)], sym : Symbols) =>
-      for {
-        he <- heaps
-        newheaps <-  he.flatMap { case (ih, ch) => for {
-           symv <- ch.spatial.get(sym).cata(_.right, s"Unknown symbol: ${PrettyPrinter.pretty(Symbol(sym))}".left)
-           newheaps = unfold(sym, symv, ih, ch)
-        } yield newheaps }.traverse(identity)(pmn).map(_.join.map { case (_, ih, ch) => (ih, ch) })
-      } yield newheaps)
-  }
-
-  def concretise(el: Set[Symbols], initialMem: SMem, currentMem: SMem, alsoReferences: Boolean = false, depth: Int = delta, c: Option[Class] = None): Process[Task, String \/ (SMem, SMem)] = {
-    def typeFilter(c1: Class) = c.cata(c2 => defs.canContain(c1, c2), true)
-    def concretise_final(el: Set[Symbols], initialMem: SMem, currentMem: SMem): Process[Task, String \/ (SMem, SMem)] = {
-      el.foldLeft(Process((initialMem, currentMem).right) : Process[Task, String \/ (SMem, SMem)]) { (memr: Process[Task, String \/ (SMem, SMem)], sym: Symbols) =>
-        for {
-          mem <- memr
-          res <- mem.traverse[TProcess, String, String \/ (SMem, SMem)]({ case (initMem, curMem) => for {
-              symv <- Process(curMem.heap.spatial.get(sym).toSeq :_*)
-              cd <- symv.typ liftMatch[SpatialDesc, ({ type l[A] = Process[Task, A]})#l] { case ExactDesc => symv }
-              defc <- Process(defs.get(cd.c).toSeq : _*)
-              thr <- if (defc.children.values.forall(_._2.isOptional)
-                          && (if (alsoReferences) defc.refs.values.forall(_._2.isOptional) else true)) {
-                            val childExprs = symv.children.values.toSet
-                            val refExprs = symv.refs.values.toSet
-                            val allExprs = childExprs ++ (if (alsoReferences) refExprs else Set())
-                            val finalConstraints = allExprs.map(Eq(_, SetLit()))
-                            findSet(allExprs.foldLeft(SetLit() : SetExpr[IsSymbolic.type])(Union(_,_)),
-                                _sh_pure.modify(_ ++ finalConstraints)(curMem.heap), beta).map(_.map(_._1))
-                         } else Process()
-              res = thr.map { th =>
-                  (applySubst(th, initMem), applySubst(th, initMem))
-              }
-          } yield res })(pmt).map(_.join)
-          /*_sh_spatial.modify(_.updated(sym, _cd_children.modify(_.mapValues(v => SetLit()))(cd)))(hh)*/
-        } yield res
-      }
-    }
-    // TODO Convert all SetLit to expression
-    def concretise_helper(el: Set[ast.Symbols], initialMem: SMem, currentMem: SMem, depth: Int): Process[Task, String \/ (SMem, SMem)] = {
-      logger.debug(s"concretising ${PrettyPrinter.pretty(SetLit(el.toSeq.map(Symbol(_)):_*))} at depth $depth}...")
-      if (depth <= 0 || el.isEmpty) {
-        concretise_final(el, initialMem, currentMem)
-      }
-      else for {
-        unfolded <- unfold_all(el, initialMem.heap, currentMem.heap)
-        res <- unfolded.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ih, ch) => {
-          // TODO handle safely
-          val childes = el.toList.flatMap(_.|>(ch.spatial.get)
-              .flatMap(_ liftMatch[SpatialDesc, Option] { case sd@SpatialDesc(_, ExactDesc, _, _) => sd })
-              .map(cd => if (typeFilter(cd.c)) cd.children.values else Set()).get)
-          val refes = el.toList.flatMap(_.|>(ch.spatial.get)
-              .flatMap(_ liftMatch[SpatialDesc, Option] { case sd@SpatialDesc(_, ExactDesc, _, _) => sd })
-              .map(cd => if(typeFilter(cd.c)) cd.refs.values else Set()).get)
-          val alles = childes ++ (if (alsoReferences) refes else Set())
-          val (newInitialMem, newCurrentMem) = (_sm_heap.set(ih)(initialMem), _sm_heap.set(ch)(currentMem))
-          // TODO, we may actually need to iterate each child individually to not restrict the shapes
-          // Just join everything together
-          // val joinede = allSyms.foldLeft(SetLit() : SetExpr)(Union)
-          // blackHole(childes)
-          alles.foldLeft[TProcess[String \/ (SMem, SMem)]](Process((newInitialMem, newCurrentMem).right)) { (pmemr, e) =>
-            pmemr.interleaved.flatMap {
-              memr => memr.traverse[TProcess, String, String \/ (SMem, SMem)] { case (nim, ncm) =>
-                (for {
-                  pth <- findSet(e, ch, beta).interleaved
-                  memr = pth.map { case (th, els) =>
-                    (applySubst(th, nim), applySubst(th, ncm), els)
-                  }
-                  cfinal = memr.traverse[TProcess,String, String \/ (SMem, SMem)]{
-                      case (nim:SMem, ncm:SMem, els : Set[Symbols]) => concretise_final(el, nim, ncm)
-                  }.map(_.join)
-                  cfurther = memr.traverse[TProcess, String, String \/ (SMem, SMem)]{
-                    case (nim:SMem, ncm:SMem, els : Set[Symbols]) => concretise_helper(els, nim, ncm, depth - 1)
-                  }.map(_.join)
-                  concretised <- cfinal.tee(cfurther)(teePlus.interleaveAll).interleaved
-                } yield concretised).toProcess
-              }(pmt).map(_.join).interleaved
-            }.toProcess
           }
-        }}(pmt).map(_.join)
-      } yield res
+
+  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, heap: SHeap): Process[Nothing, \/[Nothing, (Set[Symbol], SHeap)]] = {
+    def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
+      val sym = Symbol(symcounter.++)
+      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership)
+      val newst = st + (sym -> symdesc)
+      newst
     }
-    concretise_helper(el, initialMem, currentMem, depth)
+    val ssdesc = heap.ssvltion(ssym)
+    val (lb, ub) = ssdesc.crd match {
+      case Single => (1, 1)
+      case Many => (0, setBound)
+      case Opt => (0, 1)
+    }
+    val posVals = Process.emitAll(generate((0, Map[Symbol, SymbolDesc]())) { case (i, st) =>
+      if (i < lb) {
+        val newst = addSymbol(ssdesc, st)
+        (none[SymbolValuation], (i + 1, newst)).some
+      } else if (i == lb) (st.some, (i + 1, st)).some
+      else if (i > ub) none
+      else {
+        val newst = addSymbol(ssdesc, st)
+        (newst.some, (i + 1, newst)).some
+      }
+    } filter (_.nonEmpty) map (_.get))
+    for {
+      posVal <- posVals
+      vl = SetLit(posVal.keys.toSeq: _*)
+      nheap = _sh_svltion.modify(_ ++ posVal)(heap.subst(ssym, vl))
+    } yield (posVal.keySet, nheap).right
   }
 
+  def mkAbstractSpatialDesc(loc : Loc, cl : Class, heap: SHeap): (SpatialDesc, SHeap) = {
+    val clSupers = defs.supertypes(cl)
+    val (newssvltionc, children) = unfoldFieldSet(loc, defs.childrenOf(clSupers), owned = true)
+    val (newssvltionr, refs) = unfoldFieldSet(loc, defs.refsOf(clSupers), owned = false)
+    (SpatialDesc(cl, AbstractDesc, children, refs), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
+  }
+
+  def findLoc(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
+    def relevantLocs(nheap: SHeap, cl: Class, isUnknown: Boolean): Set[Loc] = {
+      // TODO: Filter safely
+      nheap.locOwnership.filter { case (loc, ownership) => ownership match {
+        case UnknownOwner => true
+        case NewlyCreated => false
+        case _ => !isUnknown  }
+      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).c) }.keySet
+    }
+    def addNewLoc(newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
+      val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
+        _sh_locOwnership.modify(_ + (newLoc -> ownership)) andThen
+        _sh_initSpatial.modify(_ + (newLoc -> sdesc)) andThen
+        _sh_currentSpatial.modify(_ + (newLoc -> sdesc))) (nheap)
+      nnheap
+    }
+    heap.svltion.get(sym).cata({
+      case Loced(l) => Process((l, heap).right)
+      case UnknownLoc(cl, ownership) => {
+        // TODO check consistency via SAT
+        val newLoc = Loc(loccounter.++)
+        val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
+        ownership match {
+          case SUnowned =>
+            // Can either alias existing locs with unknown owners or create new unowned locs
+            val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
+            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
+            Process((newLoc, nnheap).right) ++
+              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
+                (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
+                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(nheap)).right)
+          case SRef =>
+            // Can alias all existing locs or create new locs with unknown owners
+            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
+            val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
+            Process((newLoc, nnheap).right) ++
+              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
+                (loc, _sh_svltion.modify(_ + (sym -> Loced(newLoc)))(nheap)).right)
+          case SOwned(l, f) =>
+            // Can alias existing locs with unknown owners or create new owned locs
+            val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
+            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Owned(l,f), nheap)
+            Process((newLoc, nnheap).right) ++
+              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
+                (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
+                  _sh_locOwnership.modify(_ + (newLoc -> Owned(l,f))))(nheap)).right)
+        }
+        /*
+        TODO: Possible optimization
+        val mentioningConstraints = heap.pure.filter(_.symbols.collect({ case \/-(s) => s }).contains(sym))
+        if (mentioningConstraints.isEmpty) {
+         ???
+        } else ??? */
+      }
+    }, Process(s"No such symbol: $sym".left))
+  }
+
+  def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, (Class, Cardinality)], owned: Boolean): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
+    fieldSet.foldLeft((Map(): SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]())) { (st, fieldkv) =>
+      fieldkv match {
+        case (f, (cl, crd)) =>
+          val sym = SetSymbol(symcounter.++)
+          (st._1 + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef)), st._2)
+      }
+    }
+  }
+
+  def unfold(loc: Loc, targetField : Fields, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
+    def containsTargetField(psdesc: SpatialDesc): Boolean = {
+      psdesc.children.contains(targetField) || psdesc.refs.contains(targetField)
+    }
+    def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
+                      refs: Map[Fields, SetExpr[IsSymbolic.type]], heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
+      val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
+      if (!optimistic) err
+      else {
+        (if(dt.hasExact) err else Process()) ++ (for {
+           nc <- Process.emitAll(dt.possible.toSeq)
+           cdr = defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left)
+           unfoldedr = cdr map { cd =>
+             unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs), cd, heap)
+           }
+          res <- unfoldedr.traverse({ case (psdesc, nheap) =>
+              if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
+              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, nheap)
+          })(pmn).map(_.join)
+        } yield res)
+      }
+    }
+    def unfoldAbstract(sdesc: SpatialDesc, cd: ClassDefinition, heap: SHeap): (SpatialDesc, SHeap) = {
+      val (newsslvtionc, newchildren) = unfoldFieldSet(loc, cd.children, owned = true)
+      val (newsslvtionr, newrefs) = unfoldFieldSet(loc, cd.refs, owned = true)
+      val psdesctype = PartialDesc(hasExact = true, defs.directSubtypes(sdesc.c))
+      val pschildren = sdesc.children ++ newchildren
+      val psrefs = sdesc.refs ++ newrefs
+      val psdesc = (_sd_desctype.set(psdesctype) andThen
+        _sd_children.set(pschildren) andThen
+        _sd_refs.set(psrefs)) (sdesc)
+      val nheap = (_sh_currentSpatial.modify(_ + (loc -> psdesc)) andThen
+                  _sh_initSpatial.modify(_ + (loc -> psdesc)) andThen
+                  _sh_ssvltion.modify(_ ++ newsslvtionc ++ newsslvtionr))(heap)
+      (psdesc, nheap)
+    }
+    heap.currentSpatial.get(loc).cata({ sdesc =>
+      if (containsTargetField(sdesc)) Process((sdesc, heap).right)
+      else sdesc.desctype match {
+        case ExactDesc => Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${sdesc.c.name} has no field $targetField".left)
+        case AbstractDesc =>
+          defs.get(sdesc.c).cata({ cd =>
+            val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
+            if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
+            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, nheap)
+          }, Process(s"No such class: ${sdesc.c.name}".left))
+        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, heap)
+      }
+    }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
+  }
+
+  val typeInference = new TypeInference(defs)
 }

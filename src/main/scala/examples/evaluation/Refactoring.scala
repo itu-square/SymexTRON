@@ -21,23 +21,27 @@ object Refactoring {
 
         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
                              "old_field" -> SetLit(Symbol(oldFieldId)), "new_field" -> SetLit(Symbol(newFieldId)))
-        val inputHeap = SHeap(Map(packageId ->
-                                    SpatialDesc(Class("Package"), ExactDesc,
-                                                 Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map()),
-                                  classId ->
-                                     SpatialDesc(Class("Class"), ExactDesc,
-                                                 Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))),
-                                                     "methods" -> SetSymbol(classMethodsId))
-                                                , Map("name" -> SetLit(Symbol(classNameId)),
-                                                      "super" -> SetSymbol(classSuperId))),
-                                   oldFieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
-                                   newFieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
-                                   classNameId -> SpatialDesc(Class("String"), ExactDesc, Map(), Map())),
-                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class")),
-                                  QSpatial(SetSymbol(classFieldsId), Class("Field")),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
-                              Set())
+        val inputHeap = SHeap.initial(
+          Map(   SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
+               , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
+               , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt, SOwned(Loc(packageId), "classes"))
+               )
+          , Map(Symbol(packageId)  -> Loced(Loc(packageId)),
+              Symbol(classId)    -> Loced(Loc(classId)),
+              Symbol(oldFieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields")),
+              Symbol(newFieldId) -> UnknownLoc(Class("Field"), SUnowned),
+              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned))
+          , Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes"))
+          , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))), Map()),
+                Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))),
+                                                                                "methods" -> SetSymbol(classMethodsId))
+                                                                          , Map("name" -> SetSymbol(classNameId),
+                                                                                "super" -> SetSymbol(classSuperId))))
+             , Set(
+                   Eq(SetLit(), ISect(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
+                   Eq(SetLit(), ISect(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))))
+                 )
+        )
         SMem(inputStack, inputHeap)
   }
 
@@ -73,22 +77,28 @@ object Refactoring {
 
         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
                              "old_method" -> SetLit(Symbol(oldMethodId)), "new_method" -> SetLit(Symbol(newMethodId)))
-        val inputHeap = SHeap(Map(packageId ->
-                                    SpatialDesc(Class("Package"), ExactDesc,
-                                                 Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
-                                                 Map()),
-                                  classId ->
-                                    SpatialDesc(Class("Class"), ExactDesc,
-                                                 Map("fields" -> SetSymbol(classFieldsId),
-                                                     "methods" -> Union(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
-                                                , Map("name" -> SetLit(Symbol(classNameId)),
-                                                      "super" -> SetSymbol(classSuperId))),
-                                   oldMethodId -> SpatialDesc(Class("Method"), AbstractDesc, Map(), Map()),
-                                   newMethodId -> SpatialDesc(Class("Method"), AbstractDesc, Map(), Map())),
-                              Set(QSpatial(SetSymbol(packageClassesId), Class("Class")),
-                                  QSpatial(SetSymbol(classFieldsId), Class("Field")),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
-                              Set())
+        val inputHeap = SHeap.initial(
+          Map(   SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
+            , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
+            , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt, SOwned(Loc(packageId), "classes"))
+          ),
+          Map(Symbol(packageId)  -> Loced(Loc(packageId)),
+            Symbol(classId)    -> Loced(Loc(classId)),
+            Symbol(oldMethodId) -> UnknownLoc(Class("Method"), SOwned(Loc(classId), "methods")),
+            Symbol(newMethodId) -> UnknownLoc(Class("Method"), SUnowned),
+            Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
+          Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes")),
+          Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))), Map()),
+            Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
+              , Map("fields" -> SetSymbol(classFieldsId),
+                    "methods" -> Union(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
+              , Map("name" -> SetSymbol(classNameId),
+                    "super" -> SetSymbol(classSuperId))))
+          , Set(
+            Eq(SetLit(), ISect(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
+            Eq(SetLit(), ISect(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
+          )
+        )
         SMem(inputStack, inputHeap)
   }
 
@@ -137,14 +147,17 @@ object Refactoring {
 
          val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class1" -> SetLit(Symbol(class1Id)),
                               "class2" -> SetLit(Symbol(class2Id)), "sc_name" -> SetLit(Symbol(scnameId)))
-         val inputHeap = SHeap(Map(packageId ->
-                                     SpatialDesc(Class("Package"), ExactDesc,
-                                                  Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(class1Id), Symbol(class2Id)))),
-                                                  Map()),
-                                    class1Id -> SpatialDesc(Class("Class"), AbstractDesc, Map(), Map()),
-                                    class2Id -> SpatialDesc(Class("Class"), AbstractDesc, Map(), Map())),
-                               Set(QSpatial(SetSymbol(packageClassesId), Class("Class"))),
-                               Set())
+         val inputHeap = SHeap.initial(
+           Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))),
+           Map(
+             Symbol(packageId) -> Loced(Loc(packageId)),
+             Symbol(scnameId) -> UnknownLoc(Class("String"), SUnowned),
+             Symbol(class1Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes")),
+             Symbol(class2Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes"))  ),
+           Map(Loc(packageId) -> Unowned),
+           Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Symbol(class2Id))), SetLit(Symbol(class2Id)))), Map())),
+           Set()
+         )
          SMem(inputStack, inputHeap)
    }
 
@@ -196,17 +209,19 @@ object Refactoring {
 
         val inputStack = Map("class" -> SetLit(Symbol(classId)),
                              "field" -> SetLit(Symbol(fieldId)))
-        val inputHeap = SHeap(Map(classId ->
-                                    SpatialDesc(Class("Class"), ExactDesc,
-                                                 Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(fieldId))),
-                                                     "methods" -> SetSymbol(classMethodsId))
-                                                , Map("name" -> SetLit(Symbol(classNameId)),
-                                                      "super" -> SetSymbol(classSuperId))),
-                                   fieldId -> SpatialDesc(Class("Field"), AbstractDesc, Map(), Map()),
-                                   classNameId -> SpatialDesc(Class("String"), ExactDesc, Map(), Map())),
-                              Set(QSpatial(SetSymbol(classFieldsId), Class("Field")),
-                                  QSpatial(SetSymbol(classMethodsId), Class("Method"))),
-                              Set())
+        val inputHeap = SHeap.initial(
+          Map(SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields")),
+              SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Many, SOwned(Loc(classId), "methods")),
+              SetSymbol(classSuperId) -> SSymbolDesc(Class("String"), Opt, SUnowned)),
+          Map(Symbol(classId) -> Loced(Loc(classId)),
+              Symbol(fieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields")),
+              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
+          Map(Loc(classId) -> Unowned),
+          Map(Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
+            , Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(fieldId)))
+              ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Symbol(classNameId)), "super" -> SetSymbol(classSuperId)))),
+          Set(Eq(SetLit(), ISect(SetSymbol(classFieldsId), SetLit(Symbol(fieldId)))))
+        )
         SMem(inputStack, inputHeap)
   }
 

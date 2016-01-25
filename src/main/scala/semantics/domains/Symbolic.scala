@@ -38,7 +38,7 @@ trait SymbolicOps {
   }
 
   implicit class SymbolicProp(p : Prop)  extends Symbolic {
-    override val symbols = p.map(_.symbols).fold(Set())(_++_)
+    override val symbols = p.flatMap(_.symbols)
   }
 
   implicit class SymbolicSpatialDesc(sd : SpatialDesc) extends Symbolic {
@@ -49,18 +49,20 @@ trait SymbolicOps {
     }
   }
 
-  implicit class SymbolicSpatial(sp : Spatial) extends Symbolic {
-    override val symbols = sp.flatMap { case (s, sd) =>
-          sd.symbols ++ Set(Symbol(s).right[SetSymbol]) }.toSet
+  implicit class SymbolicSetSymbolValuation(ssvaluation: SetSymbolValuation) extends Symbolic {
+    override val symbols: Set[SetSymbol \/ Symbol] = ssvaluation.keySet.map(_.left)
   }
 
-  implicit class SymbolicQSpatial(qsps : Set[QSpatial]) extends Symbolic {
-    override val symbols = qsps.flatMap(_.e.symbols).toSet
+  implicit class SymbolicSymbolValuation(svaluation: SymbolValuation) extends Symbolic {
+    override val symbols: Set[SetSymbol \/ Symbol] = svaluation.keySet.map(_.right)
+  }
+
+  implicit class SymbolicSpatial(sp : Spatial) extends Symbolic {
+    override val symbols = sp.values.toSet[SpatialDesc].flatMap(_.symbols)
   }
 
   implicit class SymbolicSHeap(heap : SHeap) extends Symbolic {
-    override val symbols = heap.spatial.symbols ++ heap.qspatial.symbols ++
-                            heap.pure.symbols
+    override val symbols = heap.ssvltion.symbols ++ heap.svltion.symbols ++ heap.currentSpatial.symbols ++ heap.pure.symbols
   }
 
   implicit class SymbolicSStack(stack : SStack) extends Symbolic {

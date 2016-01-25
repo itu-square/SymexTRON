@@ -30,7 +30,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
       coverage : Double = TestGenerator.defaultCoverageTarget): Process[Task, (String, String) \/ CMem] = {
       val concExec = new ConcreteExecutor(defs, s)
       sleep(timeout).wye(
-               symbExec.execute(pres, concExec.prog).map(_.map(_._1)) // Only take initial heaps
+               symbExec.execute(pres, concExec.prog)
               .map(_.fold(err => ("<no heap>", err).left, sm => convertMem(sm)))
               .filterBy2(_ != _)
               .takeWhile(_ => concExec.branchCoverage <= coverage)
@@ -39,7 +39,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
               )(wye.interrupt)
   }
 
-  def convertMem(sMem: SMem): (String, String) \/ CMem = {
+  def convertMem(sMem: SMem): (String, String) \/ CMem = ??? /* {
     val maxDepth = 3
     def sbexpr2sinstance(es : Seq[BasicExpr[IsSymbolic.type]]) =
       es.map { case Symbol(ident) => ident }.toSet
@@ -81,7 +81,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
                .map(symbolic2concrete)
                .take(1).runLast.run
     concreteSMem.cata(identity, (PrettyPrinter.pretty(sMem), s"No concretisation for heap found in depth $maxDepth").left)
-  }
+  } */
 
 }
 

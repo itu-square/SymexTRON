@@ -17,8 +17,11 @@ object ContactBookExample extends Example {
   , new ClassDefinition("Child", Map(), Map(), Some(Class("Age")))
   , new ClassDefinition("Invited", Map("name" -> (Class("String"), Single)), Map())
   )
-  override val pres: Set[SMem] = Set(SMem(Map("contactbook" -> SetLit(Symbol(-1))),
-                                     SHeap(Map(-1 -> SpatialDesc(Class("ContactBook"), AbstractDesc, Map(), Map())), Set(), Set())))
+  override val pres: Set[SMem] = Set(
+    SMem(Map("contactbook" -> SetLit(Symbol(-1))),
+         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned)), Map(), Map(), Set()))
+  )
+
   override val prog: Statement = stmtSeq(
      assignVar("invitationlist", SetLit())
    , `for`("person'", MatchStar(SetLit(Var("contactbook")), Class("Person")), stmtSeq(

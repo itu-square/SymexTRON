@@ -18,11 +18,12 @@ object Class2TableExample extends Example {
     new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Some(Class("Column")))
   )
   override val classDefs = Shared.stdClassDefs ++ sourceClassDefs ++ targetClassDefs
-  override val pres = Set(SMem(Map("class" -> SetLit(Symbol(-1))),
-                     SHeap(Map(-1 ->  SpatialDesc(Class("Class"), ExactDesc,
-                                                  Map("attributes" -> SetSymbol(-2)), Map())),
-                                                  Set(QSpatial(SetSymbol(-2), Class("Attribute"))),
-                                                  Set())))
+
+  override val pres = Set(
+    SMem(Map("class" -> SetLit(Symbol(-1))),
+             SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), SUnowned)), Map(), Map(), Set()))
+  )
+
   override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),

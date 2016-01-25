@@ -39,4 +39,4 @@ fork in Test := true
 
 triggeredMessage := Watched.clearWhenTriggered
 
-maxErrors := 5
+maxErrors := 10

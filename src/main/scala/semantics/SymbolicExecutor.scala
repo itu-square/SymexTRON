@@ -1,10 +1,7 @@
 package semantics
 
-import scala.language.postfixOps
-
 import syntax.ast.MatchExpr._
 import semantics.domains._
-import semantics.domains.QSpatial._
 import semantics.domains.SHeap._
 import semantics.domains.SMem._
 import semantics.domains.SpatialDesc._
@@ -25,25 +22,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   //TODO Implement clean up function of heap, that removes unneeded constraints
 
   //TODO Convert use of SetLit to use of Process0[Symbols] and results to Process0[String \/ Symbols]
-  def match_it(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = set.traverseU (sym =>
-    for {
-      symv <- heap.spatial.get(sym).cata(_.right, s"Unknown symbol: $sym".left)
-      stc <- defs.subtypesOrSelf.get(c).cata(cs => cs.right, s"Unknown class: $c".left)
-    } yield if (stc.contains(symv.c)) Set[Symbols](sym) else Set[Symbols]()
-  ).map(_.flatMap(identity))
+  def match_it(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = ???
 
-  def descendants_or_self(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = {
-    set.traverseU { ident =>
-      for {
-        symv <- heap.spatial.get(ident).cata(_.right, s"Unknown symbol: $ident".left)
-        cd <- symv.typ match { case ExactDesc => symv.right; case _ => s"Not a concrete value: ${PrettyPrinter.pretty(Map(ident -> symv))} in heap \n\n${PrettyPrinter.pretty(heap)}\n\n".left }
-        res <- if (defs.canContain(cd.c, c)) cd.children.values.toSet.traverseU({
-          case SetLit(es@_*) => descendants_or_self(es.map { case Symbol(ident) => ident }.toSet, c, heap)
-          case e2 => s"Not a concrete set: $e2".left
-        }).map(_.flatMap(identity)) else Set[Symbols]().right
-      } yield res + ident
-    }.map(_.flatMap(identity))
-  }
+  def descendants_or_self(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = ???
 
   def match_star(set : Set[Symbols], c : Class, heap : SHeap): String \/ Set[Symbols] =
     for {
@@ -52,199 +33,161 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield m
 
 
-  def access(sym: Symbols, f: Fields, initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SetExpr[IsSymbolic.type], SHeap, SHeap)] = {
+  def access(sym: Symbol, f: Fields, heap: SHeap):
+    Process0[String \/ (SetExpr[IsSymbolic.type], SHeap)] = {
     for {
-      symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
-      unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
-      res = unfolded.traverseU(unf => {
-        val (df, newiheap, newcheap) = unf
+      locr <- modelFinder.findLoc(sym, heap)
+      unfolded <- locr.traverse({ case (loc, nheap) => modelFinder.unfold(loc, f, nheap) })(pmn).map(_.join)
+      res = unfolded.flatMap { case (sdesc, nheap) =>
         if (defs.childfields.contains(f))
-          for (chld <- df.children.get(f)) yield (chld, newiheap, newcheap)
+          (sdesc.children(f), nheap).right
         else if (defs.reffields.contains(f))
-          for (ref <- df.refs.get(f)) yield (ref, newiheap, newcheap)
-        else none
-      }.cata(_.right, s"No value for field $f".left))
-    } yield res.join
+          (sdesc.refs(f), nheap).right
+        else s"No value for field $f".left
+      }
+    } yield res
   }
 
-  def disown(heap: SHeap, ee: SetExpr[IsSymbolic.type]) : SHeap = {
-    def disownSD(sym: Symbols, desc: SpatialDesc): SHeap => SHeap  = desc match {
-      case sd@SpatialDesc(c, _, children, refs) => {
-        val (newchildren, newconstrs) =
-          children.foldLeft((Map[String, SetExpr[IsSymbolic.type]](), Set[BoolExpr[IsSymbolic.type]]()))(
-            (st, chld) => {
-              val preve = chld._2
-              //TODO Handle safely and find more precise type by infering on preve
-              val symt = defs.fieldType(c, chld._1).get
-              val ssym1 = SetSymbol(freshSym)
-              val ssym2 = SetSymbol(freshSym)
-              val cstrs =
-                   Set(Eq(preve, Union(ssym1, ssym2)),
-                    Eq(ISect(ssym1, ssym2), SetLit()),
-                    SetSubEq(ssym2, ee),
-                    Eq(ISect(ssym1, ee), SetLit()))
-              st.applyLens(first).modify(_.updated(chld._1, ssym1))
-                .applyLens(second).modify(_ ++ cstrs)
+  def disown(ee: SetExpr[IsSymbolic.type], loc: Loc, f: Fields, heap: SHeap) : SHeap =
+    _sh_currentSpatial.modify(_ mapValuesWithKeys { case (loc2, sdesc) =>
+        _sd_children.modify(_ mapValuesWithKeys { case (f2, ee2) =>
+            if (loc2 == loc && f2 == f) ee2
+            else {
+              val t1opt = typeInference.inferSetType(ee, heap)
+              val t2opt = typeInference.inferSetType(ee2, heap)
+              t1opt.cata(t1 =>
+                t2opt.cata(t2 =>
+                  defs.maxClass(t1, t2).cata(_ => Diff(ee2, ee), ee2)
+                , ee2)
+              , ee2)
             }
-          )
-        _sh_pure.modify(_ ++ newconstrs) `andThen`
-              _sh_spatial.modify(_.updated(sym,
-                   sd.applyLens(_sd_children).set(newchildren)))
-      }
-    }
+        })(sdesc)
+    })(heap)
 
-    // desc match {
-    //   case ConcreteDesc(c, children, refs) => _sh_pure.modify(_ ++ (children.foldLeft(Set[BoolExpr]())(
-    //                                                              (cstr : Prop, chld : (String, SetExpr)) => cstr + Eq(ISect(chld._2, ee), SetLit()))))
-    // }
-    // TODO consider types when disowning things
-    (((h : SHeap) => h.spatial.foldLeft(identity[SHeap] _)((f : SHeap => SHeap, el : (Symbols, SpatialDesc)) =>
-        f `andThen` (disownSD _).tupled(el))(h))) (heap)
-  }
-
-  def update(sym: Symbols, f: Fields, ee2: SetExpr[IsSymbolic.type], initialHeap: SHeap, currentHeap: SHeap): Process0[String \/ (SHeap, SHeap)] = {
+  def update(sym: Symbol, f: Fields, ee: SetExpr[IsSymbolic.type], heap: SHeap): Process0[String \/ SHeap] = {
     for {
-      symv <- Process(currentHeap.spatial.get(sym).cata(_.right, s"Error, unknown symbol $sym".left))
-      unfolded <- symv.traverse(desc => modelFinder.unfold(sym, desc, initialHeap, currentHeap))(pmn).map(_.join)
-      res = unfolded.traverseU { unf =>
-        val (df, newiheap, newcheap) = unf
-        if (defs.childfields.contains(f)) for {
-          _ <- df.children.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
-        } yield (newiheap,
-            _sh_spatial.modify(_.updated(sym, _sd_children.modify(_.updated(f, ee2))(df)))(disown(newcheap, ee2)))
-        else if (defs.reffields.contains(f)) for {
-          _ <- df.refs.get(f).cata(_.right, s"Error, field $f not allocated for symbol $sym".left)
-        } yield (newiheap,
-            _sh_spatial.modify(_.updated(sym, _sd_refs.modify(_.updated(f, ee2))(df)))(newcheap))
-        else s"Field $f is neither a child nor a reference field".left
+      locr <- modelFinder.findLoc(sym, heap)
+      unfolded <- locr.traverse[({ type l[A] = Process[Nothing, A]})#l, String, String \/ (Loc, SpatialDesc, SHeap)]({ case (loc, nheap) =>
+        for {
+          unfoldedr <- modelFinder.unfold(loc, f, nheap)
+        } yield unfoldedr.map { case (sdesc, nheap) => (loc, sdesc, nheap) }
+      })(pmn).map(_.join)
+      res = unfolded.flatMap { case (loc, sdesc, nheap) =>
+        if (defs.childfields.contains(f)) {
+          val nnheap = disown(ee, loc, f, nheap)
+          _sh_currentSpatial.modify(_.updated(loc, _sd_children.modify(_.updated(f, ee))(sdesc)))(nnheap).right
+        }
+        else if (defs.reffields.contains(f))
+          _sh_currentSpatial.modify(_.updated(loc, _sd_refs.modify(_.updated(f, ee))(sdesc)))(nheap).right
+        else s"No value for field $f".left
       }
-    } yield res.join
+    } yield res
   }
 
-  def execute(pres : Set[SMem], c : Statement): Process[Task, String \/ (SMem, SMem)] = {
-     executeHelper(Process.emitAll(pres.toSeq).map(pre => (pre, pre)), c)
+  def execute(pres : Set[SMem], c : Statement): Process[Task, String \/ SMem] = {
+     executeHelper(Process.emitAll(pres.toSeq), c)
   }
 
-  private def isConsistent(initHeap: SHeap, curHeap: SHeap) = {
-    heapConsistencyChecker.isConsistent(initHeap) &&
-      heapConsistencyChecker.isConsistent(curHeap)
-  }
-
-  private def executeHelper(pres : Process[Task, (SMem, SMem)], c : Statement) : Process[Task, String \/ (SMem, SMem)] = {
+  private def executeHelper(pres : Process[Task, SMem], c : Statement) : Process[Task, String \/ SMem] = {
     // Todo parallelise using mergeN
-    pres.flatMap { case (initMem: SMem, pre: SMem) =>
-      if (!isConsistent(initMem.heap, pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
+    pres.flatMap[Task, String \/  SMem] { case (pre: SMem) =>
+      if (!heapConsistencyChecker.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
       else c match {
-        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))(
-          (pmem, s) => for {
+        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre.right)) { (pmem, s) =>
+          for {
             memr <- pmem
-            res <- memr.traverse[TProcess, String, String \/ (SMem, SMem)](mem =>
-               executeHelper(Process(mem), s)).map(_.join)
-          } yield res)
-        case AssignVar(_,x, e) => Process(for {
-          ee <- evalExpr(pre.stack, e)
-        } yield (initMem, _sm_stack.modify(_ + (x -> ee))(pre)))
+            res <- memr.traverse[TProcess, String, String \/ SMem](mem => executeHelper(Process(mem), s)).map(_.join)
+          } yield res
+        }
+        case AssignVar(_,x, e) =>
+          val post = for {
+            ee <- evalExpr(pre.stack, e)
+          } yield _sm_stack.modify(_ + (x -> ee))(pre)
+          Process(post)
         case New(_, x, c) => Process(for {
           cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
           xsym = freshSym
+          loc = freshLoc
           alloced =
-              xsym -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
-        } yield (initMem, (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) `andThen`
-                      (_sm_heap ^|-> _sh_spatial).modify(_ + alloced))(pre)))
+              loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
+        } yield (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) andThen
+                (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
+                (_sm_heap ^|-> _sh_locOwnership).modify(_ + (loc -> NewlyCreated)) andThen
+                (_sm_heap ^|-> _sh_currentSpatial).modify(_ + alloced))(pre))
         case LoadField(_, x, e, f) => for {
-          sym <- Process(evalExpr(pre.stack, e).flatMap(getSingletonSymbolId))
-          ares <- sym.traverse[TProcess, String, String \/ (SetExpr[IsSymbolic.type], SHeap, SHeap)](s =>
-                  access(s, f, initMem.heap, pre.heap))(pmt).map(_.join)
-        } yield ares.map(p => (SMem(initMem.stack, p._2), SMem(pre.stack + (x -> p._1), p._3)))
+          sym <- Process(evalExpr(pre.stack, e).flatMap(getSingletonSymbol))
+          ares <- sym.traverse[TProcess, String, String \/ (SetExpr[IsSymbolic.type], SHeap)](s =>
+                  access(s, f, pre.heap))(pmt).map(_.join)
+        } yield ares.map { case (e, heap) => (_sm_stack.modify(_ + (x -> e)) andThen _sm_heap.set(heap))(pre)  }
         case AssignField(_, e1, f, e2) => {
-          evalExpr(pre.stack, e1).flatMap(getSingletonSymbolId).traverse[TProcess, String, String \/ (SMem, SMem)](sym =>
-              evalExpr(pre.stack, e2).traverse[TProcess, String, String \/ (SMem, SMem)](ee2 =>
+          evalExpr(pre.stack, e1).flatMap(getSingletonSymbol).traverse[TProcess, String, String \/ SMem](sym =>
+              evalExpr(pre.stack, e2).traverse[TProcess, String, String \/ SMem](ee2 =>
                     for {
-                       newheaps <- update(sym, f, ee2, initMem.heap, pre.heap)
-                    } yield newheaps.map { case (newiheap, newcheap) => (_sm_heap.set(newiheap)(initMem), _sm_heap.set(newcheap)(pre)) }
+                       newheaps <- update(sym, f, ee2, pre.heap)
+                    } yield newheaps.map { case newheap => _sm_heap.set(newheap)(pre) }
               )(pmt).map(_.join)
           )(pmt).map(_.join)
         }
         case If(_, cond, ts, fs) => {
           val econdr = evalBoolExpr(pre.stack, cond)
-          (econdr traverseU { econd =>
+          econdr traverseU { econd =>
             val newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
             val newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
-            executeHelper(Process((initMem, newtmem)), ts) ++ executeHelper(Process((initMem, newfmem)), fs)
-          }).map(_.join)
+            executeHelper(Process(newtmem), ts).interleave(executeHelper(Process(newfmem), fs))
+          } map (_.join)
         }
-        case For(_, x, m, sb) => for {
-           // TODO: Figure out how to get meaningful set with new symbols that don't point in the heap for references
-            esolr <- evalExpr(pre.stack, _me_e.get(m)).traverse[TProcess, String, String \/ (Map[Symbols, Set[Symbols]], Set[Symbols])](ee =>
-               modelFinder.findSet(ee, pre.heap, beta)).map(_.join)
-            res <- esolr.traverse[TProcess, String, String \/ (SMem, SMem)](esol => {
-                val (th, ees) = esol
-                val newpre = modelFinder.applySubst(th, pre)
-                val newinitMem = modelFinder.applySubst(th, initMem)
-                // TODO Somewhat inefficient, optimize
-                for {
-                  mres  <- m match {
-                    case MSet(e) =>
-                      //if (isConsistent(newinitMem.heap, newpre.heap))
-                      Process((ees, newinitMem, newpre).right)
-                    //else Process()
-                    case Match(e, c) => for {
-                      heapr <- modelFinder.unfold_all(ees, newinitMem.heap, newpre.heap)
-                      res = heapr /*.filter((isConsistent _).tupled)*/ .flatMap { case (ih, ch) => for {
-                        matches <- match_it(ees, c, ch)
-                      } yield (matches, ih, ch)
-                      }
-                    } yield res.map(p => (p._1, _sm_heap.set(p._2)(newinitMem), _sm_heap.set(p._3)(newpre)))
-                    case MatchStar(e, c) => for {
-                      memr <- modelFinder.concretise(ees, newinitMem, newpre, c = c.some)
-                      res = memr /*.filter{ case (im, cm) => isConsistent(im.heap, cm.heap)
-                                 }*/ .flatMap { case (initMem, curMem) => for {
-                        matches <- match_star(ees, c, curMem.heap)
-                      } yield (matches, initMem, curMem)
-                      }
-                    } yield res
-                  }
-                  res <- mres.traverse[TProcess, String, String \/ (SMem, SMem)](mr => {
-                    val (syms, initMem, pre) = mr
-                    syms.foldLeft[Process[Task, String \/ (SMem, SMem)]](Process((initMem, pre).right))((memp : Process[Task, String \/ (SMem, SMem)], sym : Symbols) =>
-                      for {
-                        memr <- memp
-                        res <- memr.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (ninitMem, nmem) =>
-                          executeHelper(Process((ninitMem, _sm_stack.modify(_ + (x -> SetLit(Symbol(sym))))(nmem))), sb)
-                        }(pmt).map(_.join)
-                      } yield res
-                    )
-                  })(pmt).map(_.join)
-                } yield res
-              })(pmt).map(_.join)
-        } yield res
+        case For(_, x, m, sb) =>
+          for {
+            matchr <- (m match {
+              case MSet(e) =>
+                val ee = evalExpr(pre.stack, e)
+                ee traverseU (e => modelFinder.findSet(e, pre.heap, beta)) map (_.join)
+              case Match(e, c) =>
+                val ee = evalExpr(pre.stack, e)
+                ee traverseU (e => modelFinder.findSet(e, pre.heap, beta, targetClass = c.some)) map (_.join)
+              case MatchStar(e, c) =>
+                val ee = evalExpr(pre.stack, e)
+                ???
+            }) : Process[Task, String \/ (Set[Symbol], SHeap)]
+            res <- matchr traverseU { case (syms : Set[Symbol], nheap) =>
+                val nmem = _sm_heap.set(nheap)(pre)
+                // TODO: Fix ordering so it coincides with concrete executor ordering
+                syms.foldLeft(Process(nmem.right[String]) : Process[Task, String \/ SMem]) { (pmem, sym) =>
+                  for {
+                    memr <- pmem
+                    res <- memr traverseU { mem =>
+                      val nmem = _sm_stack.modify(_ + (x -> SetLit(sym)))
+                      executeHelper(Process(mem), sb)
+                    } map (_.join)
+                  } yield res
+                }
+            } map (_.join)
+          } yield res
         case Fix(_, e, sb) => {
-          def fixEqCase(initMem: SMem, bmem: SMem): Process[Task, String \/ (SMem, SMem)] = {
+          def fixEqCase(bmem: SMem): Process[Task, String \/ SMem] = {
             for {
-              sbr <- executeHelper(Process((initMem, bmem)), sb)
+              sbr <- executeHelper(Process(bmem), sb)
               res = for {
-                  pmem <- sbr
-                  (initMem, amem) = pmem
+                  amem <- sbr
                   eeb <- evalExpr(bmem.stack, e)
                   eea <- evalExpr(amem.stack, e)
-                } yield (initMem, (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem))
+                } yield (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
             } yield res
           }
-          def fixNeqCase(initMem: SMem, bmem: SMem, k: Int): Process[Task, String \/ (SMem, SMem)] = {
+          def fixNeqCase(bmem: SMem, k: Int): Process[Task, String \/ SMem] = {
             for {
-              sbr <- executeHelper(Process((initMem, bmem)), sb)
-              imem2r = for {
-                pmem <- sbr
-                (initMem, imem) = pmem
+              sbr <- executeHelper(Process(bmem), sb)
+              imemr = for {
+                imem <- sbr
                 eeb <- evalExpr(bmem.stack, e)
                 eei <- evalExpr(imem.stack, e)
-              } yield (initMem, (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem))
-              res <- imem2r.traverse[TProcess, String, String \/ (SMem, SMem)]{ case (initMem, imem) =>
-                if (k <= 0) fixEqCase(initMem, imem) else fixEqCase(initMem, imem) ++ fixNeqCase(initMem, imem, k - 1)
+              } yield (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem)
+              res <- imemr.traverse[TProcess, String, String \/ SMem]{ case imem =>
+                if (k <= 0) fixEqCase(imem) else fixEqCase(imem) ++ fixNeqCase(imem, k - 1)
               }.map(_.join)
             } yield res
           }
-          fixEqCase(initMem, pre) ++ fixNeqCase(initMem, pre, kappa)
+          fixEqCase(pre) ++ fixNeqCase(pre, kappa)
         }
       }
     }
@@ -310,12 +253,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   }
 
 
+  private val locCounter = Counter(0)
+
+  private def freshLoc = Loc(locCounter.++)
+
   private val symCounter = Counter(0)
 
-  private def freshSym: Symbols = symCounter++
+  private def freshSym: Symbols = symCounter.++
 
   val heapConsistencyChecker = new HeapConsistencyChecker(defs)
 
-  val modelFinder = new ModelFinder(symCounter, defs, beta, delta)
+  val modelFinder = new ModelFinder(symCounter, locCounter, defs, beta, delta, optimistic = false)
 
+  val typeInference = modelFinder.typeInference
 }

@@ -5,7 +5,7 @@ import syntax.ast._
 
 object PrettyPrinter {
 
-  def pretty(stack: SStack): String = s"[${stack.map(p => s"${p._1} ↦ ${pretty(p._2)}").mkString(", ")}]"
+  def pretty(stack: SStack): String = s"[${stack.map {case (vr, e) => s"${vr} ↦ ${pretty(e)}"}.mkString(", ")}]"
 
   private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
 
@@ -57,34 +57,67 @@ object PrettyPrinter {
 
   def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic.type]).mkString(" ∧ ")
 
-  def pretty(sym : Symbols, spatialDesc: SpatialDesc): String = spatialDesc match {
+  def pretty(loc : Loc, spatialDesc: SpatialDesc): String = spatialDesc match {
     case SpatialDesc(c, typ, children, refs) => {
       val prettytyp = typ match {
-        case ExactDesc => s"${pretty(Symbol(sym))} : ${c.name}"
-        case AbstractDesc => s"inst〈${c.name}〉 ${pretty(Symbol(sym))}"
-        case PartialDesc(hasExact, possible) => s"inst〈${sep(if (hasExact) s"☐${c.name}" else "", ",", possible.map(_.name).mkString(", "))}〉 ${pretty(Symbol(sym))}"
+        case ExactDesc => s"${pretty(loc)} : ${c.name}"
+        case AbstractDesc => s"inst${c.name}〉${pretty(loc)}"
+        case PartialDesc(hasExact, possible) => s"inst〈${sep(if (hasExact) s"☐${c.name}" else "", ",", possible.map(_.name).mkString(", "))}〉 ${pretty(loc)}"
       }
       sep(prettytyp, "★",
-        sep(s"${children.map(p => pretty(sym, p._1, "◆↣", p._2)).mkString(" ★ ")}", "★",
-          s"${refs.map(p => pretty(sym, p._1, "↝", p._2)).mkString(" ★ ")}"))
+        sep(s"${children.map{ case (f, e) => pretty(loc, f, "◆↣", e) }.mkString(" ★ ")}", "★",
+          s"${refs.map{ case (f, e) => pretty(loc, f, "↝", e) }.mkString(" ★ ")}"))
     }
   }
 
   def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =
     s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
 
+  def pretty(loc: Loc): String = s"⟪${loc.id}⟫"
+
   def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String =
     spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
 
-  def pretty[T <: ASTType](v : Vars, f : Fields, sep : String, e : SetExpr[T]): String =
-    s"$v.$f $sep ${pretty(e)}"
+  def pretty[T <: ASTType](loc : Loc, f : Fields, sep : String, e : SetExpr[T]): String =
+    s"${pretty(loc)}.$f $sep ${pretty(e)}"
 
-  def pretty(qspatial : QSpatial): String =
-    s"inst⟨${qspatial.c.name}⟩ ${pretty(qspatial.e)}"
+  def pretty(crd: Cardinality): String = crd match {
+    case Single => ""
+    case Many => "*"
+    case Opt => "?"
+  }
+
+  def pretty(ownership: SOwnership): String = ownership match {
+    case SUnowned => "-"
+    case SRef => "↝"
+    case SOwned(l, f) => s"◆${pretty(l)}.$f"
+  }
+
+  def pretty(ssymdesc: SSymbolDesc): String = s"(${ssymdesc.cl.name}${pretty(ssymdesc.crd)}, ${pretty(ssymdesc.ownership)})"
+
+  def pretty(ssvltion: SetSymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit): String =
+    s"[${ssvltion.map {case (ssym, ssymdesc) => s"${pretty(ssym)} ↦ ${pretty(ssymdesc)}"}.mkString(", ")}]"
+
+  def pretty(ownership: Ownership): String = ownership match {
+    case NewlyCreated => "new"
+    case Unowned => "-"
+    case UnknownOwner => "¿"
+    case Owned(l, f) => s"◆${pretty(l)}.$f"
+  }
+
+  def pretty(symdesc: SymbolDesc): String = symdesc match {
+    case Loced(l) => pretty(l)
+    case UnknownLoc(cl, ownership) => s"(${cl.name}, ${pretty(ownership)})"
+  }
+
+  def pretty(ssvltion: SymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit): String =
+    s"[${ssvltion.map {case (sym, symdesc) => s"${pretty(sym)} ↦ ${pretty(symdesc)}"}.mkString(", ")}]"
+
+  def pretty(locOwnership: LocOwnership)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit, d4:DummyImplicit): String =
+    s"[${locOwnership.map {case (loc, ownership) => s"${pretty(loc)} ↦ ${pretty(ownership)}"}.mkString(", ")}]"
 
   def pretty(heap : SHeap): String =
-    sep(sep(s"${pretty(heap.spatial)}", "★",
-      s"${heap.qspatial.map(pretty).mkString(" ★ ")}"), "∧", s"(${pretty(heap.pure)})")
+    sep(sep(sep(sep(pretty(heap.ssvltion) , ";", pretty(heap.svltion)), ";", pretty(heap.locOwnership)), ";", s"${pretty(heap.currentSpatial)}"), "∧", s"(${pretty(heap.pure)})")
 
   def pretty(mem : SMem): String =
     sep(s"${pretty(mem.stack)}", ";", s"${pretty(mem.heap)}")

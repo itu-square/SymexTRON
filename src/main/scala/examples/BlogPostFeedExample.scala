@@ -8,11 +8,10 @@ import syntax.ast.Statement._
   * Created by asal on 15/01/2016.
   */
 trait BlogPostFeedExample extends Example {
-  override val pres: Set[SMem] = Set(SMem(Map("post" -> SetLit(Symbol(-1))),
-                                            SHeap(Map(-1 -> SpatialDesc(Class("Post"),
-                                                                        PartialDesc(false, Set(Class("SinglePost"), Class("AggregatePost"))),
-                                                                        Map(), Map())),
-                                              Set(), Set())))
+  override val pres: Set[SMem] = Set(
+    SMem(Map("post" -> SetLit(Symbol(-1))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned)), Map(), Map(), Set()))
+  )
+
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       new ClassDefinition("Title", Map(), Map("value" -> (Class("String"), Single)))
     , new ClassDefinition("CapitalisedTitle", Map(), Map(), Some(Class("Title")))

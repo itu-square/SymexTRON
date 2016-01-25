@@ -6,7 +6,6 @@ object Shared {
   val stdClassDefs = Set(
     new ClassDefinition("String", Map(), Map()),
     new ClassDefinition("Int", Map(), Map()),
-    new ClassDefinition("Any", Map(), Map()),
-    new ClassDefinition("Nothing", Map(), Map())
+    new ClassDefinition("Any", Map(), Map())
   )
 }

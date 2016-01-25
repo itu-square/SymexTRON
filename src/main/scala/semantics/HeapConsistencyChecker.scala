@@ -6,7 +6,7 @@ import scalaz.State, scalaz.syntax.applicative._
 import helper._
 
 class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
-  import smtlib.parser.Commands._
+  /*import smtlib.parser.Commands._
   import smtlib.parser.Terms._
   import smtlib.parser.CommandsResponses._
   import smtlib.theories.Core._
@@ -26,9 +26,10 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
   private val epilogue = List(CheckSat())
 
   private def makeScript(subscripts: List[Command]*) =
-    Script(prelogue ++ subscripts.fold(List())(_ ++ _) ++ epilogue)
+    Script(prelogue ++ subscripts.fold(List())(_ ++ _) ++ epilogue)*/
 
-  def isConsistent(heap : semantics.domains.SHeap): Boolean = {
+  // TODO: REALLY: Fix consistency check
+  def isConsistent(heap : semantics.domains.SHeap): Boolean = true /* {
     this.synchronized {
       var interpreter: ScriptInterpreter = null
       try {
@@ -38,8 +39,9 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
           Option(interpreter).map (_.free)
       }
     }
-  }
+  } */
 
+  /*
   def checkConstraintConsistency(interpreter : ScriptInterpreter, heap : semantics.domains.SHeap): Boolean = {
     val syms = heap.symbols
     val symsmap = syms.map(_.fold(
@@ -149,4 +151,5 @@ class HeapConsistencyChecker(defs: Map[Class, ClassDefinition]) {
     })
     bs.reverse
    }
+   */
 }

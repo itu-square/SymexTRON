@@ -16,6 +16,11 @@ package object helper {
   type StringE[B] = String \/ B
   type TProcess[A] = Process[Task, A]
 
+  implicit class RichMap[K, V](m : Map[K, V]) {
+    def mapValuesWithKeys[V2](f : (K, V) => V2): Map[K, V2] =
+      m map { case (k, v) => (k, f(k, v)) }
+  }
+
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
     def adjust[B1 >: Set[V]](key: K)(f : B1 => B1) = m updated (key, f (m getOrElse(key, Set())))
     def merge: Option[Map[K, V]] = m.foldLeft(Option(Map[K,V]())){

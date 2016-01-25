@@ -22,6 +22,26 @@ package object ast {
 
     // Consolidate supertypes and subtypes fields
 
+    def maxClass(c: Class, c2: Class): Option[Class] = {
+      if (subtypesOrSelf(c).contains(c2)) c.some
+      else if (subtypesOrSelf(c2).contains(c)) c2.some
+      else none
+    }
+
+    def minClass(c: Class, c2: Class): Option[Class] = {
+      if (subtypesOrSelf(c).contains(c2)) c2.some
+      else if (subtypesOrSelf(c2).contains(c)) c.some
+      else none
+    }
+
+    def lub(c: Class, c2: Class): Class = {
+      maxClass(c, c2).cata(identity,
+        (supertypes(c) intersect supertypes(c2)).foldLeft(none[Class])({ (st, c) =>
+          st.cata(c2 => minClass(c, c2), c.some)
+        }).cata(identity, impossible)
+      )
+    }
+
     def childrenOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.children).toMap
 
     def refsOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.refs).toMap
@@ -32,14 +52,11 @@ package object ast {
     }
 
     def supertypes(c : Class): Set[Class] =
-     (if (c == Class("Nothing")) defs.keys.toSet
-     else defs(c).superclass.toSet.|>(s =>
-      s ++ s.flatMap(supertypes)
-    )) + Class("Any")
+     defs(c).superclass.toSet.|>(s => s ++ s.flatMap(supertypes)) + Class("Any")
 
     val directSubtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
       defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
-        cd.superclass.cata(sup => m.adjust(sup)(_ + Class(cd.name) + Class("Nothing")), m)
+        cd.superclass.cata(sup => m.adjust(sup)(_ + Class(cd.name)), m)
       )
     } + (Class("Any") -> defs.values.toSet.filter(c => c.name != "Any" && c.superclass.isEmpty).map(c => Class(c.name)))
 
@@ -57,7 +74,7 @@ package object ast {
                                 .flatMap(_.children.values.map(_._1).toSet)
                                 .flatMap(sts)
       m + (c -> childfieldtypes)
-    }.trans ++ Map[Class, Set[Class]](Class("Any") -> Set(), Class("Nothing") -> Set())
+    }.trans ++ Map[Class, Set[Class]](Class("Any") -> Set())
 
     def canContain(c1 : Class, c2 : Class): Boolean = {
       val cts = containing
