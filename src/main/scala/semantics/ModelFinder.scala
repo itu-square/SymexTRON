@@ -252,6 +252,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def partitionSet(ees: Set[Symbol], cl: Class): Process[Task, String \/ (Set[Symbol], SHeap)] = ???
 
+  def simplify(e : SetExpr[IsSymbolic.type], heap:SHeap): (SetExpr[IsSymbolic.type], SHeap) = e match {
+    case Union(e1, e2) =>
+      val (es1, nheap) = simplify(e1, heap)
+      val (es2, nnheap) = simplify(e2, nheap)
+      (es1, es2) match {
+        case (_:SetSymbol, _:SetSymbol) =>
+      }
+    case Diff(e1, e2) => ???
+    case ISect(e1, e2) => ???
+    case _ => (e, heap)
+  }
+
   def findSet(e : SetExpr[IsSymbolic.type], heap: SHeap, setBound: Int, targetClass : Option[Class] = none):
       Process[Task, String \/ (Set[Symbol], SHeap)] =
           if (targetClass.cata(cl =>
@@ -274,32 +286,52 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                 case (_, y: SetSymbol)           => ???
                 case _                           => ???
               }
-              case Diff(e1, e2) => (e1, e2) match {
-                case (x:SetSymbol, y: SetSymbol) => ???
-                case (x:SetSymbol,  _)           => ???
-                case (_, y: SetSymbol)           => ???
-                case _                           =>
-                  for {
-                    e1r <- findSet(e1, heap, setBound, targetClass)
-                    e12syms <- e1r traverseU { case (e1syms, nheap) =>
-                      findSet(e2, nheap, setBound, targetClass) map (_.map { case (e2syms, nnheap) => (e1syms, e2syms, nnheap) })
-                    } map (_.join)
-                    res <- e12syms traverseU { case (e1syms, e2syms, nnheap) =>
-                       for {
-                         skirmishr <- symSkirmish(e1syms, e2syms, nnheap)
-                         (diffsym, samesym, nnnheap) = skirmishr
-                       } yield (samesym, nnnheap)
-                    }
-                  } yield res
-              }
+              case Diff(e1, e2) =>
+                (e1, e2) match {
+                  case (_:SetSymbol, _: SetSymbol) => ???
+                  case (_:SetSymbol,  _) => ???
+                  case (_, _:SetSymbol) => ???
+                  case _ =>
+                    for {
+                      e1r <- findSet(e1, heap, setBound, targetClass)
+                      e12syms <- e1r traverseU { case (e1syms, nheap) =>
+                        findSet(e2, nheap, setBound, targetClass) map (_.map { case (e2syms, nnheap) => (e1syms, e2syms, nnheap) })
+                      } map (_.join)
+                      res <- e12syms traverseU { case (e1syms, e2syms, nnheap) =>
+                        for {
+                          skirmishr <- symSkirmish(e1syms, e2syms, nnheap)
+                          (diffsym, samesym, nnnheap) = skirmishr
+                        } yield (samesym, nnnheap)
+                      }
+                    } yield res
+                }
               case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, heap)
             }
           }
 
-  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): (Set[Symbol], SHeap) = ???
+  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): (Set[Symbol], SHeap) = {
+    val obvsame = syms1.intersect(syms2)
+    val nsyms1 = syms1 diff obvsame
+    val nsyms2 = syms2 diff obvsame
+    val restsame = nsyms1 map { s1 =>
+      nsyms2 collectFirst {
+        // TODO: Represent a better way of getting these constraints
+       case s2 if heap.pure.contains(Eq(SetLit(s1), SetLit(s2))) || heap.pure.contains(Eq(SetLit(s2), SetLit(s1))) =>
+         (s1, s2)
+      }
+    } filter (_.nonEmpty) map (_.get)
+    (obvsame ++ restsame.map(_._2), heap.subst_all(restsame.toMap))
+  }
 
-  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Set[Symbol] = ???
+  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Set[Symbol] = {
+    def diff(syms1:Set[Symbol], syms2:Set[Symbol]): Set[Symbol] =
+      syms1.filter(s1 => syms1.forall(s2 =>
+        heap.pure.contains(Not(Eq(SetLit(s1), SetLit(s2)))) || heap.pure.contains(Not(Eq(SetLit(s2), SetLit(s1))))
+      ))
+    diff(syms1, syms2) ++ diff(syms2, syms1)
+  }
 
+  // This seems like a bad idea, maybe query the solver instead?
   def symSkirmish(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Process[Task, (Set[Symbol], Set[Symbol], SHeap)] = {
     val (samesyms, uheap) = symSame(syms1, syms2, heap)
     val (nsyms1, nsyms2) = (syms1 -- samesyms, syms2 -- samesyms)
