@@ -197,6 +197,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
       (Set(s), symbols.toSet, formula, s, th).right[String]
+    case Part(syms) => ??? // TODO Implement
     case Union(e1, e2) =>
       evalBinarySetExpr(e1, _ union _, e2, th)
     case Diff(e1, e2) =>
@@ -263,7 +264,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     ees.foldLeft(Process((Set[Symbol](), heap))) { (p, sym) =>
       for {
-        (ss, nheap) <- p
+        ssnheap <- p
+        (ss, nheap) = ssnheap
         res <- {
           val symsvltion = nheap.svltion(sym)
           val symc = symsvltion match {
@@ -329,6 +331,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
               case SetLit(es@_*) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
                 targetClass.cata(cl => partitionSet(ees, cl, heap).map(_.right), Process((ees, heap).right))
+              case Part(syms) => ???
               case Union(e1, e2) => (e1, e2) match {
                 case (x:SetSymbol, y: SetSymbol) => ???
                 case (x:SetSymbol,  _)           => ???

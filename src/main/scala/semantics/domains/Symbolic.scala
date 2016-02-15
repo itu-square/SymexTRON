@@ -17,6 +17,7 @@ trait SymbolicOps {
         case Union(e1, e2) => symbols(e1) ++ symbols(e2)
         case Diff(e1, e2) => symbols(e1) ++ symbols(e2)
         case ISect(e1, e2) => symbols(e1) ++ symbols(e2)
+        case Part(syms) => syms.map(_.left).toSet
         case e@SetSymbol(id) => Set(e.left)
       }
       symbols(e)
