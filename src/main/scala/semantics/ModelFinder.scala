@@ -250,17 +250,72 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }}.toSet
   } */
 
-  def partitionSet(ees: Set[Symbol], cl: Class): Process[Task, String \/ (Set[Symbol], SHeap)] = ???
+  def partitionSet(ees: Set[Symbol], targetCl: Class, heap: SHeap): Process[Task, (Set[Symbol], SHeap)] = {
+    def unfoldMore(nheap: SHeap, l: Loc, sdesc: SpatialDesc, supers: Set[Class]): SHeap = {
+      val (ssvltionc, newchildren) = unfoldFieldSet(l, defs.childrenOf(supers), owned = true)
+      val (ssvltionr, newrefs) = unfoldFieldSet(l, defs.refsOf(supers), owned = false)
+      val nnheap =
+        (_sh_currentSpatial.modify(
+          _.updated(l, (_sd_c.set(targetCl) andThen _sd_children.modify(_ ++ newchildren)
+            andThen _sd_desctype.set(AbstractDesc) andThen _sd_refs.modify(_ ++ newrefs)) (sdesc))) andThen
+          _sh_ssvltion.modify(_ ++ ssvltionc ++ ssvltionr)) (nheap)
+      nnheap
+    }
+    ees.foldLeft(Process((Set[Symbol](), heap))) { (p, sym) =>
+      for {
+        (ss, nheap) <- p
+        res <- {
+          val symsvltion = nheap.svltion(sym)
+          val symc = symsvltion match {
+            case Loced(l) => heap.currentSpatial(l).c
+            case UnknownLoc(ncl, ownership) => ncl
+          }
+          if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nheap))
+          else if (defs.subtypes(symc).contains(targetCl)) {
+            symsvltion match {
+              case Loced(l) =>
+                val sdesc = nheap.currentSpatial(l)
+                sdesc.desctype match {
+                  case ExactDesc => Process((ss, nheap))
+                  case AbstractDesc =>
+                    val supers = defs.supertypes(targetCl) diff defs.supertypes(symc)
+                    val nnheap: SHeap = unfoldMore(nheap, l, sdesc, supers)
+                    Process((ss, nheap), (ss + sym, nnheap))
+                  case PartialDesc(hasExact, possible) =>
+                    val possibleSupers = possible.intersect(defs.supertypes(symc))
+                    Process((ss, nheap)) ++ (for {
+                      psuper <- Process.emitAll(possibleSupers.toSeq)
+                      unfolded = {
+                        val supers = defs.supertypes(targetCl) diff (defs.supertypes(psuper) + psuper)
+                        val nnheap = unfoldMore(nheap, l, sdesc, supers)
+                        (ss + sym, nnheap)
+                      }
+                    } yield unfolded)
+                }
+              case UnknownLoc(ncl, ownership) =>
+                Process((ss, nheap), (ss + sym, _sh_svltion.modify(_.updated(sym, UnknownLoc(targetCl, ownership)))(nheap)))
+            }
+          }
+          else Process((ss, nheap))
+        }
+      } yield res
+    }
+  }
 
+  // TODO actually implement optimization
   def simplify(e : SetExpr[IsSymbolic.type], heap:SHeap): (SetExpr[IsSymbolic.type], SHeap) = e match {
     case Union(e1, e2) =>
       val (es1, nheap) = simplify(e1, heap)
       val (es2, nnheap) = simplify(e2, nheap)
-      (es1, es2) match {
-        case (_:SetSymbol, _:SetSymbol) =>
-      }
-    case Diff(e1, e2) => ???
-    case ISect(e1, e2) => ???
+      (Union(es1, es2), nnheap)
+    case Diff(e1, e2) =>
+      val (es1, nheap) = simplify(e1, heap)
+      val (es2, nnheap) = simplify(e2, nheap)
+      (Diff(es1, es2), nnheap)
+    case ISect(e1, e2) =>
+      val (es1, nheap) = simplify(e1, heap)
+      val (es2, nnheap) = simplify(e2,nheap)
+      (ISect(es1, es2), nnheap)
     case _ => (e, heap)
   }
 
@@ -273,7 +328,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             e match {
               case SetLit(es@_*) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
-                targetClass.cata(cl => partitionSet(ees, cl), Process((ees, heap).right))
+                targetClass.cata(cl => partitionSet(ees, cl, heap).map(_.right), Process((ees, heap).right))
               case Union(e1, e2) => (e1, e2) match {
                 case (x:SetSymbol, y: SetSymbol) => ???
                 case (x:SetSymbol,  _)           => ???
