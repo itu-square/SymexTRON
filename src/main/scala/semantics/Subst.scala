@@ -31,7 +31,7 @@ object Subst {
     override def toT = e0
 
     override def subst(x: Symbol, y: Symbol): SetExpr[IsSymbolic.type] = e0 match {
-      case SetLit(es@_*) => SetLit(es.map(_.subst(x,y)) :_*)
+      case SetLit(es) => SetLit(es.map(_.subst(x,y)))
       case Union(e1, e2) => Union(e1.subst(x, y), e2.subst(x, y))
       case Diff(e1, e2) => Diff(e1.subst(x, y), e2.subst(x, y))
       case ISect(e1, e2) => ISect(e1.subst(x, y), e2.subst(x, y))
@@ -41,7 +41,7 @@ object Subst {
 
     override def subst(x: SetSymbol, e: SetExpr[IsSymbolic.type]): SetExpr[IsSymbolic.type] = e0 match {
       case `x` => e
-      case SetLit(es@_*) => SetLit(es :_*)
+      case SetLit(es) => SetLit(es)
       case Union(e1, e2) => Union(e1.subst(x, e), e2.subst(x, e))
       case Diff(e1, e2) => Diff(e1.subst(x, e), e2.subst(x, e))
       case ISect(e1, e2) => ISect(e1.subst(x, e), e2.subst(x, e))

@@ -18,24 +18,24 @@ object ContactBookExample extends Example {
   , new ClassDefinition("Invited", Map("name" -> (Class("String"), Single)), Map())
   )
   override val pres: Set[SMem] = Set(
-    SMem(Map("contactbook" -> SetLit(Symbol(-1))),
+    SMem(Map("contactbook" -> SetLit(Seq(Symbol(-1)))),
          SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned)), Map(), Map(), Set()))
   )
 
   override val prog: Statement = stmtSeq(
-     assignVar("invitationlist", SetLit())
-   , `for`("person'", MatchStar(SetLit(Var("contactbook")), Class("Person")), stmtSeq(
-      assignVar("isadult", SetLit())
-    , loadField("person_age", SetLit(Var("person")), "age")
-    , loadField("person_name", SetLit(Var("person")), "name")
-    , `for`("age", Match(SetLit(Var("person_age")), Class("Adult")), stmtSeq(
+     assignVar("invitationlist", SetLit(Seq()))
+   , `for`("person'", MatchStar(SetLit(Seq(Var("contactbook"))), Class("Person")), stmtSeq(
+      assignVar("isadult", SetLit(Seq()))
+    , loadField("person_age", SetLit(Seq(Var("person"))), "age")
+    , loadField("person_name", SetLit(Seq(Var("person"))), "name")
+    , `for`("age", Match(SetLit(Seq(Var("person_age"))), Class("Adult")), stmtSeq(
         `new`("isadult", Class("Any"))
       ))
-    , `if`(Not(Eq(SetVar("isadult"), SetLit()))
+    , `if`(Not(Eq(SetVar("isadult"), SetLit(Seq())))
         , stmtSeq(
             `new`("invited", Class("Invited"))
-          , assignField(SetLit(Var("invited")), "name", SetLit(Var("person_name")))
-          , assignVar("invitationlist", Union(SetVar("invitationlist"), SetLit(Var("invited")))))
+          , assignField(SetLit(Seq(Var("invited"))), "name", SetLit(Seq(Var("person_name"))))
+          , assignVar("invitationlist", Union(SetVar("invitationlist"), SetLit(Seq(Var("invited"))))))
         , stmtSeq())
     ))
   )

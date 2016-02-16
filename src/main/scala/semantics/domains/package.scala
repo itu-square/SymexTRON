@@ -20,7 +20,7 @@ package object domains extends SymbolicOps {
 
   def getSingletonSymbol(e : SetExpr[IsSymbolic.type]): String \/ Symbol = {
     e match {
-      case SetLit(sym@Symbol(symid)) => sym.right
+      case SetLit(Seq(sym@Symbol(symid))) => sym.right
       case _ => s"${PrettyPrinter.pretty(e)} is not a single symbol".left
     }
   }

@@ -9,7 +9,7 @@ import syntax.ast.Statement._
   */
 trait BlogPostFeedExample extends Example {
   override val pres: Set[SMem] = Set(
-    SMem(Map("post" -> SetLit(Symbol(-1))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned)), Map(), Map(), Set()))
+    SMem(Map("post" -> SetLit(Seq(Symbol(-1)))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned)), Map(), Map(), Set()))
   )
 
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
@@ -25,19 +25,19 @@ trait BlogPostFeedExample extends Example {
 
 object BlogPostFeedTimestampsExample extends BlogPostFeedExample {
   override val prog: Statement = stmtSeq(
-     assignVar("timestamps", SetLit())
-   , `for`("ts", MatchStar(SetLit(Var("post")), Class("Timestamp")), stmtSeq(
-        assignVar("timestamps", Union(SetVar("timestamps"), SetLit(Var("ts"))))
+     assignVar("timestamps", SetLit(Seq()))
+   , `for`("ts", MatchStar(SetLit(Seq(Var("post"))), Class("Timestamp")), stmtSeq(
+        assignVar("timestamps", Union(SetVar("timestamps"), SetLit(Seq(Var("ts")))))
     ))
   )
 }
 
 object BlogPostFeedCapitaliseTitlesExample extends BlogPostFeedExample {
-  override val prog: Statement = `for`("sp", MatchStar(SetLit(Var("post")), Class("SinglePost")), stmtSeq(
-      loadField("sp_title", SetLit(Var("sp")), "title")
-    , loadField("sp_title_value", SetLit(Var("sp_title")), "value")
+  override val prog: Statement = `for`("sp", MatchStar(SetLit(Seq(Var("post"))), Class("SinglePost")), stmtSeq(
+      loadField("sp_title", SetLit(Seq(Var("sp"))), "title")
+    , loadField("sp_title_value", SetLit(Seq(Var("sp_title"))), "value")
     , `new`("new_sp_title", Class("CapitalisedTitle"))
-    , assignField(SetLit(Var("new_sp_title")), "value", SetLit(Var("sp_title_value")))
-    , assignField(SetLit(Var("sp")), "title", SetLit(Var("new_sp_title")))
+    , assignField(SetLit(Seq(Var("new_sp_title"))), "value", SetLit(Seq(Var("sp_title_value"))))
+    , assignField(SetLit(Seq(Var("sp"))), "title", SetLit(Seq(Var("new_sp_title"))))
   ))
 }

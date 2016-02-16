@@ -41,21 +41,21 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       _stmtCoverageMap.put(uid, true)
     }
     s match {
-      case StmtSeq(_, ss @ _*) => {
+      case StmtSeq(_, ss) => {
         ss.toList.foldLeft[String \/ CMem](mem.right) {
           (memr, s) => memr flatMap { mem => executeStmt(mem, s) }
         }
       }
       case AssignVar(_, x, e) => {
-        (for {
+        for {
           os <- evalExpr(e, mem.stack)
-        } yield _cm_stack.modify(_.updated(x, os))(mem))
+        } yield _cm_stack.modify(_.updated(x, os))(mem)
       }
-      case LoadField(_, x, e, f) => (for {
+      case LoadField(_, x, e, f) => for {
         os <- evalExpr(e, mem.stack)
         o <- os.single.cata(_.right, s"Not a single object $os".left)
         os2 <- access(o, f, mem.heap)
-      } yield _cm_stack.modify(_.updated(x, os2))(mem))
+      } yield _cm_stack.modify(_.updated(x, os2))(mem)
       case New(_, x, c) => for {
         defc <- defs.get(c).cata(_.right, s"Unknown class $c".left)
         o = freshInstance
@@ -157,7 +157,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   }
 
   private def evalExpr(e: SetExpr[IsProgram.type], stack: CStack): String \/ Set[Instances] = e match {
-    case SetLit(es @ _*) => es.toSet.traverseU(e => evalBasicExpr(e, stack))
+    case SetLit(es) => es.toSet.traverseU(e => evalBasicExpr(e, stack))
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)

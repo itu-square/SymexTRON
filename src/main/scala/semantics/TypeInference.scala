@@ -12,7 +12,7 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
 
 
   def inferSetType(ee : SetExpr[IsSymbolic.type], heap: SHeap): Option[Class] = ee match {
-    case SetLit(es@_*) => es match {
+    case SetLit(es) => es match {
       case Seq() => none
       case (sym:Symbol) +: es => inferSetLitType(sym, es, heap).some
     }

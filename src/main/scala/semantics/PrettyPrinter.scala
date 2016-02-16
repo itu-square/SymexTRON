@@ -30,7 +30,7 @@ object PrettyPrinter {
     e match {
       case SetSymbol(ident) => s"${prettySymb(ident).toUpperCase}"
       case SetVar(name) => name
-      case SetLit(es @ _*) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
+      case SetLit(es) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
       case Part(syms) => if (syms.length <= 0) "∅" else s"{${syms.map(sym => pretty(sym : SetExpr[IsSymbolic.type])).mkString(" ⊎ ")}}"
       case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
       case Diff(e1, e2) => s"(${pretty(e1)} ∖ ${pretty(e2)})"

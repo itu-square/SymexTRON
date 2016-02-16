@@ -93,7 +93,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     pres.flatMap[Task, String \/  SMem] { case (pre: SMem) =>
       if (!heapConsistencyChecker.isConsistent(pre.heap)) Process(s"Inconsistent memory ${PrettyPrinter.pretty(pre.heap)}".left)
       else c match {
-        case StmtSeq(_,ss@_*) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre.right)) { (pmem, s) =>
+        case StmtSeq(_,ss) => ss.toList.foldLeft[Process[Task, String \/ SMem]](Process(pre.right)) { (pmem, s) =>
           for {
             memr <- pmem
             res <- memr.traverse[TProcess, String, String \/ SMem](mem => executeHelper(Process(mem), s)).map(_.join)
@@ -109,8 +109,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           xsym = freshSym
           loc = freshLoc
           alloced =
-              loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit()), cdef.refs.mapValues(_ => SetLit()))
-        } yield (_sm_stack.modify(_ + (x -> SetLit(Symbol(xsym)))) andThen
+              loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit(Seq())), cdef.refs.mapValues(_ => SetLit(Seq())))
+        } yield (_sm_stack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
                 (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
                 (_sm_heap ^|-> _sh_locOwnership).modify(_ + (loc -> NewlyCreated)) andThen
                 (_sm_heap ^|-> _sh_currentSpatial).modify(_ + alloced))(pre))
@@ -156,7 +156,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                   for {
                     memr <- pmem
                     res <- memr traverseU { mem =>
-                      val nmem = _sm_stack.modify(_ + (x -> SetLit(sym)))
+                      val nmem = _sm_stack.modify(_ + (x -> SetLit(Seq(sym))))
                       executeHelper(Process(mem), sb)
                     } map (_.join)
                   } yield res
@@ -196,17 +196,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def evalBasicExpr(s: SStack, e: BasicExpr[IsProgram.type]): String \/ BasicExpr[IsSymbolic.type] = e match {
     case Var(name) =>
       s.get(name).cata({
-            case SetLit(evalue) => evalue.right
+            case SetLit(Seq(evalue)) => evalue.right
             case ee => s"Not a basic expression: $ee".left
         }, s"Error while evaluating expression $e".left)
   }
 
   def evalExpr(s : SStack, e : SetExpr[IsProgram.type]) : String \/ SetExpr[IsSymbolic.type] = {
       e match {
-        case SetLit(es @ _*) =>
+        case SetLit(es) =>
           for {
             ees <- es.toList.traverseU(e => evalBasicExpr(s, e))
-          } yield SetLit(ees : _*)
+          } yield SetLit(ees)
         case SetVar(name) =>
           s.get(name).cata(_.right, s"Error while evaluating expression $e".left)
         case Diff(e1, e2) => for {

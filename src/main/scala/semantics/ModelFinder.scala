@@ -180,7 +180,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
-    case SetLit(es@_*) =>
+    case SetLit(es) =>
       val s = freshSet
       val formula = {
         val ss = Variable.unary("ss")
@@ -231,7 +231,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def relevantConstraints(e: SetExpr[IsSymbolic.type], p: Prop): (Prop, Prop) = {
     val (disj, norm) = p partition {
-      case Eq(ISect(_,_), SetLit()) => true
+      case Eq(ISect(_,_), SetLit(Seq())) => true
       case _ => false
     }
     def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
@@ -337,7 +337,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             }
             val (eSimp, heapSimp) = simplify(e, heap)
             eSimp match {
-              case SetLit(es@_*) =>
+              case SetLit(es) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
                 targetClass.cata(cl => partitionSet(ees, cl, heapSimp).map(_.right), Process((ees, heapSimp).right))
               case Part(syms) => ???
@@ -358,7 +358,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val restsame = nsyms1 map { s1 =>
       nsyms2 collectFirst {
         // TODO: Represent a better way of getting these constraints
-       case s2 if heap.pure.contains(Eq(SetLit(s1), SetLit(s2))) || heap.pure.contains(Eq(SetLit(s2), SetLit(s1))) =>
+       case s2 if heap.pure.contains(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) || heap.pure.contains(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))) =>
          (s1, s2)
       }
     } filter (_.nonEmpty) map (_.get)
@@ -368,7 +368,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Set[Symbol] = {
     def diff(syms1:Set[Symbol], syms2:Set[Symbol]): Set[Symbol] =
       syms1.filter(s1 => syms1.forall(s2 =>
-        heap.pure.contains(Not(Eq(SetLit(s1), SetLit(s2)))) || heap.pure.contains(Not(Eq(SetLit(s2), SetLit(s1))))
+        heap.pure.contains(Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2))))) || heap.pure.contains(Not(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))))
       ))
     diff(syms1, syms2) ++ diff(syms2, syms1)
   }
@@ -384,7 +384,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       Process.emitAll((nnsyms1 pairings nnsyms2 map { case (eqs, uneqs) =>
         val diff = uneqs.flatMap { case (s1, s2) => Set(s1, s2) }
         val same = eqs.map(_._1)
-        val nheap = _sh_pure.modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(s1), SetLit(s2))) })(heap.subst_all(eqs.map(_.swap).toMap))
+        val nheap = _sh_pure.modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) })(heap.subst_all(eqs.map(_.swap).toMap))
         (same, diff, nheap)
       }).toSeq)
     }
@@ -416,7 +416,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     } filter (_.nonEmpty) map (_.get))
     for {
       posVal <- posVals
-      vl = SetLit(posVal.keys.toSeq: _*)
+      vl = SetLit(posVal.keys.toSeq)
       nheap = _sh_svltion.modify(_ ++ posVal)(heap.subst(ssym, vl))
     } yield (posVal.keySet, nheap).right
   }

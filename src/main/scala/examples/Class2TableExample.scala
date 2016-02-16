@@ -20,21 +20,21 @@ object Class2TableExample extends Example {
   override val classDefs = Shared.stdClassDefs ++ sourceClassDefs ++ targetClassDefs
 
   override val pres = Set(
-    SMem(Map("class" -> SetLit(Symbol(-1))),
+    SMem(Map("class" -> SetLit(Seq(Symbol(-1)))),
              SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), SUnowned)), Map(), Map(), Set()))
   )
 
   override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),
-    assignField(SetLit(Var("table")), "id", SetLit(Var("idcol"))),
-    assignField(SetLit(Var("table")), "columns", SetLit(Var("idcol"))),
-    `for`("attr", MatchStar(SetLit(Var("class")), Class("Attribute")), stmtSeq(
+    assignField(SetLit(Seq(Var("table"))), "id", SetLit(Seq(Var("idcol")))),
+    assignField(SetLit(Seq(Var("table"))), "columns", SetLit(Seq(Var("idcol")))),
+    `for`("attr", MatchStar(SetLit(Seq(Var("class"))), Class("Attribute")), stmtSeq(
       `new`("col", Class("DataColumn")),
-      loadField("attrtype", SetLit(Var("attr")), "type"),
-      assignField(SetLit(Var("col")), "type", SetLit(Var("attrtype"))),
-      loadField("tablecolumns", SetLit(Var("table")), "columns"),
-      assignField(SetLit(Var("table")), "columns", Union(SetVar("tablecolumns"), SetLit(Var("col"))))
+      loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
+      assignField(SetLit(Seq(Var("col"))), "type", SetLit(Seq(Var("attrtype")))),
+      loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
+      assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
     ))
   )
 

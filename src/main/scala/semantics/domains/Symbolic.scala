@@ -13,7 +13,7 @@ trait SymbolicOps {
   implicit class SymbolicSetExpr(e: SetExpr[IsSymbolic.type]) extends Symbolic {
     override val symbols = {
       def symbols(e: SetExpr[IsSymbolic.type]): Set[SetSymbol \/ Symbol] = e match {
-        case SetLit(es@_*) => es.collect{ case x: Symbol => x.right }.toSet
+        case SetLit(es) => es.collect{ case x: Symbol => x.right }.toSet
         case Union(e1, e2) => symbols(e1) ++ symbols(e2)
         case Diff(e1, e2) => symbols(e1) ++ symbols(e2)
         case ISect(e1, e2) => symbols(e1) ++ symbols(e2)
@@ -28,7 +28,7 @@ trait SymbolicOps {
     override val symbols = {
       def symbols(b: BoolExpr[IsSymbolic.type]): Set[SetSymbol \/ Symbol] = b match {
         case Eq(e1, e2) => e1.symbols ++ e2.symbols
-        case SetMem(e1, e2) => SetLit(e1).symbols ++ e2.symbols
+        case SetMem(e1, e2) => SetLit(Seq(e1)).symbols ++ e2.symbols
         case SetSubEq(e1, e2) => e1.symbols ++ e2.symbols
         case True() => Set()
         case And(p1, p2) => symbols(p1) ++ symbols(p2)

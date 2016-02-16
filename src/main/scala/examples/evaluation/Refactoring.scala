@@ -19,8 +19,8 @@ object Refactoring {
         val classNameId      = -8
         val classSuperId     = -9
 
-        val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
-                             "old_field" -> SetLit(Symbol(oldFieldId)), "new_field" -> SetLit(Symbol(newFieldId)))
+        val inputStack = Map("package" -> SetLit(Seq(Symbol(packageId))), "class" -> SetLit(Seq(Symbol(classId))),
+                             "old_field" -> SetLit(Seq(Symbol(oldFieldId))), "new_field" -> SetLit(Seq(Symbol(newFieldId))))
         val inputHeap = SHeap.initial(
           Map(   SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
                , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
@@ -32,14 +32,14 @@ object Refactoring {
               Symbol(newFieldId) -> UnknownLoc(Class("Field"), SUnowned),
               Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned))
           , Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes"))
-          , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))), Map()),
-                Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))),
+          , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map()),
+                Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))),
                                                                                 "methods" -> SetSymbol(classMethodsId))
                                                                           , Map("name" -> SetSymbol(classNameId),
                                                                                 "super" -> SetSymbol(classSuperId))))
              , Set(
-                   Eq(SetLit(), ISect(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
-                   Eq(SetLit(), ISect(SetSymbol(classFieldsId), SetLit(Symbol(oldFieldId))))
+                   Eq(SetLit(Seq()), ISect(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))),
+                   Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))))
                  )
         )
         SMem(inputStack, inputHeap)
@@ -47,18 +47,18 @@ object Refactoring {
 
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
   val renameFieldAst: Statement = stmtSeq(
-    loadField("class_fields", SetLit(Var("class")), "fields")
-  , assignField(SetLit(Var("class")), "fields", Union(Diff(SetVar("class_fields"), SetLit(Var("old_field"))), SetLit(Var("new_field"))))
-  , `for`("faexpr", MatchStar(SetLit(Var("package")), Class("FieldAccessExpr")), stmtSeq(
-            loadField("faexpr_field_name", SetLit(Var("faexpr")), "field_name")
-          , loadField("old_field_name", SetLit(Var("old_field")), "name")
-          , loadField("faexpr_target", SetLit(Var("faexpr")), "target")
-          , loadField("faexpr_target_type", SetLit(Var("faexpr_target")), "type")
-          , `if`(And(Eq(SetLit(Var("faexpr_field_name")), SetLit(Var("old_field_name"))),
+    loadField("class_fields", SetLit(Seq(Var("class"))), "fields")
+  , assignField(SetLit(Seq(Var("class"))), "fields", Union(Diff(SetVar("class_fields"), SetLit(Seq(Var("old_field")))), SetLit(Seq(Var("new_field")))))
+  , `for`("faexpr", MatchStar(SetLit(Seq(Var("package"))), Class("FieldAccessExpr")), stmtSeq(
+            loadField("faexpr_field_name", SetLit(Seq(Var("faexpr"))), "field_name")
+          , loadField("old_field_name", SetLit(Seq(Var("old_field"))), "name")
+          , loadField("faexpr_target", SetLit(Seq(Var("faexpr"))), "target")
+          , loadField("faexpr_target_type", SetLit(Seq(Var("faexpr_target"))), "type")
+          , `if`(And(Eq(SetLit(Seq(Var("faexpr_field_name"))), SetLit(Seq(Var("old_field_name")))),
                    Eq(SetVar("class"), SetVar("faexpr_target_type")))
                  , stmtSeq(
-                       loadField("new_field_name", SetLit(Var("new_field")), "name")
-                     , assignField(SetLit(Var("faexpr")), "name", SetLit(Var("new_field_name"))))
+                       loadField("new_field_name", SetLit(Seq(Var("new_field"))), "name")
+                     , assignField(SetLit(Seq(Var("faexpr"))), "name", SetLit(Seq(Var("new_field_name")))))
                  , stmtSeq()
                )
       ))
@@ -75,8 +75,8 @@ object Refactoring {
         val classNameId      = -8
         val classSuperId     = -9
 
-        val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class" -> SetLit(Symbol(classId)),
-                             "old_method" -> SetLit(Symbol(oldMethodId)), "new_method" -> SetLit(Symbol(newMethodId)))
+        val inputStack = Map("package" -> SetLit(Seq(Symbol(packageId))), "class" -> SetLit(Seq(Symbol(classId))),
+                             "old_method" -> SetLit(Seq(Symbol(oldMethodId))), "new_method" -> SetLit(Seq(Symbol(newMethodId))))
         val inputHeap = SHeap.initial(
           Map(   SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
             , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
@@ -88,15 +88,15 @@ object Refactoring {
             Symbol(newMethodId) -> UnknownLoc(Class("Method"), SUnowned),
             Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
           Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes")),
-          Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Symbol(classId)))), Map()),
+          Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map()),
             Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
               , Map("fields" -> SetSymbol(classFieldsId),
-                    "methods" -> Union(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
+                    "methods" -> Union(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
               , Map("name" -> SetSymbol(classNameId),
                     "super" -> SetSymbol(classSuperId))))
           , Set(
-            Eq(SetLit(), ISect(SetSymbol(packageClassesId), SetLit(Symbol(classId)))),
-            Eq(SetLit(), ISect(SetSymbol(classMethodsId), SetLit(Symbol(oldMethodId))))
+            Eq(SetLit(Seq()), ISect(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))),
+            Eq(SetLit(Seq()), ISect(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
           )
         )
         SMem(inputStack, inputHeap)
@@ -105,35 +105,35 @@ object Refactoring {
   // Input:: package: Package, class: Class, old_method : Method, new_method : Method
   //Assumes overloading is allowed (but arity must be different), things are semantically checked, and that the transformation is applicable
   val renameMethodAst: Statement  = stmtSeq(
-     loadField("class_methods", SetLit(Var("class")), "methods")
-   , assignField(SetLit(Var("class")), "methods", Union(Diff(SetVar("class_methods"), SetLit(Var("old_method"))), SetLit(Var("new_method"))))
-   , `for`("mcexpr", MatchStar(SetLit(Var("package")), Class("MethodCallExpr")), stmtSeq(
-          loadField("mcexpr_method_name", SetLit(Var("mcexpr")), "method_name")
-        , loadField("old_method_name", SetLit(Var("old_method")), "name")
-        , loadField("old_method_params", SetLit(Var("old_method")), "params")
-        , loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
-        , loadField("mcexpr_target_type", SetLit(Var("mcexpr_target")), "type")
-        , loadField("mcexpr_args", SetLit(Var("mcexpr")), "args")
+     loadField("class_methods", SetLit(Seq(Var("class"))), "methods")
+   , assignField(SetLit(Seq(Var("class"))), "methods", Union(Diff(SetVar("class_methods"), SetLit(Seq(Var("old_method")))), SetLit(Seq(Var("new_method")))))
+   , `for`("mcexpr", MatchStar(SetLit(Seq(Var("package"))), Class("MethodCallExpr")), stmtSeq(
+          loadField("mcexpr_method_name", SetLit(Seq(Var("mcexpr"))), "method_name")
+        , loadField("old_method_name", SetLit(Seq(Var("old_method"))), "name")
+        , loadField("old_method_params", SetLit(Seq(Var("old_method"))), "params")
+        , loadField("mcexpr_target", SetLit(Seq(Var("mcexpr"))), "target")
+        , loadField("mcexpr_target_type", SetLit(Seq(Var("mcexpr_target"))), "type")
+        , loadField("mcexpr_args", SetLit(Seq(Var("mcexpr"))), "args")
         , `new`("paramsmatched", Class("Any"))
         , `for`("omp", MSet(SetVar("old_method_params")), stmtSeq(
-              assignVar("parammatched", SetLit())
-            , loadField("omp_name", SetLit(Var("omp")), "name")
+              assignVar("parammatched", SetLit(Seq()))
+            , loadField("omp_name", SetLit(Seq(Var("omp"))), "name")
             , `for`("mcea", MSet(SetVar("mcexpr_args")), stmtSeq(
-                 loadField("mcea_name", SetLit(Var("mcea")), "name"),
-                 `if`(Eq(SetLit(Var("omp_name")), SetLit(Var("mcea_name"))),
+                 loadField("mcea_name", SetLit(Seq(Var("mcea"))), "name"),
+                 `if`(Eq(SetLit(Seq(Var("omp_name"))), SetLit(Seq(Var("mcea_name")))),
                       assignVar("parammatched", SetVar("paramsmatched"))
                     , stmtSeq())
                ))
-            , `if`(Eq(SetVar("parammatched"), SetLit())
-                  , assignVar("paramsmatched", SetLit())
+            , `if`(Eq(SetVar("parammatched"), SetLit(Seq()))
+                  , assignVar("paramsmatched", SetLit(Seq()))
                   , stmtSeq())
           ))
-        , `if`(And(And(Eq(SetLit(Var("mcexpr_method_name")), SetLit(Var("old_method_name"))),
+        , `if`(And(And(Eq(SetLit(Seq(Var("mcexpr_method_name"))), SetLit(Seq(Var("old_method_name")))),
                 Eq(SetVar("class"), SetVar("mcexpr_target_type"))),
-                  or(And(Eq(SetVar("old_method_params"), SetLit()), Eq(SetVar("mcexpr_args"), SetLit())),
-                     Not(Eq(SetVar("paramsmatched"), SetLit()))))
-              , stmtSeq(loadField("new_method_name", SetLit(Var("new_method")), "name")
-                       , assignField(SetLit(Var("mcexpr")), "name", SetLit(Var("new_method_name"))))
+                  or(And(Eq(SetVar("old_method_params"), SetLit(Seq())), Eq(SetVar("mcexpr_args"), SetLit(Seq()))),
+                     Not(Eq(SetVar("paramsmatched"), SetLit(Seq())))))
+              , stmtSeq(loadField("new_method_name", SetLit(Seq(Var("new_method"))), "name")
+                       , assignField(SetLit(Seq(Var("mcexpr"))), "name", SetLit(Seq(Var("new_method_name")))))
               , stmtSeq()
               )
         ))
@@ -145,8 +145,8 @@ object Refactoring {
          val scnameId         = -4
          val packageClassesId = -5
 
-         val inputStack = Map("package" -> SetLit(Symbol(packageId)), "class1" -> SetLit(Symbol(class1Id)),
-                              "class2" -> SetLit(Symbol(class2Id)), "sc_name" -> SetLit(Symbol(scnameId)))
+         val inputStack = Map("package" -> SetLit(Seq(Symbol(packageId))), "class1" -> SetLit(Seq(Symbol(class1Id))),
+                              "class2" -> SetLit(Seq(Symbol(class2Id))), "sc_name" -> SetLit(Seq(Symbol(scnameId))))
          val inputHeap = SHeap.initial(
            Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))),
            Map(
@@ -155,7 +155,7 @@ object Refactoring {
              Symbol(class1Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes")),
              Symbol(class2Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes"))  ),
            Map(Loc(packageId) -> Unowned),
-           Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Symbol(class2Id))), SetLit(Symbol(class2Id)))), Map())),
+           Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map())),
            Set()
          )
          SMem(inputStack, inputHeap)
@@ -164,39 +164,39 @@ object Refactoring {
   // Input:: class1 : Class, class2 : Class, sc_name : String
   val extractSuperclassAst: Statement = stmtSeq(
       `new`("sclass", Class("Class"))
-    , loadField("package_classes", SetLit(Var("package")), "classes")
-    , assignField(SetLit(Var("package")), "classes", Union(SetVar("package_classes"), SetLit(Var("sclass"))))
-    , assignField(SetLit(Var("class1")), "super", SetLit(Var("sclass")))
-    , assignField(SetLit(Var("class2")), "super", SetLit(Var("sclass")))
-    , assignField(SetLit(Var("sclass")), "name", SetLit(Var("sc_name")))
+    , loadField("package_classes", SetLit(Seq(Var("package"))), "classes")
+    , assignField(SetLit(Seq(Var("package"))), "classes", Union(SetVar("package_classes"), SetLit(Seq(Var("sclass")))))
+    , assignField(SetLit(Seq(Var("class1"))), "super", SetLit(Seq(Var("sclass"))))
+    , assignField(SetLit(Seq(Var("class2"))), "super", SetLit(Seq(Var("sclass"))))
+    , assignField(SetLit(Seq(Var("sclass"))), "name", SetLit(Seq(Var("sc_name"))))
     // Pull up relevant fields
-    , assignVar("new_sclass_fields", SetLit())
-    , assignVar("rem_class1_fields", SetLit())
-    , assignVar("rem_class2_fields", SetLit())
-    , loadField("class1_fields", SetLit(Var("class1")), "fields")
-    , loadField("class2_fields", SetLit(Var("class2")), "fields")
+    , assignVar("new_sclass_fields", SetLit(Seq()))
+    , assignVar("rem_class1_fields", SetLit(Seq()))
+    , assignVar("rem_class2_fields", SetLit(Seq()))
+    , loadField("class1_fields", SetLit(Seq(Var("class1"))), "fields")
+    , loadField("class2_fields", SetLit(Seq(Var("class2"))), "fields")
     , `for`("c1f", MSet(SetVar("class1_fields")), stmtSeq(
             `for`("c2f", MSet(SetVar("class2_fields")), stmtSeq(
-                     loadField("c1f_name", SetLit(Var("c1f")), "name")
-                   , loadField("c2f_name", SetLit(Var("c2f")), "name")
-                   , loadField("c1f_type", SetLit(Var("c1f")), "type")
-                   , loadField("c2f_type", SetLit(Var("c2f")), "type")
-                   , `if`(And(Eq(SetLit(Var("c1f_name")), SetLit(Var("c2f_name"))),
-                             Eq(SetLit(Var("c2f_type")), SetLit(Var("c2f_type"))))
+                     loadField("c1f_name", SetLit(Seq(Var("c1f"))), "name")
+                   , loadField("c2f_name", SetLit(Seq(Var("c2f"))), "name")
+                   , loadField("c1f_type", SetLit(Seq(Var("c1f"))), "type")
+                   , loadField("c2f_type", SetLit(Seq(Var("c2f"))), "type")
+                   , `if`(And(Eq(SetLit(Seq(Var("c1f_name"))), SetLit(Seq(Var("c2f_name")))),
+                             Eq(SetLit(Seq(Var("c2f_type"))), SetLit(Seq(Var("c2f_type")))))
                          , stmtSeq(
                             `new`("scf", Class("Field"))
-                           , assignField(SetLit(Var("scf")), "name", SetLit(Var("c1f_name")))
-                           , assignField(SetLit(Var("scf")), "type", SetLit(Var("c1f_type")))
-                           , assignVar("new_sclass_fields", Union(SetVar("new_sclass_fields"), SetLit(Var("scf"))))
-                           , assignVar("rem_class1_fields", Union(SetVar("rem_class1_fields"), SetLit(Var("c1f"))))
-                           , assignVar("rem_class2_fields", Union(SetVar("rem_class2_fields"), SetLit(Var("c2f"))))
+                           , assignField(SetLit(Seq(Var("scf"))), "name", SetLit(Seq(Var("c1f_name"))))
+                           , assignField(SetLit(Seq(Var("scf"))), "type", SetLit(Seq(Var("c1f_type"))))
+                           , assignVar("new_sclass_fields", Union(SetVar("new_sclass_fields"), SetLit(Seq(Var("scf")))))
+                           , assignVar("rem_class1_fields", Union(SetVar("rem_class1_fields"), SetLit(Seq(Var("c1f")))))
+                           , assignVar("rem_class2_fields", Union(SetVar("rem_class2_fields"), SetLit(Seq(Var("c2f")))))
                           )
                          , stmtSeq())
                 ))
          ))
-   , assignField(SetLit(Var("class1")), "fields", Diff(SetVar("class1_fields"), SetVar("rem_class1_fields")))
-   , assignField(SetLit(Var("class2")), "fields", Diff(SetVar("class2_fields"), SetVar("rem_class2_fields")))
-   , assignField(SetLit(Var("sclass")), "fields", SetVar("new_sclass_fields"))
+   , assignField(SetLit(Seq(Var("class1"))), "fields", Diff(SetVar("class1_fields"), SetVar("rem_class1_fields")))
+   , assignField(SetLit(Seq(Var("class2"))), "fields", Diff(SetVar("class2_fields"), SetVar("rem_class2_fields")))
+   , assignField(SetLit(Seq(Var("sclass"))), "fields", SetVar("new_sclass_fields"))
   )
 
   val replaceDelegationWithInheritanceInput: SMem = {
@@ -207,8 +207,8 @@ object Refactoring {
         val classNameId      = -5
         val classSuperId     = -6
 
-        val inputStack = Map("class" -> SetLit(Symbol(classId)),
-                             "field" -> SetLit(Symbol(fieldId)))
+        val inputStack = Map("class" -> SetLit(Seq(Symbol(classId))),
+                             "field" -> SetLit(Seq(Symbol(fieldId))))
         val inputHeap = SHeap.initial(
           Map(SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields")),
               SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Many, SOwned(Loc(classId), "methods")),
@@ -218,9 +218,9 @@ object Refactoring {
               Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
           Map(Loc(classId) -> Unowned),
           Map(Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
-            , Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Symbol(fieldId)))
-              ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Symbol(classNameId)), "super" -> SetSymbol(classSuperId)))),
-          Set(Eq(SetLit(), ISect(SetSymbol(classFieldsId), SetLit(Symbol(fieldId)))))
+            , Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))
+              ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Seq(Symbol(classNameId))), "super" -> SetSymbol(classSuperId)))),
+          Set(Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))))
         )
         SMem(inputStack, inputHeap)
   }
@@ -228,44 +228,44 @@ object Refactoring {
   // Assumes that methods that have the same name as the delegate are delegated methods and that field is private
   // class: Class, field : Field
   val replaceDelegationWithInheritanceAst : Statement = stmtSeq(
-      loadField("class_fields", SetLit(Var("class")), "fields")
-    , loadField("field_type", SetLit(Var("field")), "type")
-    , assignField(SetLit(Var("class")), "super", SetLit(Var("field_type")))
+      loadField("class_fields", SetLit(Seq(Var("class"))), "fields")
+    , loadField("field_type", SetLit(Seq(Var("field"))), "type")
+    , assignField(SetLit(Seq(Var("class"))), "super", SetLit(Seq(Var("field_type"))))
     // Remove all delegated methods
-    , loadField("field_type_methods", SetLit(Var("field_type")), "methods")
-    , loadField("class_methods", SetLit(Var("class")), "methods")
-    , assignVar("class_new_methods", SetLit())
+    , loadField("field_type_methods", SetLit(Seq(Var("field_type"))), "methods")
+    , loadField("class_methods", SetLit(Seq(Var("class"))), "methods")
+    , assignVar("class_new_methods", SetLit(Seq()))
     , `for`("ftm", MSet(SetVar("field_type_methods")), stmtSeq(
         `for`("cm", MSet(SetVar("class_methods")), stmtSeq(
-              loadField("ftm_name", SetLit(Var("ftm")), "name")
-            , loadField("cm_name", SetLit(Var("cm")), "name")
-            , `if`(Not(Eq(SetLit(Var("ftm_name")), SetLit(Var("cm_name"))))
-                  , assignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Var("cm"))))
+              loadField("ftm_name", SetLit(Seq(Var("ftm"))), "name")
+            , loadField("cm_name", SetLit(Seq(Var("cm"))), "name")
+            , `if`(Not(Eq(SetLit(Seq(Var("ftm_name"))), SetLit(Seq(Var("cm_name")))))
+                  , assignVar("class_new_methods", Union(SetVar("class_new_methods"), SetLit(Seq(Var("cm")))))
                   , stmtSeq())
           ))
       ))
-    , assignField(SetLit(Var("class")), "methods", SetVar("class_new_methods"))
+    , assignField(SetLit(Seq(Var("class"))), "methods", SetVar("class_new_methods"))
     // Replace other delegations with calls to the object itself
-    , `for`("mcexpr", MatchStar(SetLit(Var("class")), Class("MethodCallExpr")), stmtSeq(
-          loadField("mcexpr_target", SetLit(Var("mcexpr")), "target")
-        , assignVar("MCEXPR_TARGET", SetLit())
-        , `for`("mcx", Match(SetLit(Var("mcexpr_target")), Class("FieldAccessExpr")),
-                  assignVar("MCEXPR_TARGET", SetLit(Var("mcx")))
+    , `for`("mcexpr", MatchStar(SetLit(Seq(Var("class"))), Class("MethodCallExpr")), stmtSeq(
+          loadField("mcexpr_target", SetLit(Seq(Var("mcexpr"))), "target")
+        , assignVar("MCEXPR_TARGET", SetLit(Seq()))
+        , `for`("mcx", Match(SetLit(Seq(Var("mcexpr_target"))), Class("FieldAccessExpr")),
+                  assignVar("MCEXPR_TARGET", SetLit(Seq(Var("mcx"))))
            )
-        , `if`(not(Eq(SetVar("MCEXPR_TARGET"), SetLit()))
+        , `if`(not(Eq(SetVar("MCEXPR_TARGET"), SetLit(Seq())))
               , stmtSeq(
-                  loadField("mcexpr_target_target", SetLit(Var("mcexpr_target")), "target")
-                , loadField("mcexpr_target_target_type", SetLit(Var("mcexpr_target_target")), "type")
-                , loadField("mcexpr_target_field_name", SetLit(Var("mcexpr_target")), "field_name")
-                , loadField("field_name", SetLit(Var("field")), "name")
-                , `if`(And(Eq(SetLit(Var("field_name")), SetLit(Var("mcexpr_target_field_name"))),
-                         Eq(SetLit(Var("class")), SetLit(Var("mcexpr_target_target_type"))))
-                      , assignField(SetLit(Var("mcexpr")), "target", SetLit(Var("mcexpr_target_target")))
+                  loadField("mcexpr_target_target", SetLit(Seq(Var("mcexpr_target"))), "target")
+                , loadField("mcexpr_target_target_type", SetLit(Seq(Var("mcexpr_target_target"))), "type")
+                , loadField("mcexpr_target_field_name", SetLit(Seq(Var("mcexpr_target"))), "field_name")
+                , loadField("field_name", SetLit(Seq(Var("field"))), "name")
+                , `if`(And(Eq(SetLit(Seq(Var("field_name"))), SetLit(Seq(Var("mcexpr_target_field_name")))),
+                         Eq(SetLit(Seq(Var("class"))), SetLit(Seq(Var("mcexpr_target_target_type")))))
+                      , assignField(SetLit(Seq(Var("mcexpr"))), "target", SetLit(Seq(Var("mcexpr_target_target"))))
                       , stmtSeq()))
                 , stmtSeq())
       ))
     // Remove the delegate field
-    , assignField(SetLit(Var("class")), "fields", Diff(SetVar("class_fields"), SetLit(Var("field"))))
+    , assignField(SetLit(Seq(Var("class"))), "fields", Diff(SetVar("class_fields"), SetLit(Seq(Var("field")))))
     )
 
     def executeRefactoring(name: String, initialMems: List[SMem], refactoring: Statement): Unit = {

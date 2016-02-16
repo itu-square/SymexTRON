@@ -1,13 +1,10 @@
 package syntax.ast
 
-import scala.language.higherKinds
-
 import helper.Counter
 import monocle.Lens
-import monocle.function.Field2._
 import monocle.macros.{GenLens, GenPrism}
-import monocle.std.tuple2._
 
+import scala.language.higherKinds
 import scalaz.{Node => _}
 
 case class Class(name: String)
@@ -31,9 +28,9 @@ case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic.type]
 case class Var(name: Vars) extends BasicExpr[IsProgram.type]
 
 sealed trait SetExpr[T <: ASTType]
-case class SetLit[T <: ASTType](es: BasicExpr[T]*) extends SetExpr[T]
+case class SetLit[T <: ASTType](es: Seq[BasicExpr[T]]) extends SetExpr[T]
 case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
-case class Part[T <: ASTType](parts: Seq[SetSymbol]*) extends SetExpr[IsSymbolic.type]
+case class Part[T <: ASTType](parts: Seq[SetSymbol]) extends SetExpr[IsSymbolic.type]
 case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class SetVar(name: Vars) extends SetExpr[IsProgram.type]
@@ -65,7 +62,7 @@ object MatchExpr {
 }
 
 sealed trait Statement
-case class StmtSeq(metaInf: Statement.MetaInf, ss : Statement*)
+case class StmtSeq(metaInf: Statement.MetaInf, ss : Seq[Statement])
   extends Statement
 case class AssignVar(metaInf: Statement.MetaInf, x : Vars, e : SetExpr[IsProgram.type])
   extends Statement
@@ -88,7 +85,7 @@ object Statement {
   case object NoMI extends MetaInf
 
   val _stmt_metaInf = Lens[Statement, MetaInf]({
-        case StmtSeq(minf, _*) => minf
+        case s: StmtSeq => s.metaInf
         case s: AssignVar => s.metaInf
         case s: LoadField => s.metaInf
         case s: New => s.metaInf
@@ -97,7 +94,7 @@ object Statement {
         case s: For => s.metaInf
         case s: Fix => s.metaInf
   })(nminf => {
-        case StmtSeq(_, ss@_*) => StmtSeq(nminf, ss:_*) // copy doesn't work on list arguments apparently
+        case s: StmtSeq => s.copy(metaInf = nminf)
         case s: AssignVar => s.copy(metaInf = nminf)
         case s: LoadField => s.copy(metaInf = nminf)
         case s: New => s.copy(metaInf = nminf)
@@ -110,7 +107,7 @@ object Statement {
   private val _stmt_mi = _stmt_metaInf composePrism GenPrism[MetaInf, MI]
   val _stmt_uid = _stmt_mi composeLens GenLens[MI](_.uid)
 
-  def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI, ss :_*)
+  def stmtSeq(ss : Statement*) : Statement = StmtSeq(NoMI, ss)
   def assignVar(x : Vars, e : SetExpr[IsProgram.type]) : Statement = AssignVar(NoMI, x, e)
   def loadField(x : Vars, e : SetExpr[IsProgram.type], f : Fields) : Statement = LoadField(NoMI, x, e, f)
   def `new`(x : Vars, c : Class) : Statement = New(NoMI, x, c)
@@ -124,7 +121,7 @@ object Statement {
     def annotateUidH(s : Statement) : Statement = {
       val sMInf = MI(counter.++)
       s match {
-        case StmtSeq(_, ss@_*) => StmtSeq(sMInf, ss.map(annotateUidH) :_*)
+        case StmtSeq(_, ss) => StmtSeq(sMInf, ss.map(annotateUidH))
         case AssignVar(_, x, e) => AssignVar(sMInf, x, e)
         case LoadField(_, x, e, f) => LoadField(sMInf, x, e, f)
         case New(_, x, c) => New(sMInf, x, c)
@@ -147,7 +144,7 @@ object Statement {
                                   branches(sb)
       case Fix(_, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)
-      case StmtSeq(_, ss@_*) => ss.map(branches _).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
+      case StmtSeq(_, ss) => ss.map(branches).fold(Map.empty[Integer, List[BranchPoint]])(_ ++ _)
       case _ => Map(uid -> List())
     }
   }
