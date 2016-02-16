@@ -19,7 +19,7 @@ object ContactBookExample extends Example {
   )
   override val pres: Set[SMem] = Set(
     SMem(Map("contactbook" -> SetLit(Seq(Symbol(-1)))),
-         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned)), Map(), Map(), Set()))
+         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned, Map())), Map(), Map(), Set()))
   )
 
   override val prog: Statement = stmtSeq(

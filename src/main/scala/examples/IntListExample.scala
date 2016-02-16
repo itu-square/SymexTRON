@@ -14,7 +14,7 @@ object IntListExample extends Example {
   )
   override val pres: Set[SMem] = Set(
     SMem(Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2)))),
-             SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned)), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned)), Map(), Map(), Set()))
+             SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Map())), Map(), Map(), Set()))
   )
 
   override val prog: Statement = stmtSeq(

@@ -109,7 +109,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           xsym = freshSym
           loc = freshLoc
           alloced =
-              loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit(Seq())), cdef.refs.mapValues(_ => SetLit(Seq())))
+              loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit(Seq())), cdef.refs.mapValues(_ => SetLit(Seq())), Map())
         } yield (_sm_stack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
                 (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
                 (_sm_heap ^|-> _sh_locOwnership).modify(_ + (loc -> NewlyCreated)) andThen

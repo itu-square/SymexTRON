@@ -21,7 +21,7 @@ object Class2TableExample extends Example {
 
   override val pres = Set(
     SMem(Map("class" -> SetLit(Seq(Symbol(-1)))),
-             SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), SUnowned)), Map(), Map(), Set()))
+             SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), SUnowned, Map())), Map(), Map(), Set()))
   )
 
   override val prog = stmtSeq(

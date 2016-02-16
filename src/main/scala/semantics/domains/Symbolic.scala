@@ -44,9 +44,10 @@ trait SymbolicOps {
 
   implicit class SymbolicSpatialDesc(sd : SpatialDesc) extends Symbolic {
     override val symbols: Set[SetSymbol \/ Symbol] = sd match {
-      case SpatialDesc(_, _, children, refs) =>
+      case SpatialDesc(_, _, children, refs, descendantpool) =>
         children.values.flatMap(_.symbols).toSet ++
-           refs.values.flatMap(_.symbols).toSet
+           refs.values.flatMap(_.symbols).toSet ++
+        descendantpool.values.flatMap(_.symbols)
     }
   }
 

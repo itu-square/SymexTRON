@@ -56,7 +56,7 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
   def inferSymbolType(s: Symbol, heap: SHeap): Class = {
     heap.svltion(s) match {
       case Loced(l) => heap.currentSpatial(l).c
-      case UnknownLoc(cl, ownership) => cl
+      case UnknownLoc(cl, ownership, descendantpool) => cl
     }
   }
 }

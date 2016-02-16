@@ -269,7 +269,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           val symsvltion = nheap.svltion(sym)
           val symc = symsvltion match {
             case Loced(l) => heap.currentSpatial(l).c
-            case UnknownLoc(ncl, ownership) => ncl
+            case UnknownLoc(ncl, ownership, descendantpool) => ncl
           }
           if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nheap))
           else if (defs.subtypes(symc).contains(targetCl)) {
@@ -293,8 +293,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                       }
                     } yield unfolded)
                 }
-              case UnknownLoc(ncl, ownership) =>
-                Process((ss, nheap), (ss + sym, _sh_svltion.modify(_.updated(sym, UnknownLoc(targetCl, ownership)))(nheap)))
+              case UnknownLoc(ncl, ownership, descendantpool) =>
+                Process((ss, nheap), (ss + sym, _sh_svltion.modify(_.updated(sym, UnknownLoc(targetCl, ownership, descendantpool)))(nheap)))
             }
           }
           else Process((ss, nheap))
@@ -390,10 +390,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
   }
 
-  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, heap: SHeap): Process[Nothing, \/[Nothing, (Set[Symbol], SHeap)]] = {
+  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, heap: SHeap): Process0[String \/ (Set[Symbol], SHeap)] = {
     def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
       val sym = Symbol(symcounter.++)
-      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership)
+      // TODO Fix descendantpool to be partitioned
+      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership, ssdesc.descendantPool)
       val newst = st + (sym -> symdesc)
       newst
     }
@@ -425,7 +426,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val clSupers = defs.supertypes(cl)
     val (newssvltionc, children) = unfoldFieldSet(loc, defs.childrenOf(clSupers), owned = true)
     val (newssvltionr, refs) = unfoldFieldSet(loc, defs.refsOf(clSupers), owned = false)
-    (SpatialDesc(cl, AbstractDesc, children, refs), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
+    (SpatialDesc(cl, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
   }
 
   def findLoc(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
@@ -446,7 +447,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     heap.svltion.get(sym).cata({
       case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership) => {
+      case UnknownLoc(cl, ownership, descendantpool) => {
         // TODO check consistency via SAT
         val newLoc = Loc(loccounter.++)
         val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
@@ -494,7 +495,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       fieldkv match {
         case (f, (cl, crd)) =>
           val sym = SetSymbol(symcounter.++)
-          (st._1 + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef)), st._2)
+          // TODO Partition descendant pools
+          (st._1 + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), st._2)
       }
     }
   }
@@ -504,7 +506,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       psdesc.children.contains(targetField) || psdesc.refs.contains(targetField)
     }
     def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
-                      refs: Map[Fields, SetExpr[IsSymbolic.type]], heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
+                      refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPool, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
       val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
       if (!optimistic) err
       else {
@@ -512,11 +514,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
            nc <- Process.emitAll(dt.possible.toSeq)
            cdr = defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left)
            unfoldedr = cdr map { cd =>
-             unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs), cd, heap)
+             unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
            }
           res <- unfoldedr.traverse({ case (psdesc, nheap) =>
               if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, nheap)
+              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpool, nheap)
           })(pmn).map(_.flatMap(identity))
         } yield res)
       }
@@ -543,9 +545,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           defs.get(sdesc.c).cata({ cd =>
             val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
             if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, nheap)
+            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpool, nheap)
           }, Process(s"No such class: ${sdesc.c.name}".left))
-        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, heap)
+        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, sdesc.descendantpool, heap)
       }
     }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
   }

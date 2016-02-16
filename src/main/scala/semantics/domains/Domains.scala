@@ -28,20 +28,21 @@ object DescType {
   val _dt_partial = GenPrism[DescType, PartialDesc]
 }
 
-case class SpatialDesc(c : Class, desctype : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]])
+case class SpatialDesc(c : Class, desctype : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPool)
 
 object SpatialDesc {
   val _sd_c = GenLens[SpatialDesc](_.c)
   val _sd_desctype = GenLens[SpatialDesc](_.desctype)
   val _sd_children = GenLens[SpatialDesc](_.children)
   val _sd_refs = GenLens[SpatialDesc](_.refs)
+  val _sd_descendantpool = GenLens[SpatialDesc](_.descendantpool)
 }
 
-case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership)
+case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership, descendantPool: DescendantPool)
 
 sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
-case class UnknownLoc(cl : Class, ownership : SOwnership) extends SymbolDesc
+case class UnknownLoc(cl : Class, ownership : SOwnership, descendantPool: DescendantPool) extends SymbolDesc
 
 case class QJump(source : SetExpr[IsSymbolic.type], c : Class, target : SetExpr[IsSymbolic.type])
 
