@@ -18,12 +18,11 @@ import helper._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scalaz.{Scalaz, \/-, \/}
+import scalaz.{EitherT, Scalaz, \/-, \/}
 import Scalaz.{none, unfold => generate}
 import scalaz.syntax.std.option._
 import scalaz.syntax.either._
-import scalaz.syntax.monad._
-import scalaz.syntax.traverse._
+import scalaz.EitherT._
 import scalaz.concurrent.Task
 import scalaz.stream._
 
@@ -327,43 +326,28 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                   typeInference.inferSetType(e, heap).cata(ec => defs.subtypesOrSelf(cl).contains(ec), true), false)) {
             findSet(e, heap, setBound, targetClass = none)
           } else {
-            e match {
+            // TODO Implement correctly to account for symbol equality
+            def findBinary(e1: SetExpr[IsSymbolic.type], e2: SetExpr[IsSymbolic.type], op: (Set[Symbol], Set[Symbol]) => Set[Symbol], heap: SHeap): TProcess[\/[String, (Set[Symbol], SHeap)]] = {
+              (for {
+                e1r <- EitherT[TProcess, String, (Set[Symbol], SHeap)](findSet(e1, heap, setBound, targetClass))
+                (syms1, nheap) = e1r
+                e2r <- EitherT[TProcess, String, (Set[Symbol], SHeap)](findSet(e2, heap, setBound, targetClass))
+                (syms2, nnheap) = e2r
+              } yield (op(syms1, syms2), nnheap)).run
+            }
+            val (eSimp, heapSimp) = simplify(e, heap)
+            eSimp match {
               case SetLit(es@_*) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
-                targetClass.cata(cl => partitionSet(ees, cl, heap).map(_.right), Process((ees, heap).right))
+                targetClass.cata(cl => partitionSet(ees, cl, heapSimp).map(_.right), Process((ees, heapSimp).right))
               case Part(syms) => ???
-              case Union(e1, e2) => (e1, e2) match {
-                case (x:SetSymbol, y: SetSymbol) => ???
-                case (x:SetSymbol,  _)           => ???
-                case (_, y: SetSymbol)           => ???
-                case _                           => ???
-              }
-              case ISect(e1, e2) => (e1, e2) match {
-                case (x:SetSymbol, y: SetSymbol) => ???
-                case (x:SetSymbol,  _)           => ???
-                case (_, y: SetSymbol)           => ???
-                case _                           => ???
-              }
+              case Union(e1, e2) =>
+                findBinary(e1, e2, _ union _, heapSimp)
+              case ISect(e1, e2) =>
+                findBinary(e1, e2, _ intersect _, heapSimp)
               case Diff(e1, e2) =>
-                (e1, e2) match {
-                  case (_:SetSymbol, _: SetSymbol) => ???
-                  case (_:SetSymbol,  _) => ???
-                  case (_, _:SetSymbol) => ???
-                  case _ =>
-                    for {
-                      e1r <- findSet(e1, heap, setBound, targetClass)
-                      e12syms <- e1r traverseU { case (e1syms, nheap) =>
-                        findSet(e2, nheap, setBound, targetClass) map (_.map { case (e2syms, nnheap) => (e1syms, e2syms, nnheap) })
-                      } map (_.join)
-                      res <- e12syms traverseU { case (e1syms, e2syms, nnheap) =>
-                        for {
-                          skirmishr <- symSkirmish(e1syms, e2syms, nnheap)
-                          (diffsym, samesym, nnnheap) = skirmishr
-                        } yield (samesym, nnnheap)
-                      }
-                    } yield res
-                }
-              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, heap)
+                findBinary(e1, e2, _ diff _, heapSimp)
+              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, heapSimp)
             }
           }
 
@@ -533,7 +517,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           res <- unfoldedr.traverse({ case (psdesc, nheap) =>
               if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
               else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, nheap)
-          })(pmn).map(_.join)
+          })(pmn).map(_.flatMap(identity))
         } yield res)
       }
     }
