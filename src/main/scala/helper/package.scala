@@ -90,13 +90,13 @@ package object helper {
     } map { case (assignments, unassigneda, unassignedb) => (assignments, for (ua <- unassigneda; ub <- unassignedb) yield (ua, ub)) }
   }
 
-  implicit def processMonad[F[_]]: Monad[({ type l[a] = Process[F, a] })#l] = new Monad[({ type l[a] = Process[F, a] })#l] {
+  def processMonad[F[_]]: Monad[({ type l[a] = Process[F, a] })#l] = new Monad[({ type l[a] = Process[F, a] })#l] {
     def point[A](a: => A): Process[F, A] = Process.emit(a)
     def bind[A, B](fa : Process[F, A])(f : A => Process[F, B]): Process[F, B] = fa.flatMap(f)
   }
 
-  val pmn = helper.processMonad[Nothing]
-  val pmt = helper.processMonad[Task]
+  implicit val pmn = helper.processMonad[Nothing]
+  implicit val pmt = helper.processMonad[Task]
 
 
   implicit class UnFunction1[A,B,C](f : (A, B) => C) {
