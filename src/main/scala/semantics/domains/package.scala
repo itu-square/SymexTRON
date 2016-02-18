@@ -1,5 +1,6 @@
 package semantics
 
+import language.higherKinds
 import syntax.ast._
 
 import scalaz._, Scalaz._
@@ -19,10 +20,10 @@ package object domains extends SymbolicOps {
   type CStack = Map[Vars, Set[Instances]]
 
 
-  def getSingletonSymbol(e : SetExpr[IsSymbolic.type]): String \/ Symbol = {
+  def getSingletonSymbol[M[_] : Monad](e : SetExpr[IsSymbolic.type]): EitherT[M, String, Symbol] = {
     e match {
-      case SetLit(Seq(sym@Symbol(symid))) => sym.right
-      case _ => s"${PrettyPrinter.pretty(e)} is not a single symbol".left
+      case SetLit(Seq(sym@Symbol(symid))) => EitherT.right(sym.point[M])
+      case _ => EitherT.left(s"${PrettyPrinter.pretty(e)} is not a single symbol".point[M])
     }
   }
 }
