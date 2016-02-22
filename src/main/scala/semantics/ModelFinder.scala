@@ -3,11 +3,9 @@ package semantics
 import java.util
 
 import kodkod.ast._
-import kodkod.engine.satlab.SATFactory
 import kodkod.engine.{Solution, Solver}
 import kodkod.instance.{Bounds, TupleSet, Universe}
 
-import _root_.syntax.ast
 import syntax.ast._
 import semantics.domains._
 import semantics.domains.SpatialDesc._
@@ -17,12 +15,10 @@ import semantics.Subst._
 import helper._
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scalaz.{EitherT, Scalaz, \/-, \/}
+import scalaz.{EitherT, Scalaz, \/}
 import Scalaz.{none, unfold => generate}
 import scalaz.syntax.std.option._
 import scalaz.syntax.either._
-import scalaz.EitherT._
 import scalaz.concurrent.Task
 import scalaz.stream._
 
@@ -37,58 +33,75 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   var counter = 0
 
-  val SymbolicSet = Relation.unary("SymbolicSet")
-  val syms = Relation.binary("syms")
-
-
-  val SymbolsRel = Relation.unary("Symbols")
-  val name = Relation.binary("name")
-
-  val Types = Relation.unary("Types")
-  val isSubType = Relation.binary("isSubType")
-  val typeOfS = Relation.binary("typeOfS")
-  val typeOf = Relation.binary("typeOf")
-
-  def freshSet : Relation = {
-    counter = counter + 1
-    Relation.unary(s"ConcreteSymbolicSet$counter")
-  }
-
-  def constraints : Formula = {
-    val nameTyping = {
-      val s = Variable.unary("s")
-      (s.join(name).one and (s.join(name) in Expression.INTS) forAll (s oneOf SymbolsRel)) and
-        (name.join(Expression.UNIV) in SymbolsRel)
-    }
+  object SymbolicSetRel {
+    val self = Relation.unary("SymbolicSet")
+    val syms = Relation.binary("SymbolicSet/syms")
     val symsTyping = {
       val ss = Variable.unary("ss")
-      ((ss.join(syms) in SymbolsRel) forAll (ss oneOf SymbolicSet)) and
-        (syms.join(Expression.UNIV) in SymbolicSet)
+      ((ss.join(SymbolicSetRel.syms) in SymbolsRel.self) forAll (ss oneOf SymbolicSetRel.self)) and
+        (SymbolicSetRel.syms.join(Expression.UNIV) in SymbolicSetRel.self)
+    }
+    val name = Relation.binary("SymbolicSet/name")
+    val nameTyping = {
+      val s = Variable.unary("s")
+      (s.join(name).lone and (s.join(name) in Expression.INTS) forAll (s oneOf self)) and
+        (name.join(Expression.UNIV) in self)
     }
     val nameUniqueness = {
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
-      (s1 eq s2) iff (s1.join(name) eq s2.join(name)) forAll ((s1 oneOf SymbolsRel) and (s2 oneOf SymbolsRel))
+      (s1 eq s2) iff ((s1.join(name) eq s2.join(name)) and (s1.join(name) eq Expression.NONE).not) forAll ((s1 oneOf self) and (s2 oneOf self))
     }
+  }
+
+  object SymbolsRel {
+    val self = Relation.unary("Symbols")
+    val name = Relation.binary("Symbols/name")
+    val nameTyping = {
+      val s = Variable.unary("s")
+      (s.join(SymbolsRel.name).one and (s.join(name) in Expression.INTS) forAll (s oneOf self)) and
+        (name.join(Expression.UNIV) in self)
+    }
+    val nameUniqueness = {
+      val s1 = Variable.unary("s1")
+      val s2 = Variable.unary("s2")
+      (s1 eq s2) iff (s1.join(name) eq s2.join(name)) forAll ((s1 oneOf self) and (s2 oneOf self))
+    }
+    val loc = Relation.binary("Symbols/loc")
+  }
+
+  object TypesRel {
+    val self = Relation.unary("Types")
+    val isSubType = Relation.binary("Types/isSubType")
+    val typeOfS = Relation.binary("Types/typeOfS")
     val typeOfSTyping = {
       val ss = Variable.unary("ss")
-      (ss.join(typeOfS).one and (ss.join(typeOfS) in Types) forAll (ss oneOf SymbolicSet)) and
-        (typeOfS.join(Expression.UNIV) in SymbolicSet)
+      (ss.join(typeOfS).one and (ss.join(typeOfS) in self) forAll (ss oneOf SymbolicSetRel.self)) and
+        (typeOfS.join(Expression.UNIV) in SymbolicSetRel.self)
     }
+    val typeOf = Relation.binary("Types/typeOf")
     val typeOfTyping = {
       val s = Variable.unary("s")
-      (s.join(typeOf).one and (s.join(typeOf) in Types) forAll (s oneOf SymbolsRel)) and
-        (typeOf.join(Expression.UNIV) in SymbolsRel)
+      (s.join(typeOf).one and (s.join(typeOf) in typeOf) forAll (s oneOf SymbolsRel.self)) and
+        (typeOf.join(Expression.UNIV) in SymbolsRel.self)
     }
-    nameTyping and nameUniqueness and symsTyping //and typeOfTyping and typeOfSTyping
+  }
+
+  def freshSymbolicSetRel(id: Option[Symbols]): (Relation, Formula) = {
+    counter = counter + 1
+    val ss = Relation.unary(s"ConcreteSymbolicSet$counter")
+    val s = Variable.unary("s")
+    val nameExpr = id.cata(i => IntConstant.constant(i).toExpression, Expression.NONE)
+    val nameConstraint = s.join(SymbolicSetRel.name) eq nameExpr forAll (s oneOf ss)
+    (ss, nameConstraint)
+  }
+
+  def constraints : Formula = {
+    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolicSetRel.symsTyping and SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness //and typeOfTyping and typeOfSTyping
   }
 
 
-  def bounds(rs : Set[Relation], is : Set[Integer], minSymbols : Int) : Bounds = {
-    val symbolintnames = (for (i <- 1 to (minSymbols - is.size)) yield {
-      Int.box(symcounter.++)
-    }).toSet ++ is
-
+  def bounds(rs : Set[Relation], symbolintnames: Set[Integer]) : Bounds = {
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
     val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
     val types = (for (c <- defs.keys) yield (c, s"type'${c.name}")).toMap
@@ -97,39 +110,39 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val bounds = new Bounds(universe)
     val f = universe.factory
 
-    bounds.boundExactly(SymbolsRel, f setOf (symbolids :_*))
+    bounds.boundExactly(SymbolsRel.self, f setOf (symbolids :_*))
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
-    bounds.boundExactly(SymbolicSet, f setOf (symbolicsets.map(_._2).toSeq :_*))
+    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.map(_._2).toSeq :_*))
 
     for (symname <- symbolintnames)
       bounds.boundExactly(symname.intValue, f range (f tuple symname, f tuple symname))
 
-    bounds.bound(syms, f allOf 2)
+    bounds.bound(SymbolicSetRel.syms, f allOf 2)
     val nameUpper = f noneOf 2
     for ((sid, sname) <- symbolids.zip(symbolintnames.toList.sorted))
       nameUpper.add((f tuple sid) product (f tuple sname))
-    bounds.bound(name, nameUpper)
+    bounds.bound(SymbolsRel.name, nameUpper)
 
-    bounds.boundExactly(Types, f setOf (types.values.toSeq :_*)) // TODO fix bounds
+    bounds.boundExactly(TypesRel.self, f setOf (types.values.toSeq :_*))
     val stBounds = f noneOf 2
     for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
       stBounds.add((f tuple types(sc)) product (f tuple types(c)))
     }
-    bounds.boundExactly(isSubType, stBounds)
+    bounds.boundExactly(TypesRel.isSubType, stBounds)
     val typeOfSUpper = f noneOf 2
     for (ss <- symbolicsets.map(_._2).toList) {
       for (typ <- types.values.toList) {
         typeOfSUpper.add((f tuple ss) product (f tuple typ))
       }
     }
-    bounds.bound(typeOfS, typeOfSUpper)
+    bounds.bound(TypesRel.typeOfS, typeOfSUpper)
     val typeOfUpper = f noneOf 2
     for (sid <- symbolids) {
       for (typ <- types.values.toList) {
         typeOfUpper.add((f tuple sid) product (f tuple typ))
       }
     }
-    bounds.bound(typeOf, typeOfUpper)
+    bounds.bound(TypesRel.typeOf, typeOfUpper)
     bounds
   }
 
@@ -142,10 +155,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         formula = {
           val sym = Variable.unary("sym")
           val x = Variable.unary("x")
-          val symInSyms = sym in x.join(syms)
+          val symInSyms = sym in x.join(SymbolicSetRel.syms)
           (e1 match {
-            case Symbol(symident) => sym.join(name) eq IntConstant.constant(symident).toExpression
-          }) implies (if (isNegated) symInSyms.not else symInSyms) forAll ((sym oneOf SymbolsRel) and (x oneOf r2))
+            case Symbol(symident) => sym.join(SymbolsRel.name) eq IntConstant.constant(symident).toExpression
+          }) implies (if (isNegated) symInSyms.not else symInSyms) forAll ((sym oneOf SymbolsRel.self) and (x oneOf r2))
         }
       } yield (rs2, is2, formula and f2, formula, th2)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
@@ -157,8 +170,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         eb2 <- evalBoolExpr(b2, th1, isNegated)
         (rs2, is2, fs2, r2, th2) = eb2
       } yield (rs1 union rs2, is1 union is2,  fs1 and fs2, if (isNegated) r1 or r2 else r1 and r2, th2)
-    case Not(b) => for {
-        eb <- evalBoolExpr(b, th, !isNegated)
+    case Not(b0) => for {
+        eb <- evalBoolExpr(b0, th, !isNegated)
         (rs1, is1, f1, r, th1) = eb
       } yield (rs1, is1, f1, r, th1)
   }
@@ -173,7 +186,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       formula = {
         val x1 = Variable.unary("x1")
         val x2 = Variable.unary("x2")
-        val res = op(x1.join(syms), x2.join(syms))
+        val res = op(x1.join(SymbolicSetRel.syms), x2.join(SymbolicSetRel.syms))
         (if (isNegated) res.not else res) forAll ((x1 oneOf r1) and (x2 oneOf r2))
       }
     } yield (rs1 union rs2, is1 union is2, formula and f1 and f2, formula, th2)
@@ -181,21 +194,21 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
     case SetLit(es) =>
-      val s = freshSet
+      val (s, nameConstraint) = freshSymbolicSetRel(none)
       val formula = {
         val ss = Variable.unary("ss")
-        if (es.isEmpty) ss.join(syms) eq Expression.NONE forAll (ss oneOf s)
+        if (es.isEmpty) ss.join(SymbolicSetRel.syms) eq Expression.NONE forAll (ss oneOf s)
         else {
           val sym = Variable.unary("sym")
           val ees = es.map {
-            case Symbol(ident) => sym.join(name) eq IntConstant.constant(ident).toExpression
+            case Symbol(ident) => sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
           }.toList
           val ee1 :: ees1 = ees
-          (ss.join(syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf SymbolsRel))) forAll (ss oneOf s)
+          (ss.join(SymbolicSetRel.syms) eq (ees1.fold(ee1)(_ or _) comprehension (sym oneOf SymbolsRel.self))) forAll (ss oneOf s)
         }
       }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (Set(s), symbols.toSet, formula, s, th).right[String]
+      (Set(s), symbols.toSet, formula and nameConstraint, s, th).right[String]
     case Part(syms) => ??? // TODO Implement
     case Union(e1, e2) =>
       evalBinarySetExpr(e1, _ union _, e2, th)
@@ -206,9 +219,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     case SetSymbol(ident) =>
       if (th.contains(ident)) (Set[Relation](), Set[Integer](), Formula.TRUE, th(ident), th).right[String]
       else {
-        val s = freshSet
+        val (s, nameConstraint) = freshSymbolicSetRel(ident.some)
         val formula = Formula.TRUE
-        (Set[Relation](s), Set[Integer](), formula, s, th + (ident -> s)).right[String]
+        (Set[Relation](s), Set[Integer](), formula and nameConstraint, s, th + (ident -> s)).right[String]
       }
   }
 
@@ -219,163 +232,144 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (rs1, is1, f1, r1, th1) = ee1
       ee2 <- evalSetExpr(e2,th1)
       (rs2, is2, f2, r2, th2) = ee2
-      s = freshSet
+      (s, nameConstraint) = freshSymbolicSetRel(none)
       formula = {
         val x = Variable.unary("x")
         val x1 = Variable.unary("x1")
         val x2 = Variable.unary("x2")
-        x.join(syms) eq op(x1.join(syms),x2.join(syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
+        x.join(SymbolicSetRel.syms) eq op(x1.join(SymbolicSetRel.syms),x2.join(SymbolicSetRel.syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
       }
-    } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2, s, th2)
+    } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2 and nameConstraint, s, th2)
   }
 
-  def relevantConstraints(e: SetExpr[IsSymbolic.type], p: Prop): (Prop, Prop) = {
-    val (disj, norm) = p partition {
-      case Eq(ISect(_,_), SetLit(Seq())) => true
-      case _ => false
-    }
-    def rlv(syms: Set[Symbols], visited: Set[Symbols]): Prop = {
-      val relevant = norm.filter((b : BoolExpr[IsSymbolic.type]) => (b.symbols.ids intersect syms).nonEmpty)
-      val relevantsyms = relevant.symbols.ids diff visited
-      relevant ++ (if (relevantsyms.nonEmpty)
-                        rlv(relevantsyms, visited ++ syms)
-                  else Set())
-    }
-    (disj, rlv(e.symbols.ids, Set()))
-  }
+  def concretise(smem: SMem): String \/ CMem = { ??? }
 
-  def ownershipConstraints(spatial: Spatial): Prop = ??? /* {
-    spatial.flatMap{ case (sym, sd) => sd match {
-      case SpatialDesc(c, typ, children, refs) => children.values.map(e => not(SetMem(Symbol(sym), e)))
-    }}.toSet
-  } */
-
-  def partitionSet(ees: Set[Symbol], targetCl: Class, heap: SHeap): Process[Task, (Set[Symbol], SHeap)] = {
-    def unfoldMore(nheap: SHeap, l: Loc, sdesc: SpatialDesc, supers: Set[Class]): SHeap = {
+  def partitionSet(ees: Set[Symbol], targetCl: Class, mem: SMem): Process[Task, (Set[Symbol], SMem)] = {
+    def unfoldMore(mem: SMem, l: Loc, sdesc: SpatialDesc, supers: Set[Class]): SMem = {
       val (ssvltionc, newchildren) = unfoldFieldSet(l, defs.childrenOf(supers), owned = true)
       val (ssvltionr, newrefs) = unfoldFieldSet(l, defs.refsOf(supers), owned = false)
-      val nnheap =
-        (_sh_currentSpatial.modify(
-          _.updated(l, (_sd_c.set(targetCl) andThen _sd_children.modify(_ ++ newchildren)
-            andThen _sd_desctype.set(AbstractDesc) andThen _sd_refs.modify(_ ++ newrefs)) (sdesc))) andThen
-          _sh_ssvltion.modify(_ ++ ssvltionc ++ ssvltionr)) (nheap)
-      nnheap
+      val nmem =
+         _sm_heap.modify(_sh_currentSpatial.modify(
+           _.updated(l, (_sd_c.set(targetCl) andThen _sd_children.modify(_ ++ newchildren)
+             andThen _sd_desctype.set(AbstractDesc) andThen _sd_refs.modify(_ ++ newrefs)) (sdesc))) andThen
+           _sh_ssvltion.modify(_ ++ ssvltionc ++ ssvltionr))(mem)
+      nmem
     }
-    ees.foldLeft(Process((Set[Symbol](), heap))) { (p, sym) =>
+    ees.foldLeft(Process((Set[Symbol](), mem))) { (p, sym) =>
       for {
-        ssnheap <- p
-        (ss, nheap) = ssnheap
+        ssnmem <- p
+        (ss, nmem) = ssnmem
         res <- {
-          val symsvltion = nheap.svltion(sym)
+          val symsvltion = nmem.heap.svltion(sym)
           val symc = symsvltion match {
-            case Loced(l) => heap.currentSpatial(l).c
+            case Loced(l) => nmem.heap.currentSpatial(l).c
             case UnknownLoc(ncl, ownership, descendantpool) => ncl
           }
-          if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nheap))
+          if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nmem))
           else if (defs.subtypes(symc).contains(targetCl)) {
             symsvltion match {
               case Loced(l) =>
-                val sdesc = nheap.currentSpatial(l)
+                val sdesc = nmem.heap.currentSpatial(l)
                 sdesc.desctype match {
-                  case ExactDesc => Process((ss, nheap))
+                  case ExactDesc => Process((ss, nmem))
                   case AbstractDesc =>
                     val supers = defs.supertypes(targetCl) diff defs.supertypes(symc)
-                    val nnheap: SHeap = unfoldMore(nheap, l, sdesc, supers)
-                    Process((ss, nheap), (ss + sym, nnheap))
+                    val nnmem: SMem = unfoldMore(nmem, l, sdesc, supers)
+                    Process((ss, nmem), (ss + sym, nnmem))
                   case PartialDesc(hasExact, possible) =>
                     val possibleSupers = possible.intersect(defs.supertypes(symc))
-                    Process((ss, nheap)) ++ (for {
+                    Process((ss, nmem)) ++ (for {
                       psuper <- Process.emitAll(possibleSupers.toSeq)
                       unfolded = {
                         val supers = defs.supertypes(targetCl) diff (defs.supertypes(psuper) + psuper)
-                        val nnheap = unfoldMore(nheap, l, sdesc, supers)
+                        val nnheap = unfoldMore(nmem, l, sdesc, supers)
                         (ss + sym, nnheap)
                       }
                     } yield unfolded)
                 }
               case UnknownLoc(ncl, ownership, descendantpool) =>
-                Process((ss, nheap), (ss + sym, _sh_svltion.modify(_.updated(sym, UnknownLoc(targetCl, ownership, descendantpool)))(nheap)))
+                Process((ss, nmem), (ss + sym, (_sm_heap ^|-> _sh_svltion).modify(_.updated(sym, UnknownLoc(targetCl, ownership, descendantpool)))(nmem)))
             }
           }
-          else Process((ss, nheap))
+          else Process((ss, nmem))
         }
       } yield res
     }
   }
 
   // TODO actually implement optimization
-  def simplify(e : SetExpr[IsSymbolic.type], heap:SHeap): (SetExpr[IsSymbolic.type], SHeap) = e match {
+  def simplify(e : SetExpr[IsSymbolic.type], mem:SMem): (SetExpr[IsSymbolic.type], SMem) = e match {
     case Union(e1, e2) =>
-      val (es1, nheap) = simplify(e1, heap)
+      val (es1, nheap) = simplify(e1, mem)
       val (es2, nnheap) = simplify(e2, nheap)
       (Union(es1, es2), nnheap)
     case Diff(e1, e2) =>
-      val (es1, nheap) = simplify(e1, heap)
+      val (es1, nheap) = simplify(e1, mem)
       val (es2, nnheap) = simplify(e2, nheap)
       (Diff(es1, es2), nnheap)
     case ISect(e1, e2) =>
-      val (es1, nheap) = simplify(e1, heap)
+      val (es1, nheap) = simplify(e1, mem)
       val (es2, nnheap) = simplify(e2,nheap)
       (ISect(es1, es2), nnheap)
-    case _ => (e, heap)
+    case _ => (e, mem)
   }
 
-  def findSet(e : SetExpr[IsSymbolic.type], heap: SHeap, setBound: Int, targetClass : Option[Class] = none):
-      Process[Task, String \/ (Set[Symbol], SHeap)] =
+  def findSet(e : SetExpr[IsSymbolic.type], mem: SMem, setBound: Int, targetClass : Option[Class] = none):
+      Process[Task, String \/ (Set[Symbol], SMem)] =
           if (targetClass.cata(cl =>
-                  typeInference.inferSetType(e, heap).cata(ec => defs.subtypesOrSelf(cl).contains(ec), true), false)) {
-            findSet(e, heap, setBound, targetClass = none)
+                  typeInference.inferSetType(e, mem.heap).cata(ec => defs.subtypesOrSelf(cl).contains(ec), true), false)) {
+            findSet(e, mem, setBound, targetClass = none)
           } else {
             // TODO Implement correctly to account for symbol equality
-            def findBinary(e1: SetExpr[IsSymbolic.type], e2: SetExpr[IsSymbolic.type], op: (Set[Symbol], Set[Symbol]) => Set[Symbol], heap: SHeap): TProcess[\/[String, (Set[Symbol], SHeap)]] = {
+            def findBinary(e1: SetExpr[IsSymbolic.type], e2: SetExpr[IsSymbolic.type], op: (Set[Symbol], Set[Symbol]) => Set[Symbol], mem: SMem): TProcess[\/[String, (Set[Symbol], SMem)]] = {
               (for {
-                e1r <- EitherT[TProcess, String, (Set[Symbol], SHeap)](findSet(e1, heap, setBound, targetClass))
+                e1r <- EitherT[TProcess, String, (Set[Symbol], SMem)](findSet(e1, mem, setBound, targetClass))
                 (syms1, nheap) = e1r
-                e2r <- EitherT[TProcess, String, (Set[Symbol], SHeap)](findSet(e2, heap, setBound, targetClass))
+                e2r <- EitherT[TProcess, String, (Set[Symbol], SMem)](findSet(e2, mem, setBound, targetClass))
                 (syms2, nnheap) = e2r
               } yield (op(syms1, syms2), nnheap)).run
             }
-            val (eSimp, heapSimp) = simplify(e, heap)
+            val (eSimp, memSimp) = simplify(e, mem)
             eSimp match {
               case SetLit(es) =>
                 val ees = es.map{ case s:Symbol => s }.toSet
-                targetClass.cata(cl => partitionSet(ees, cl, heapSimp).map(_.right), Process((ees, heapSimp).right))
+                targetClass.cata(cl => partitionSet(ees, cl, memSimp).map(_.right), Process((ees, memSimp).right))
               case Part(syms) => ???
               case Union(e1, e2) =>
-                findBinary(e1, e2, _ union _, heapSimp)
+                findBinary(e1, e2, _ union _, memSimp)
               case ISect(e1, e2) =>
-                findBinary(e1, e2, _ intersect _, heapSimp)
+                findBinary(e1, e2, _ intersect _, memSimp)
               case Diff(e1, e2) =>
-                findBinary(e1, e2, _ diff _, heapSimp)
-              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, heapSimp)
+                findBinary(e1, e2, _ diff _, memSimp)
+              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, memSimp)
             }
           }
 
-  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): (Set[Symbol], SHeap) = {
+  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): (Set[Symbol], SMem) = {
     val obvsame = syms1.intersect(syms2)
     val nsyms1 = syms1 diff obvsame
     val nsyms2 = syms2 diff obvsame
     val restsame = nsyms1 map { s1 =>
       nsyms2 collectFirst {
         // TODO: Represent a better way of getting these constraints
-       case s2 if heap.pure.contains(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) || heap.pure.contains(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))) =>
+       case s2 if mem.heap.pure.contains(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) || mem.heap.pure.contains(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))) =>
          (s1, s2)
       }
     } filter (_.nonEmpty) map (_.get)
-    (obvsame ++ restsame.map(_._2), heap.subst_all(restsame.toMap))
+    (obvsame ++ restsame.map(_._2), mem.subst_all(restsame.toMap))
   }
 
-  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Set[Symbol] = {
+  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): Set[Symbol] = {
     def diff(syms1:Set[Symbol], syms2:Set[Symbol]): Set[Symbol] =
       syms1.filter(s1 => syms1.forall(s2 =>
-        heap.pure.contains(Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2))))) || heap.pure.contains(Not(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))))
+        mem.heap.pure.contains(Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2))))) || mem.heap.pure.contains(Not(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))))
       ))
     diff(syms1, syms2) ++ diff(syms2, syms1)
   }
 
   // This seems like a bad idea, maybe query the solver instead?
-  def symSkirmish(syms1: Set[Symbol], syms2: Set[Symbol], heap: SHeap): Process[Task, (Set[Symbol], Set[Symbol], SHeap)] = {
-    val (samesyms, uheap) = symSame(syms1, syms2, heap)
+  def symSkirmish(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): Process[Task, (Set[Symbol], Set[Symbol], SMem)] = {
+    val (samesyms, uheap) = symSame(syms1, syms2, mem)
     val (nsyms1, nsyms2) = (syms1 -- samesyms, syms2 -- samesyms)
     val diffsyms = symDiff(nsyms1, nsyms2, uheap)
     val (nnsyms1, nnsyms2) = (syms1 -- diffsyms, syms2 -- diffsyms)
@@ -384,21 +378,21 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       Process.emitAll((nnsyms1 pairings nnsyms2 map { case (eqs, uneqs) =>
         val diff = uneqs.flatMap { case (s1, s2) => Set(s1, s2) }
         val same = eqs.map(_._1)
-        val nheap = _sh_pure.modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) })(heap.subst_all(eqs.map(_.swap).toMap))
-        (same, diff, nheap)
+        val nmem = (_sm_heap ^|-> _sh_pure).modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) })(mem.subst_all(eqs.map(_.swap).toMap))
+        (same, diff, nmem)
       }).toSeq)
     }
   }
 
-  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, heap: SHeap): Process0[String \/ (Set[Symbol], SHeap)] = {
+  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, mem: SMem): Process0[String \/ (Set[Symbol], SMem)] = {
     def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
       val sym = Symbol(symcounter.++)
       // TODO Fix descendantpool to be partitioned
-      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership, ssdesc.descendantPool)
+      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership, ssdesc.descendantPools)
       val newst = st + (sym -> symdesc)
       newst
     }
-    val ssdesc = heap.ssvltion(ssym)
+    val ssdesc = mem.heap.ssvltion(ssym)
     val (lb, ub) = ssdesc.crd match {
       case Single => (1, 1)
       case Many => (0, setBound)
@@ -418,8 +412,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for {
       posVal <- posVals
       vl = SetLit(posVal.keys.toSeq)
-      nheap = _sh_svltion.modify(_ ++ posVal)(heap.subst(ssym, vl))
-    } yield (posVal.keySet, nheap).right
+      nmem = (_sm_heap ^|-> _sh_svltion).modify(_ ++ posVal)(mem.subst(ssym, vl))
+    } yield (posVal.keySet, nmem).right
   }
 
   def mkAbstractSpatialDesc(loc : Loc, cl : Class, heap: SHeap): (SpatialDesc, SHeap) = {
@@ -506,7 +500,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       psdesc.children.contains(targetField) || psdesc.refs.contains(targetField)
     }
     def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
-                      refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPool, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
+                      refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPools, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
       val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
       if (!optimistic) err
       else {
@@ -518,7 +512,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
            }
           res <- unfoldedr.traverse({ case (psdesc, nheap) =>
               if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpool, nheap)
+              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
           })(pmn).map(_.flatMap(identity))
         } yield res)
       }
@@ -545,9 +539,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           defs.get(sdesc.c).cata({ cd =>
             val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
             if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpool, nheap)
+            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
           }, Process(s"No such class: ${sdesc.c.name}".left))
-        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, sdesc.descendantpool, heap)
+        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
       }
     }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
   }

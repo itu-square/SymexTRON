@@ -115,27 +115,25 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         } yield res
         case For(_, x, m, sb) =>
           for {
-            (syms, nheap) <- m match {
+            (syms, imem) <- m match {
               case MSet(e) =>
                 for {
                   ee <- evalExpr[TProcess](pre.stack, e)
-                  set <- EitherT[TProcess, String, (Set[Symbol], SHeap)](modelFinder.findSet(ee, pre.heap, beta))
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
                 } yield set
               case Match(e, c) =>
                 for {
                   ee <- evalExpr[TProcess](pre.stack, e)
-                  set <- EitherT[TProcess, String, (Set[Symbol], SHeap)](modelFinder.findSet(ee, pre.heap, beta, targetClass = c.some))
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta, targetClass = c.some))
                 } yield set
               case MatchStar(e, c) =>
                 for {
                   ee <- evalExpr[TProcess](pre.stack, e)
-                  set <- ??? : EitherT[TProcess, String, (Set[Symbol], SHeap)]
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
                 } yield set
             }
-            nmem = _sm_heap.set(nheap)(pre)
-
             // TODO: Fix ordering so it coincides with concrete executor ordering
-            iterated <- syms.foldLeft(EitherT.right[TProcess, String, SMem](nmem.point[TProcess])) { (memr, sym) =>
+            iterated <- syms.foldLeft(EitherT.right[TProcess, String, SMem](imem.point[TProcess])) { (memr, sym) =>
               memr.flatMap { mem => executeHelper(Process(_sm_stack.modify(_ + (x -> SetLit(Seq(sym))))(mem)), sb) }
             }
           } yield iterated

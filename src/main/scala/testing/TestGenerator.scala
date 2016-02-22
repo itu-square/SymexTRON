@@ -23,23 +23,21 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
     generateTestsE(pres, s, timeout, coverage)
                  .map(_.fold(_ => none, _.some))
                  .filter(_.isDefined).map(_.get)
-                 .filterBy2(_ != _)
 
   def generateTestsE(pres : Set[SMem], s : Statement,
       timeout : FiniteDuration = TestGenerator.defaultTimeout,
-      coverage : Double = TestGenerator.defaultCoverageTarget): Process[Task, (String, String) \/ CMem] = {
+      coverage : Double = TestGenerator.defaultCoverageTarget): Process[Task, String \/ CMem] = {
       val concExec = new ConcreteExecutor(defs, s)
       sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
-              .map(_.fold(err => ("<no heap>", err).left, sm => convertMem(sm)))
-              .filterBy2(_ != _)
+              .map(_.fold(err => err.left, sm => convertMem(sm)))
               .takeWhile(_ => concExec.branchCoverage <= coverage)
               .map { mem => mem.fold(_ => (), m => { concExec.execute(m);  println(s"Test coverage: ${concExec.branchCoverage}"); () }); mem }
               .onComplete { println(s"Test coverage: ${concExec.branchCoverage}"); Process() }
               )(wye.interrupt)
   }
 
-  def convertMem(sMem: SMem): (String, String) \/ CMem = ??? /* {
+  def convertMem(sMem: SMem): String \/ CMem = { CMem(Map(),CHeap(Map(), Map(), Map())).right } /* ??? {
     val maxDepth = 3
     def sbexpr2sinstance(es : Seq[BasicExpr[IsSymbolic.type]]) =
       es.map { case Symbol(ident) => ident }.toSet
