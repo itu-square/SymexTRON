@@ -85,6 +85,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (s.join(typeOf).one and (s.join(typeOf) in typeOf) forAll (s oneOf SymbolsRel.self)) and
         (typeOf.join(Expression.UNIV) in SymbolsRel.self)
     }
+    val typerels = defs.keys.map(c => (c,Relation.unary(s"Type$$${c.name}"))).toMap
   }
 
   def freshSymbolicSetRel(id: Option[Symbols]): (Relation, Formula) = {
@@ -104,7 +105,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def bounds(rs : Set[Relation], symbolintnames: Set[Integer]) : Bounds = {
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
     val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
-    val types = (for (c <- defs.keys) yield (c, s"type'${c.name}")).toMap
+    val types = (for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")).toMap
     val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2) ++ types.values.toSeq
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
@@ -123,6 +124,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       nameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(SymbolsRel.name, nameUpper)
 
+    for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf (types(c)))
     bounds.boundExactly(TypesRel.self, f setOf (types.values.toSeq :_*))
     val stBounds = f noneOf 2
     for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
@@ -242,7 +244,30 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     } yield (Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2 and nameConstraint, s, th2)
   }
 
-  def concretise(smem: SMem): String \/ CMem = { ??? }
+
+  def concretise(smem: SMem): String \/ CMem = {
+    def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
+      case Single => s.join(SymbolicSetRel.syms).one
+      case Many => Formula.TRUE
+      case Opt => s.join(SymbolicSetRel.syms).lone
+    }
+    val ssvconstraints = smem.heap.ssvltion.foldLeft(Formula.TRUE) { (constraints, ssinfo) =>
+      val (ssym, ssdesc) = ssinfo
+      val s = Variable.unary("s")
+      val t = Variable.unary("t")
+      (s.join(SymbolicSetRel.name) eq IntConstant.constant(ssym.id).toExpression implies
+        (cardConstraint(s, ssdesc.crd) and (s.join(TypesRel.typeOfS) eq t)) forAll
+          ((s oneOf SymbolicSetRel.self) and (t oneOf TypesRel.typerels(ssdesc.cl)))) and constraints
+    }
+    val svconstraints = smem.heap.svltion.foldLeft(Formula.TRUE) { (constraints, sinfo) =>
+      val (sym, sdesc) = sinfo
+      sdesc match {
+        case Loced(l) => ???
+        case UnknownLoc(cl, ownership, descendantPools) => ???
+      }
+    }
+    ???
+  }
 
   def partitionSet(ees: Set[Symbol], targetCl: Class, mem: SMem): Process[Task, (Set[Symbol], SMem)] = {
     def unfoldMore(mem: SMem, l: Loc, sdesc: SpatialDesc, supers: Set[Class]): SMem = {
