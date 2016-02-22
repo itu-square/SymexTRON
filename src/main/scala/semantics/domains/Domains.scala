@@ -44,15 +44,6 @@ sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
 case class UnknownLoc(cl : Class, ownership : SOwnership, descendantPool: DescendantPool) extends SymbolDesc
 
-case class QJump(source : SetExpr[IsSymbolic.type], c : Class, target : SetExpr[IsSymbolic.type])
-
-object QJump {
-  val _qj_source = GenLens[QJump](_.source)
-  val _qj_c = GenLens[QJump](_.c)
-  val _qj_target = GenLens[QJump](_.target)
-}
-
-
 case class SHeap(ssvltion : SetSymbolValuation, svltion : SymbolValuation, locOwnership: LocOwnership, initSpatial: Spatial, currentSpatial: Spatial, pure : Prop)
 
 object SHeap {
