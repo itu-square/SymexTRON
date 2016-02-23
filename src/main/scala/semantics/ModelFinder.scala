@@ -65,6 +65,37 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (l.join(name).one and (l.join(name) in Expression.INTS)) forAll (l oneOf self) and
         (name.join(Expression.UNIV) in self)
     }
+    val nameUniqueness = {
+      val l1 = Variable.unary("l1")
+      val l2 = Variable.unary("l2")
+      (l1 eq l2) iff (l1.join(name) eq l2.join(name)) forAll ((l1 oneOf self) and (l2 oneOf self))
+    }
+    val fields = Relation.ternary("Locs/fields")
+    val fieldsTyping = {
+      val l = Variable.unary("l")
+      val f = Variable.unary("f")
+      val ss = Variable.unary("s")
+      (l.join(fields) in FieldsRel.self.product(SymbolicSetRel.self) and
+        ((f.join(l.join(fields)).lone and (f.join(l.join(fields)) in SymbolicSetRel.self)) forAll (f oneOf FieldsRel.self)) and
+          ((l.join(fields).join(ss) in FieldsRel.self) forAll (ss oneOf SymbolicSetRel.self))
+        ) forAll (l oneOf self) and
+          (fields.join(Expression.UNIV).join(Expression.UNIV) in self)
+    }
+  }
+
+  object FieldsRel {
+    val self = Relation.unary("Fields")
+    val name = Relation.binary("Fields/name")
+    val nameTyping = {
+      val f = Variable.unary("f")
+      (f.join(name).one and (f.join(name) in Expression.INTS)) forAll (f oneOf self) and
+        (name.join(Expression.UNIV) in self)
+    }
+    val nameUniqueness = {
+      val f1 = Variable.unary("f1")
+      val f2 = Variable.unary("f2")
+      ((f1 eq f2) iff (f1.join(name) eq f2.join(name))) forAll ((f1 oneOf self) and (f2 oneOf self))
+    }
   }
 
   object SymbolsRel {
@@ -130,8 +161,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def constraints : Formula = {
     SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and
       SymbolicSetRel.symsTyping and SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
-        LocsRel.nameTyping and TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfLocTyping and
-          TypesRel.typeOfLocTypeOfSymEquality
+        LocsRel.nameTyping and LocsRel.nameUniqueness and
+          FieldsRel.nameTyping and FieldsRel.nameUniqueness
+           TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfLocTyping and
+              TypesRel.typeOfLocTypeOfSymEquality
   }
 
 
