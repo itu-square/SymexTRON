@@ -1,37 +1,34 @@
 package semantics
 
-import java.util
-
+import com.typesafe.scalalogging.LazyLogging
+import helper._
 import kodkod.ast._
 import kodkod.engine.Solution.Outcome
+import kodkod.engine.Solver
 import kodkod.engine.satlab.SATFactory
-import kodkod.engine.{Solution, Solver}
-import kodkod.instance.{Instance, Bounds, TupleSet, Universe}
-
-import syntax.ast._
-import semantics.domains._
-import semantics.domains.SpatialDesc._
+import kodkod.instance.{Bounds, Instance, Universe}
+import semantics.Subst._
 import semantics.domains.SHeap._
 import semantics.domains.SMem._
-import semantics.Subst._
-import helper._
+import semantics.domains.SpatialDesc._
+import semantics.domains._
+import syntax.ast._
 
 import scala.collection.JavaConverters._
-import scalaz.{EitherT, Scalaz, \/}
-import Scalaz.{none, unfold => generate}
-import scalaz.syntax.std.option._
-import scalaz.syntax.either._
+import scalaz.Scalaz.{none, unfold => generate}
 import scalaz.concurrent.Task
 import scalaz.stream._
-
-import com.typesafe.scalalogging.LazyLogging
+import scalaz.syntax.either._
+import scalaz.syntax.monad._
+import scalaz.syntax.std.option._
+import scalaz.{EitherT, \/}
 
 class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition],
                   beta: Int, delta: Int, optimistic: Boolean)
   extends LazyLogging {
 
   private type StringE[T] = String \/ T
-  case class EvalState(rs: Set[Relation], is: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
+  case class EvalState(symrels: Set[Relation], symnames: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
   private type EvalRes[T] = (EvalState, T)
 
   var counter = 0
@@ -83,6 +80,27 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
   }
 
+  object VarsRel {
+    val self = Relation.unary("Vars")
+    val name = Relation.binary("Vars/name")
+    val nameTyping = {
+      val v = Variable.unary("v")
+      (v.join(name).one and (v.join(name) in Expression.INTS)) forAll (v oneOf self) and
+        (name.join(Expression.UNIV) in self)
+    }
+    val nameUniqueness = {
+      val v1 = Variable.unary("v1")
+      val v2 = Variable.unary("v2")
+      ((v1 eq v2) iff (v1.join(name) eq v2.join(name))) forAll ((v1 oneOf self) and (v2 oneOf self))
+    }
+    val vals = Relation.binary("Vars/vals")
+    val valsTyping = {
+      val v = Variable.unary("v")
+      (v.join(vals).one and (v.join(vals) in SymbolicSetRel.self)) forAll (v oneOf self) and
+        (vals.join(Expression.UNIV) in self)
+    }
+  }
+
   object FieldsRel {
     val self = Relation.unary("Fields")
     val name = Relation.binary("Fields/name")
@@ -122,6 +140,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object TypesRel {
     val self = Relation.unary("Types")
     val isSubType = Relation.binary("Types/isSubType")
+    val isSubTypeTyping = {
+      val t = Variable.unary("t")
+      (t.join(isSubType) in self) forAll (t oneOf self) and
+        (isSubType.join(Expression.UNIV) in self)
+    }
     val typeOfSet = Relation.binary("Types/typeOfSet")
     val typeOfSetTyping = {
       val ss = Variable.unary("ss")
@@ -131,7 +154,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val typeOfSym = Relation.binary("Types/typeOfSym")
     val typeOfSymTyping = {
       val s = Variable.unary("s")
-      (s.join(typeOfSym).one and (s.join(typeOfSym) in self) forAll (s oneOf SymbolsRel.self)) and
+      (s.join(typeOfSym).lone and (s.join(typeOfSym) in self) forAll (s oneOf SymbolsRel.self)) and
         (typeOfSym.join(Expression.UNIV) in SymbolsRel.self)
     }
     val typeOfLoc = Relation.binary("Types/typeOfLoc")
@@ -146,32 +169,44 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (s.join(SymbolsRel.loc) eq l) implies (s.join(typeOfSym) eq l.join(typeOfLoc)) forAll
         ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
     }
+    val typeOfSymTypeOfSetSubtyping = {
+      val s = Variable.unary("s")
+      val ss = Variable.unary("ss")
+      val t = Variable.unary("t")
+      val ts = Variable.unary("ts")
+      ((s.join(typeOfSym) eq t) and (ss.join(typeOfSet) eq ts) and (s in ss.join(SymbolicSetRel.syms)) implies
+        (ts in t.join(isSubType))) forAll
+          ((s oneOf SymbolsRel.self) and (ss oneOf SymbolicSetRel.self) and (t oneOf self) and (ts oneOf self))
+    }
     val typerels = defs.keys.map(c => (c,Relation.unary(s"Type$$${c.name}"))).toMap
   }
 
-  def freshSymbolicSetRel(id: Option[Symbols]): (Relation, Formula) = {
+  def freshSymbolicSetRel(idopt: Option[Symbols]): (Relation, Formula) = {
     counter = counter + 1
     val ss = Relation.unary(s"ConcreteSymbolicSet$counter")
     val s = Variable.unary("s")
-    val nameExpr = id.cata(i => IntConstant.constant(i).toExpression, Expression.NONE)
-    val nameConstraint = s.join(SymbolicSetRel.name) eq nameExpr forAll (s oneOf ss)
-    (ss, nameConstraint)
+    val nameExpr = idopt.cata({ case id => IntConstant.constant(id).toExpression }, Expression.NONE)
+    val nameConstraint = ((s.join(SymbolicSetRel.name) eq nameExpr) and
+      idopt.cata(_ => s.join(TypesRel.typeOfSet) eq Expression.NONE, Formula.TRUE)) forAll (s oneOf ss)
+    val subsetConstraint = (s in SymbolicSetRel.self) forAll (s oneOf ss)
+    (ss, nameConstraint and subsetConstraint)
   }
 
-  def constraints : Formula = {
+  def staticConstraints : Formula = {
     SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and
-      SymbolicSetRel.symsTyping and SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
-        LocsRel.nameTyping and LocsRel.nameUniqueness and
-          FieldsRel.nameTyping and FieldsRel.nameUniqueness
-           TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfLocTyping and
-              TypesRel.typeOfLocTypeOfSymEquality
+    SymbolicSetRel.symsTyping and SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
+    LocsRel.nameTyping and LocsRel.nameUniqueness and
+    FieldsRel.nameTyping and FieldsRel.nameUniqueness and
+    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
+    TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfLocTyping and
+    TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality
   }
 
 
   def bounds(rs : Set[Relation], symbolintnames: Set[Integer]) : Bounds = {
     val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
     val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
-    val types = (for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")).toMap
+    val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
     val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2) ++ types.values.toSeq
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
@@ -190,7 +225,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       nameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(SymbolsRel.name, nameUpper)
 
-    for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf (types(c)))
+    for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf types(c))
     bounds.boundExactly(TypesRel.self, f setOf (types.values.toSeq :_*))
     val stBounds = f noneOf 2
     for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
@@ -309,14 +344,35 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     } yield (EvalState(Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2 and nameConstraint, th2), s)
   }
 
-
-  def extractConcreteMemory(instance: Instance): CMem = ???
-
   def concretise(smem: SMem): String \/ CMem = {
+    def extractConcreteMemory(instance: Instance): CMem = ???
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
       case Single => s.join(SymbolicSetRel.syms).one
       case Many => Formula.TRUE
       case Opt => s.join(SymbolicSetRel.syms).lone
+    }
+    def createBidiMap[K,V](s: Seq[(K,V)]): (Map[K, V], Map[V,K]) = {
+      (Map(s :_*), Map(s.map(_.swap) :_*))
+    }
+    val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
+    val (varMapFrom, varMapTo) = createBidiMap(smem.stack.keySet.zipWithIndex.toSeq)
+    val varevalres = smem.stack.foldLeft((initEvalState, Set[Relation](), Formula.TRUE).right[String]) { (str, vinfo) =>
+      val (vr, exp) = vinfo
+      for {
+        st <- str
+        (evalState, varrels, constraints) = st
+        eexp <- evalSetExpr(exp, evalState.ssymmap)
+        (EvalState(rs,is,f,th), setrel) = eexp
+        varrel = Relation.unary(s"Var$vr")
+        varconstraint = {
+          val v = Variable.unary("v")
+          val ss = Variable.unary("ss")
+          val membershipconstraint = v in VarsRel.self forAll (v oneOf varrel)
+          val nameConstraint = v.join(VarsRel.name) eq IntConstant.constant(varMapFrom(vr)).toExpression forAll (v oneOf varrel)
+          val valsConstraint = v.join(VarsRel.vals) eq ss forAll ((ss oneOf setrel) and (v oneOf varrel))
+          membershipconstraint and nameConstraint and valsConstraint
+        }
+      } yield (EvalState(evalState.symrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varrels + varrel, constraints and varconstraint)
     }
     val ssvconstraints = smem.heap.ssvltion.foldLeft(Formula.TRUE) { (constraints, ssinfo) =>
       val (ssym, ssdesc) = ssinfo
@@ -342,14 +398,15 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             (s.join(TypesRel.typeOfSym) eq t)) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
       }) and constraints
     }
-    
     val solver = new Solver
     solver.options.setSolver(SATFactory.MiniSat)
     for {
+      ver <- varevalres
+      (varEvalState, varrels, varconstraints) = ver
       epure <- evalBoolExpr(smem.heap.pure.foldLeft(True(): BoolExpr[IsSymbolic.type]) (And(_, _)), Map(), isNegated = false)
       (est, pureconstraints) = epure
-      allConstraints = constraints and ssvconstraints and svconstraints and pureconstraints and est.constraints // and ...
-      solution = solver.solve(allConstraints, bounds(est.rs, est.is))
+      allConstraints = staticConstraints and ssvconstraints and svconstraints and pureconstraints and est.constraints // and ...
+      solution = solver.solve(allConstraints, bounds(est.symrels, est.symnames))
       instance <- solution.outcome match {
         case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE =>
           val instance = solution.instance
@@ -501,7 +558,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, mem: SMem): Process0[String \/ (Set[Symbol], SMem)] = {
     def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
-      val sym = Symbol(symcounter.++)
+      val sym = Symbol(symcounter.++())
       // TODO Fix descendantpool to be partitioned
       val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership, ssdesc.descendantPools)
       val newst = st + (sym -> symdesc)
@@ -556,9 +613,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     heap.svltion.get(sym).cata({
       case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership, descendantpool) => {
+      case UnknownLoc(cl, ownership, descendantpool) =>
         // TODO check consistency via SAT
-        val newLoc = Loc(loccounter.++)
+        val newLoc = Loc(loccounter.++())
         val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
         ownership match {
           case SUnowned =>
@@ -591,7 +648,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         if (mentioningConstraints.isEmpty) {
          ???
         } else ??? */
-      }
     }, Process(s"No such symbol: $sym".left))
   }
 
@@ -603,7 +659,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     fieldSet.foldLeft((Map(): SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]())) { (st, fieldkv) =>
       fieldkv match {
         case (f, (cl, crd)) =>
-          val sym = SetSymbol(symcounter.++)
+          val sym = SetSymbol(symcounter.++())
           // TODO Partition descendant pools
           (st._1 + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), st._2)
       }
@@ -620,16 +676,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       if (!optimistic) err
       else {
         (if(dt.hasExact) err else Process()) ++ (for {
-           nc <- Process.emitAll(dt.possible.toSeq)
-           cdr = defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left)
-           unfoldedr = cdr map { cd =>
-             unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
-           }
-          res <- unfoldedr.traverse({ case (psdesc, nheap) =>
-              if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-              else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
-          })(pmn).map(_.flatMap(identity))
-        } yield res)
+           nc <- EitherT.right[Process0,String,Class](Process.emitAll(dt.possible.toSeq))
+           cd <- EitherT[Process0, String, ClassDefinition](defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left).point[Process0])
+           (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
+           res <- EitherT[Process0, String, (SpatialDesc, SHeap)](
+                  if (containsTargetField(psdesc)) (psdesc, nheap).right.point[Process0]
+                  else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
+        } yield res).run
       }
     }
     def unfoldAbstract(sdesc: SpatialDesc, cd: ClassDefinition, heap: SHeap): (SpatialDesc, SHeap) = {
