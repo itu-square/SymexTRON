@@ -35,6 +35,10 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
 
+resolvers += Resolver.sonatypeRepo("releases")
+
+addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.7.1")
+
 fork in Test := true
 
 triggeredMessage := Watched.clearWhenTriggered

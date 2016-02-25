@@ -15,6 +15,7 @@ import semantics.domains._
 import syntax.ast._
 
 import scala.collection.JavaConverters._
+import scala.language.higherKinds
 import scalaz.Scalaz.{none, unfold => generate}
 import scalaz.concurrent.Task
 import scalaz.stream._
@@ -28,26 +29,30 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   extends LazyLogging {
 
   private type StringE[T] = String \/ T
-  case class EvalState(symrels: Set[Relation], symnames: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
+  case class EvalState(ssymrels: Set[Relation], symnames: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
   private type EvalRes[T] = (EvalState, T)
+
+
+  def mergeEvalState(inState: EvalState, outState: EvalState): EvalState =
+    EvalState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, inState.constraints and outState.constraints, inState.ssymmap ++ outState.ssymmap)
 
   var counter = 0
 
   object SymbolicSetRel {
     val self = Relation.unary("SymbolicSet")
     val syms = Relation.binary("SymbolicSet/syms")
-    val symsTyping = {
+    lazy val symsTyping = {
       val ss = Variable.unary("ss")
-      ((ss.join(SymbolicSetRel.syms) in SymbolsRel.self) forAll (ss oneOf SymbolicSetRel.self)) and
-        (SymbolicSetRel.syms.join(Expression.UNIV) in SymbolicSetRel.self)
+      ((ss.join(syms) in SymbolsRel.self) forAll (ss oneOf self)) and
+        (syms.join(Expression.UNIV) in self)
     }
     val name = Relation.binary("SymbolicSet/name")
-    val nameTyping = {
+    lazy val nameTyping = {
       val s = Variable.unary("s")
       (s.join(name).lone and (s.join(name) in Expression.INTS) forAll (s oneOf self)) and
         (name.join(Expression.UNIV) in self)
     }
-    val nameUniqueness = {
+    lazy val nameUniqueness = {
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
       (s1 eq s2) iff ((s1.join(name) eq s2.join(name)) and (s1.join(name) eq Expression.NONE).not) forAll ((s1 oneOf self) and (s2 oneOf self))
@@ -57,18 +62,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object LocsRel {
     val self = Relation.unary("Locs")
     val name = Relation.binary("Locs/name")
-    val nameTyping = {
+    lazy val nameTyping = {
       val l = Variable.unary("l")
       (l.join(name).one and (l.join(name) in Expression.INTS)) forAll (l oneOf self) and
         (name.join(Expression.UNIV) in self)
     }
-    val nameUniqueness = {
+    lazy val nameUniqueness = {
       val l1 = Variable.unary("l1")
       val l2 = Variable.unary("l2")
       (l1 eq l2) iff (l1.join(name) eq l2.join(name)) forAll ((l1 oneOf self) and (l2 oneOf self))
     }
     val fields = Relation.ternary("Locs/fields")
-    val fieldsTyping = {
+    lazy val fieldsTyping = {
       val l = Variable.unary("l")
       val f = Variable.unary("f")
       val ss = Variable.unary("s")
@@ -83,18 +88,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object VarsRel {
     val self = Relation.unary("Vars")
     val name = Relation.binary("Vars/name")
-    val nameTyping = {
+    lazy val nameTyping = {
       val v = Variable.unary("v")
       (v.join(name).one and (v.join(name) in Expression.INTS)) forAll (v oneOf self) and
         (name.join(Expression.UNIV) in self)
     }
-    val nameUniqueness = {
+    lazy val nameUniqueness = {
       val v1 = Variable.unary("v1")
       val v2 = Variable.unary("v2")
       ((v1 eq v2) iff (v1.join(name) eq v2.join(name))) forAll ((v1 oneOf self) and (v2 oneOf self))
     }
     val vals = Relation.binary("Vars/vals")
-    val valsTyping = {
+    lazy val valsTyping = {
       val v = Variable.unary("v")
       (v.join(vals).one and (v.join(vals) in SymbolicSetRel.self)) forAll (v oneOf self) and
         (vals.join(Expression.UNIV) in self)
@@ -104,12 +109,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object FieldsRel {
     val self = Relation.unary("Fields")
     val name = Relation.binary("Fields/name")
-    val nameTyping = {
+    lazy val nameTyping = {
       val f = Variable.unary("f")
       (f.join(name).one and (f.join(name) in Expression.INTS)) forAll (f oneOf self) and
         (name.join(Expression.UNIV) in self)
     }
-    val nameUniqueness = {
+    lazy val nameUniqueness = {
       val f1 = Variable.unary("f1")
       val f2 = Variable.unary("f2")
       ((f1 eq f2) iff (f1.join(name) eq f2.join(name))) forAll ((f1 oneOf self) and (f2 oneOf self))
@@ -119,18 +124,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object SymbolsRel {
     val self = Relation.unary("Symbols")
     val name = Relation.binary("Symbols/name")
-    val nameTyping = {
+    lazy val nameTyping = {
       val s = Variable.unary("s")
       (s.join(name).one and (s.join(name) in Expression.INTS) forAll (s oneOf self)) and
         (name.join(Expression.UNIV) in self)
     }
-    val nameUniqueness = {
+    lazy val nameUniqueness = {
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
       (s1 eq s2) iff (s1.join(name) eq s2.join(name)) forAll ((s1 oneOf self) and (s2 oneOf self))
     }
     val loc = Relation.binary("Symbols/loc")
-    val locTyping = {
+    lazy val locTyping = {
       val s = Variable.unary("s")
       s.join(loc).one and (s.join(loc) in LocsRel.self) forAll (s oneOf self) and
         (loc.join(Expression.UNIV) in self)
@@ -140,36 +145,36 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   object TypesRel {
     val self = Relation.unary("Types")
     val isSubType = Relation.binary("Types/isSubType")
-    val isSubTypeTyping = {
+    lazy val isSubTypeTyping = {
       val t = Variable.unary("t")
       (t.join(isSubType) in self) forAll (t oneOf self) and
         (isSubType.join(Expression.UNIV) in self)
     }
     val typeOfSet = Relation.binary("Types/typeOfSet")
-    val typeOfSetTyping = {
+    lazy val typeOfSetTyping = {
       val ss = Variable.unary("ss")
       (ss.join(typeOfSet).one and (ss.join(typeOfSet) in self) forAll (ss oneOf SymbolicSetRel.self)) and
         (typeOfSet.join(Expression.UNIV) in SymbolicSetRel.self)
     }
     val typeOfSym = Relation.binary("Types/typeOfSym")
-    val typeOfSymTyping = {
+    lazy val typeOfSymTyping = {
       val s = Variable.unary("s")
       (s.join(typeOfSym).lone and (s.join(typeOfSym) in self) forAll (s oneOf SymbolsRel.self)) and
         (typeOfSym.join(Expression.UNIV) in SymbolsRel.self)
     }
     val typeOfLoc = Relation.binary("Types/typeOfLoc")
-    val typeOfLocTyping = {
+    lazy val typeOfLocTyping = {
       val l = Variable.unary("l")
       (l.join(typeOfLoc).one and (l.join(typeOfLoc) in self)) forAll (l oneOf LocsRel.self) and
         (typeOfLoc.join(Expression.UNIV) in LocsRel.self)
     }
-    val typeOfLocTypeOfSymEquality = {
+    lazy val typeOfLocTypeOfSymEquality = {
       val s = Variable.unary("s")
       val l = Variable.unary("l")
       (s.join(SymbolsRel.loc) eq l) implies (s.join(typeOfSym) eq l.join(typeOfLoc)) forAll
         ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
     }
-    val typeOfSymTypeOfSetSubtyping = {
+    lazy val typeOfSymTypeOfSetSubtyping = {
       val s = Variable.unary("s")
       val ss = Variable.unary("ss")
       val t = Variable.unary("t")
@@ -203,11 +208,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
 
-  def bounds(rs : Set[Relation], symbolintnames: Set[Integer]) : Bounds = {
-    val symbolids = symbolintnames.toList.sorted.map(i => s"sym'$i")
-    val symbolicsets = for ((r, i) <- rs.zipWithIndex) yield (r, s"set'$i")
+  def bounds(setsymrels : Set[Relation], symnames: Set[Integer], setsymnames: Set[Integer]) : Bounds = {
+    val symbolids = symnames.toList.sorted.map(i => s"sym'$i")
+    val symbolicsets = for ((r, i) <- setsymrels.zipWithIndex) yield (r, s"set'$i")
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
-    val atoms =  symbolintnames ++ symbolids ++ symbolicsets.map(_._2) ++ types.values.toSeq
+    val atoms =  symnames ++ symbolids ++ symbolicsets.map(_._2) ++ setsymnames ++ types.values.toSeq
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
@@ -216,12 +221,20 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
     bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.map(_._2).toSeq :_*))
 
-    for (symname <- symbolintnames)
+    for (symname <- symnames)
       bounds.boundExactly(symname.intValue, f range (f tuple symname, f tuple symname))
 
+    for (setsymname <- setsymnames)
+      bounds.boundExactly(setsymname.intValue, f range (f tuple setsymname, f tuple setsymname))
+
+
     bounds.bound(SymbolicSetRel.syms, f allOf 2)
+    // TODO Use stricter bounds
+    bounds.bound(SymbolicSetRel.name, f allOf 2)
+
+
     val nameUpper = f noneOf 2
-    for ((sid, sname) <- symbolids.zip(symbolintnames.toList.sorted))
+    for ((sid, sname) <- symbolids.zip(symnames.toList.sorted))
       nameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(SymbolsRel.name, nameUpper)
 
@@ -282,16 +295,16 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                          th: Map[Symbols, Relation], isNegated: Boolean): String \/ EvalRes[Formula] = {
     for {
       ee1 <- evalSetExpr(e1, th)
-      (EvalState(rs1, is1, f1, th1), r1) = ee1
-      ee2 <- evalSetExpr(e2, th1)
-      (EvalState(rs2, is2, f2, th2), r2) = ee2
+      (est1, r1) = ee1
+      ee2 <- evalSetExpr(e2, est1.ssymmap)
+      (est2, r2) = ee2
       formula = {
         val x1 = Variable.unary("x1")
         val x2 = Variable.unary("x2")
         val res = op(x1.join(SymbolicSetRel.syms), x2.join(SymbolicSetRel.syms))
         (if (isNegated) res.not else res) forAll ((x1 oneOf r1) and (x2 oneOf r2))
       }
-    } yield (EvalState(rs1 union rs2, is1 union is2, formula and f1 and f2, th2), formula)
+    } yield (mergeEvalState(est1, est2), formula)
   }
 
   def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Relation] = e match {
@@ -367,12 +380,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         varconstraint = {
           val v = Variable.unary("v")
           val ss = Variable.unary("ss")
-          val membershipconstraint = v in VarsRel.self forAll (v oneOf varrel)
+          val membershipConstraint = v in VarsRel.self forAll (v oneOf varrel)
           val nameConstraint = v.join(VarsRel.name) eq IntConstant.constant(varMapFrom(vr)).toExpression forAll (v oneOf varrel)
           val valsConstraint = v.join(VarsRel.vals) eq ss forAll ((ss oneOf setrel) and (v oneOf varrel))
-          membershipconstraint and nameConstraint and valsConstraint
+          membershipConstraint and nameConstraint and valsConstraint
         }
-      } yield (EvalState(evalState.symrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varrels + varrel, constraints and varconstraint)
+      } yield (EvalState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varrels + varrel, constraints and varconstraint)
     }
     val ssvconstraints = smem.heap.ssvltion.foldLeft(Formula.TRUE) { (constraints, ssinfo) =>
       val (ssym, ssdesc) = ssinfo
@@ -398,15 +411,77 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             (s.join(TypesRel.typeOfSym) eq t)) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
       }) and constraints
     }
+    val allFields = defs.childfields ++ defs.reffields
+    val (fieldMapFrom, fieldMapTo) = createBidiMap(allFields.zipWithIndex.toSeq)
+    val (fieldRels, fieldConstraints) = allFields.foldLeft((Set[Relation](), Formula.TRUE)) { (st, field) =>
+      val (rels, constraints) = st
+      val frel = Relation.unary(s"Field$field")
+      val f = Variable.unary("f")
+      val membershipConstraint = (f in FieldsRel.self) forAll (f oneOf frel)
+      val nameConstraint = (f.join(FieldsRel.name) eq IntConstant.constant(fieldMapFrom(field)).toExpression) forAll (f oneOf frel)
+      (rels + frel, constraints and membershipConstraint and nameConstraint)
+    }
+    val (locRels, locConstraints) = smem.heap.initSpatial.keySet.foldLeft((Set[Relation](), Formula.TRUE)) { (st, loc) =>
+      val (rels, constraints) = st
+      val locrel = Relation.unary(s"Loc${loc.id}")
+      val l = Variable.unary("l")
+      val membershipConstraint = (l in LocsRel.self) forAll (l oneOf locrel)
+      val nameConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) forAll (l oneOf locrel)
+      (rels + locrel, constraints and membershipConstraint and nameConstraint)
+    }
+    def translateSpatial(initEvalState: EvalState) = smem.heap.initSpatial.foldLeft((initEvalState, Formula.TRUE).right[String]) { (st, locinfo) =>
+      val (loc, sdesc) = locinfo
+      val l = Variable.unary("l")
+      val t = Variable.unary("t")
+      val t2 = Variable.unary("t2")
+      val typeConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) implies
+        (l.join(TypesRel.typeOfLoc) eq t) and (t2 in TypesRel.typerels(sdesc.c)) and (sdesc.desctype match {
+          case ExactDesc => t eq t2
+          case AbstractDesc => t2 in t.join(TypesRel.isSubType)
+          case PartialDesc(hasExact, possible) =>
+            val exactConstraint = if (!hasExact) (t eq t2).not else Formula.TRUE
+            val possibleConstraints = possible.foldLeft(Formula.FALSE) { (constraint,c) =>
+              TypesRel.typerels(c) in t.join(TypesRel.isSubType) or constraint
+            }
+            (t2 in t.join(TypesRel.isSubType)) and exactConstraint and possibleConstraints
+      }) `forSome` ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.self)) forAll (l oneOf LocsRel.self)
+      for {
+        evalres <- st
+        (evalstate, constraints) = evalres
+        fieldEvalRes <- (sdesc.children ++ sdesc.refs).foldLeft((evalstate, Formula.TRUE).right[String]) { (st, fieldinfo) =>
+          val (field, fieldval) = fieldinfo
+          for {
+            evalres <- st
+            (evalstate, constraints) = evalres
+            fieldvalres <- evalSetExpr(fieldval, evalstate.ssymmap)
+            (fieldvalEvalState, fieldvalRel) = fieldvalres
+            fieldconstraint = {
+              val f = Variable.unary("f")
+              val s = Variable.unary("s")
+              (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) and
+                (f.join(FieldsRel.name) eq IntConstant.constant(fieldMapFrom(field)).toExpression) implies
+                  (f.product(s) in l.join(LocsRel.fields)) forAll
+                    ((l oneOf LocsRel.self) and (f oneOf FieldsRel.self) and (s oneOf fieldvalRel))
+            }
+          } yield (mergeEvalState(evalstate, fieldvalEvalState), constraints and fieldconstraint)
+        }
+        (fieldEvalState, fieldConstraints) = fieldEvalRes
+      } yield (mergeEvalState(evalstate, fieldEvalState), constraints and typeConstraint and fieldConstraints)
+    }
     val solver = new Solver
     solver.options.setSolver(SATFactory.MiniSat)
     for {
       ver <- varevalres
-      (varEvalState, varrels, varconstraints) = ver
-      epure <- evalBoolExpr(smem.heap.pure.foldLeft(True(): BoolExpr[IsSymbolic.type]) (And(_, _)), Map(), isNegated = false)
-      (est, pureconstraints) = epure
-      allConstraints = staticConstraints and ssvconstraints and svconstraints and pureconstraints and est.constraints // and ...
-      solution = solver.solve(allConstraints, bounds(est.symrels, est.symnames))
+      (varEvalState, varrels, varConstraints) = ver
+      epure <- evalBoolExpr(smem.heap.pure.foldLeft(True(): BoolExpr[IsSymbolic.type]) (And(_, _)), varEvalState.ssymmap, isNegated = false)
+      (pureEvalState, pureConstraints) = epure
+      // Consider using RWS monad
+      iest = mergeEvalState(varEvalState, pureEvalState)
+      spatialEvalRes <- translateSpatial(iest)
+      (spatialEvalState, spatialConstraints) = spatialEvalRes
+      est  = mergeEvalState(iest, spatialEvalState)
+      allConstraints = staticConstraints and ssvconstraints and svconstraints and pureConstraints and spatialConstraints and est.constraints // and ...
+      solution = solver.solve(allConstraints, bounds(est.ssymrels, est.symnames, smem.heap.ssvltion.keySet.map(s => Int.box(s.id))))
       instance <- solution.outcome match {
         case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE =>
           val instance = solution.instance
