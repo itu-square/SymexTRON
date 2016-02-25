@@ -208,35 +208,41 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
 
-  def bounds(setsymrels : Set[Relation], symnames: Set[Integer], setsymnames: Set[Integer]) : Bounds = {
-    val symbolids = symnames.toList.sorted.map(i => s"sym'$i")
-    val symbolicsets = for ((r, i) <- setsymrels.zipWithIndex) yield (r, s"set'$i")
+  def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc]) : Bounds = {
+    val locset = locs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
+    val symbolids = symnames.map(i => (i, s"sym'$i")).toMap
+    val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
-    val atoms =  symnames ++ symbolids ++ symbolicsets.map(_._2) ++ setsymnames ++ types.values.toSeq
+    val setsymnames: Set[Integer] = setsymmap.keySet.map(s => Int.box(s))
+    val atoms =  symbolids.keySet ++ symbolids.values ++ symbolicsets.values ++ setsymnames ++ types.values ++ locset.keySet ++ locset.values
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
 
-    bounds.boundExactly(SymbolsRel.self, f setOf (symbolids :_*))
+    bounds.boundExactly(SymbolsRel.self, f setOf (symbolids.values.toSeq :_*))
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
-    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.map(_._2).toSeq :_*))
+    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.values.toSeq :_*))
 
-    for (symname <- symnames)
+    for (symname <- symbolids.keySet)
       bounds.boundExactly(symname.intValue, f range (f tuple symname, f tuple symname))
 
     for (setsymname <- setsymnames)
       bounds.boundExactly(setsymname.intValue, f range (f tuple setsymname, f tuple setsymname))
 
-
     bounds.bound(SymbolicSetRel.syms, f allOf 2)
-    // TODO Use stricter bounds
-    bounds.bound(SymbolicSetRel.name, f allOf 2)
+    val ssetrelnameUpper = f noneOf 2
+    for ((ssym, rel) <- setsymmap) ssetrelnameUpper.add((f tuple symbolicsets(rel)) product (f tuple Int.box(ssym)))
+    bounds.bound(SymbolicSetRel.name, ssetrelnameUpper)
 
+    bounds.boundExactly(LocsRel.self, f setOf (locset.values.toSeq :_*))
+    val locsnameUpper = f noneOf 2
+    for ((locname, locid) <- locset) locsnameUpper.add((f tuple locid) product (f tuple locname))
+    bounds.boundExactly(LocsRel.name, locsnameUpper)
 
-    val nameUpper = f noneOf 2
-    for ((sid, sname) <- symbolids.zip(symnames.toList.sorted))
-      nameUpper.add((f tuple sid) product (f tuple sname))
-    bounds.bound(SymbolsRel.name, nameUpper)
+    val symnameUpper = f noneOf 2
+    for ((sname, sid) <- symbolids)
+      symnameUpper.add((f tuple sid) product (f tuple sname))
+    bounds.bound(SymbolsRel.name, symnameUpper)
 
     for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf types(c))
     bounds.boundExactly(TypesRel.self, f setOf (types.values.toSeq :_*))
@@ -246,14 +252,14 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     bounds.boundExactly(TypesRel.isSubType, stBounds)
     val typeOfSUpper = f noneOf 2
-    for (ss <- symbolicsets.map(_._2).toList) {
+    for (ss <- symbolicsets.values.toList) {
       for (typ <- types.values.toList) {
         typeOfSUpper.add((f tuple ss) product (f tuple typ))
       }
     }
     bounds.bound(TypesRel.typeOfSet, typeOfSUpper)
     val typeOfUpper = f noneOf 2
-    for (sid <- symbolids) {
+    for (sid <- symbolids.values) {
       for (typ <- types.values.toList) {
         typeOfUpper.add((f tuple sid) product (f tuple typ))
       }
@@ -481,7 +487,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (spatialEvalState, spatialConstraints) = spatialEvalRes
       est  = mergeEvalState(iest, spatialEvalState)
       allConstraints = staticConstraints and ssvconstraints and svconstraints and pureConstraints and spatialConstraints and est.constraints // and ...
-      solution = solver.solve(allConstraints, bounds(est.ssymrels, est.symnames, smem.heap.ssvltion.keySet.map(s => Int.box(s.id))))
+      bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet)
+      solution = solver.solve(allConstraints, bounds)
       instance <- solution.outcome match {
         case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE =>
           val instance = solution.instance
