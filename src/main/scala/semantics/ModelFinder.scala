@@ -198,18 +198,17 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def staticConstraints : Formula = {
-    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and // SymbolsRel.locTyping and
+    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolsRel.locTyping and
     SymbolicSetRel.symsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
-    //LocsRel.nameTyping and LocsRel.nameUniqueness and
-    //FieldsRel.nameTyping and FieldsRel.nameUniqueness and
-    //VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
+    LocsRel.nameTyping and LocsRel.nameUniqueness and
+    FieldsRel.nameTyping and FieldsRel.nameUniqueness and
+    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
     TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
     TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality
   }
 
-
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
-    val locobjs = locs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
+    val locobjs = (locs ++ (100 to 150).map(Loc)).map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
     val symbolids = symnames.map(i => (i, s"sym'$i")).toMap
     val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
@@ -222,12 +221,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val bounds = new Bounds(universe)
     val f = universe.factory
 
+
+    for (intval <- locobjs.keySet ++ symbolids.keySet ++ fieldobjs.keySet ++ varobjs.keySet)
+      bounds.boundExactly(intval.intValue, f range (f tuple intval, f tuple intval))
+
     bounds.boundExactly(SymbolsRel.self, f setOf (symbolids.values.toSeq :_*))
+
+    val symLocUpper = f noneOf 2
+    for (symid <- symbolids.values.toSeq; locid <- locobjs.values.toSeq) symLocUpper.add((f tuple symid) product (f tuple locid))
+    bounds.bound(SymbolsRel.loc, symLocUpper)
+
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
     bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.values.toSeq :_*))
-
-    for (symname <- symbolids.keySet)
-      bounds.boundExactly(symname.intValue, f range (f tuple symname, f tuple symname))
 
     for (setsymname <- setsymnames)
       bounds.boundExactly(setsymname.intValue, f range (f tuple setsymname, f tuple setsymname))
