@@ -22,6 +22,7 @@ import scalaz.stream._
 import scalaz.syntax.either._
 import scalaz.syntax.monad._
 import scalaz.syntax.std.option._
+import scalaz.syntax.foldable._
 import scalaz.{EitherT, \/}
 
 class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition],
@@ -200,7 +201,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def staticConstraints : Formula = {
     SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolsRel.locTyping and
     SymbolicSetRel.symsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
-    LocsRel.nameTyping and LocsRel.nameUniqueness and
+    LocsRel.nameTyping and LocsRel.nameUniqueness and LocsRel.fieldsTyping and
     FieldsRel.nameTyping and FieldsRel.nameUniqueness and
     VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
     TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
@@ -208,19 +209,33 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
-    val locobjs = (locs ++ (100 to 150).map(Loc)).map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
-    val symbolids = symnames.map(i => (i, s"sym'$i")).toMap
+    val additionallocs = {
+      // See if .max works instead of maximum
+      val maxid = try { locs.map(_.id).max + 1 } catch { case e:UnsupportedOperationException => 0 }
+      (maxid until (maxid + delta)).map(Loc)
+    }
+    val additionalsyms = {
+      val maxsym = try { symnames.max + 1 } catch { case e:UnsupportedOperationException => 0 }
+      (maxsym until (maxsym + delta)).map(Int.box)
+    }
+    val additionalsets = {
+      val k = setsymexprels.size + 1
+      val fieldmax = try { defs.values.toList.map(cd => (cd.refs ++ cd.children).size).max } catch { case e: UnsupportedOperationException => 0 }
+      (k until (fieldmax * delta + k)).map(i => s"set'$i")
+    }
+    println(additionalsets)
+    val locobjs = (locs ++ additionallocs).map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
+    val symbolids = (symnames ++ additionalsyms).map(i => (i, s"sym'$i")).toMap
     val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
     val fieldobjs = fieldmap.map { case (field, i) => (i, s"field'$field") }
     val varobjs = varmap.map { case (vr, i) => (i, s"var'$vr") }
     val setsymnames: Set[Integer] = setsymmap.keySet.map(s => Int.box(s))
-    val atoms =  symbolids.keySet ++ symbolids.values ++ symbolicsets.values ++ setsymnames ++ types.values ++
+    val atoms =  symbolids.keySet ++ symbolids.values ++ symbolicsets.values ++ additionalsets ++ setsymnames ++ types.values ++
       locobjs.keySet ++ locobjs.values ++ fieldobjs.keySet ++ fieldobjs.values ++ varobjs.keySet ++ varobjs.values
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
-
 
     for (intval <- locobjs.keySet ++ symbolids.keySet ++ fieldobjs.keySet ++ varobjs.keySet)
       bounds.boundExactly(intval.intValue, f range (f tuple intval, f tuple intval))
@@ -232,7 +247,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.bound(SymbolsRel.loc, symLocUpper)
 
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
-    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.values.toSeq :_*))
+    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.values.toSeq ++ additionalsets :_*))
 
     for (setsymname <- setsymnames)
       bounds.boundExactly(setsymname.intValue, f range (f tuple setsymname, f tuple setsymname))
@@ -243,7 +258,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.boundExactly(VarsRel.name, varnameUpper)
     val varvalsUpper = f noneOf 2
     for (varid <- varobjs.values.toSeq; sset <- symbolicsets.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple sset))
-    bounds.boundExactly(VarsRel.vals, varvalsUpper)
+    bounds.bound(VarsRel.vals, varvalsUpper)
 
     bounds.boundExactly(FieldsRel.self, f setOf (fieldobjs.values.toSeq :_*))
     val fieldnameUpper = f noneOf 2
@@ -261,6 +276,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val locsnameUpper = f noneOf 2
     for ((locname, locid) <- locobjs) locsnameUpper.add((f tuple locid) product (f tuple locname))
     bounds.boundExactly(LocsRel.name, locsnameUpper)
+
+    val locsfieldsUpper = f noneOf 3
+    for (locid <- locobjs.values; fieldid <- fieldobjs.values; setid <- symbolicsets.values ++ additionalsets)
+      locsfieldsUpper.add((f tuple locid) product (f tuple fieldid) product (f tuple setid))
+    bounds.bound(LocsRel.fields, locsfieldsUpper)
 
     val symnameUpper = f noneOf 2
     for ((sname, sid) <- symbolids)
@@ -500,7 +520,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       instance <- solution.outcome match {
         case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE =>
           val instance = solution.instance
-          extractConcreteMemory (instance).right
+          extractConcreteMemory(instance).right
         case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE => s"Unsatisfiable constraints: $allConstraints".left
       }
     } yield instance
