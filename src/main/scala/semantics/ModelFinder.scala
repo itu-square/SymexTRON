@@ -223,7 +223,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val fieldmax = try { defs.values.toList.map(cd => (cd.refs ++ cd.children).size).max } catch { case e: UnsupportedOperationException => 0 }
       (k until (fieldmax * delta + k)).map(i => s"set'$i")
     }
-    println(additionalsets)
     val locobjs = (locs ++ additionallocs).map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
     val symbolids = (symnames ++ additionalsyms).map(i => (i, s"sym'$i")).toMap
     val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
@@ -231,7 +230,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val fieldobjs = fieldmap.map { case (field, i) => (i, s"field'$field") }
     val varobjs = varmap.map { case (vr, i) => (i, s"var'$vr") }
     val setsymnames: Set[Integer] = setsymmap.keySet.map(s => Int.box(s))
-    val atoms =  symbolids.keySet ++ symbolids.values ++ symbolicsets.values ++ additionalsets ++ setsymnames ++ types.values ++
+    val allsymbolicsets = symbolicsets.values.toSeq ++ additionalsets
+    val atoms =  symbolids.keySet ++ symbolids.values ++ allsymbolicsets ++ setsymnames ++ types.values ++
       locobjs.keySet ++ locobjs.values ++ fieldobjs.keySet ++ fieldobjs.values ++ varobjs.keySet ++ varobjs.values
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
@@ -247,7 +247,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.bound(SymbolsRel.loc, symLocUpper)
 
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
-    bounds.boundExactly(SymbolicSetRel.self, f setOf (symbolicsets.values.toSeq ++ additionalsets :_*))
+    bounds.boundExactly(SymbolicSetRel.self, f setOf (allsymbolicsets :_*))
 
     for (setsymname <- setsymnames)
       bounds.boundExactly(setsymname.intValue, f range (f tuple setsymname, f tuple setsymname))
@@ -257,7 +257,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for ((varname, varid) <- varobjs) varnameUpper.add((f tuple varid) product (f tuple varname))
     bounds.boundExactly(VarsRel.name, varnameUpper)
     val varvalsUpper = f noneOf 2
-    for (varid <- varobjs.values.toSeq; sset <- symbolicsets.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple sset))
+    for (varid <- varobjs.values.toSeq; sset <- allsymbolicsets) varvalsUpper.add((f tuple varid) product (f tuple sset))
     bounds.bound(VarsRel.vals, varvalsUpper)
 
     bounds.boundExactly(FieldsRel.self, f setOf (fieldobjs.values.toSeq :_*))
@@ -266,8 +266,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.bound(FieldsRel.name, fieldnameUpper)
 
     val ssetrelsymsUpper = f noneOf 2
-    for (symid <- symbolids.values.toSeq; sset <- symbolicsets.values.toSeq) ssetrelsymsUpper.add((f tuple sset) product (f tuple symid))
+    for (symid <- symbolids.values.toSeq; sset <- allsymbolicsets) ssetrelsymsUpper.add((f tuple sset) product (f tuple symid))
     bounds.bound(SymbolicSetRel.syms, ssetrelsymsUpper)
+
     val ssetrelnameUpper = f noneOf 2
     for ((ssym, rel) <- setsymmap) ssetrelnameUpper.add((f tuple symbolicsets(rel)) product (f tuple Int.box(ssym)))
     bounds.bound(SymbolicSetRel.name, ssetrelnameUpper)
@@ -278,7 +279,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.boundExactly(LocsRel.name, locsnameUpper)
 
     val locsfieldsUpper = f noneOf 3
-    for (locid <- locobjs.values; fieldid <- fieldobjs.values; setid <- symbolicsets.values ++ additionalsets)
+    for (locid <- locobjs.values; fieldid <- fieldobjs.values; setid <- allsymbolicsets)
       locsfieldsUpper.add((f tuple locid) product (f tuple fieldid) product (f tuple setid))
     bounds.bound(LocsRel.fields, locsfieldsUpper)
 
@@ -295,7 +296,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     bounds.boundExactly(TypesRel.isSubType, stBounds)
     val typeOfSetUpper = f noneOf 2
-    for (ss <- symbolicsets.values.toSeq) {
+    for (ss <- allsymbolicsets) {
       for (typ <- types.values.toSeq) {
         typeOfSetUpper.add((f tuple ss) product (f tuple typ))
       }
