@@ -14,7 +14,7 @@ class Class2TableExampleTests extends FlatSpec
   def execFixture = new ConcreteExecutor(Class2TableExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
                                          Class2TableExample.prog)
 
-  def retainedVars(mem: CMem) = GarbageCollection.retainVars(mem, Set("class", "table"))
+  def retainedVars(mem: CMem) = GarbageCollection.gc(mem, retainvars = Some(Set("class", "table")))
 
   "The class-to-table transformation" should "transform a class with no attributes to a table with only an identity column" in {
     val exec = execFixture

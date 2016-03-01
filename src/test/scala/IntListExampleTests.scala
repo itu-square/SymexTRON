@@ -13,7 +13,7 @@ class IntListExampleTests extends FlatSpec
   def execFixture = new ConcreteExecutor(IntListExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
                                          IntListExample.prog)
 
-  def retainedVars(mem: CMem) = GarbageCollection.retainVars(mem, Set("list", "elem", "containselem"))
+  def retainedVars(mem: CMem) = GarbageCollection.gc(mem, retainvars = Some(Set("list", "elem", "containselem")))
 
   "The int list containment query" should "not find the element in the empty list" in {
     val exec = execFixture
