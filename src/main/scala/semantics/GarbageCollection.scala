@@ -8,7 +8,7 @@ import semantics.domains._
   */
 object GarbageCollection {
 
-  def retainVars(cmem: CMem, retained: Set[Vars]): CMem = {
+  private def retainVars(cmem: CMem, retained: Set[Vars]): CMem = {
     def mark(marked: Set[Instances], current: Instances): Set[Instances] = {
       def markRefs(marked: Set[Instances], refs: Map[Instances, Map[Fields, Set[Instances]]]): Set[Instances] = {
         if (refs.contains(current)) {
@@ -30,10 +30,23 @@ object GarbageCollection {
     val marked_ = marked.foldLeft(marked)(mark)
     val newheap = CHeap(sweep(marked_, cmem.heap.typeenv),
                         sweep(marked_, cmem.heap.childenv),
-                        sweep(marked_, cmem.heap.childenv))
+                        sweep(marked_, cmem.heap.refenv))
     CMem(newstack, newheap)
   }
 
-  def gc(cmem: CMem): CMem = retainVars(cmem, cmem.stack.keys.toSet)
+  private def reset(mem: CMem): CMem = {
+    val allLocs = mem.heap.typeenv.keys.toList.sorted
+    val locReplacement = allLocs.zipWithIndex.toMap
+    val nstack = mem.stack.mapValues(_.map(locReplacement))
+    val ntypeenv = mem.heap.typeenv.map { case (l, c) => (locReplacement(l), c) }
+    val nchildenv = mem.heap.childenv.map { case (l, fs) => (locReplacement(l), fs.map { case (f, ols) => (f, ols.map(locReplacement)) } ) }
+    val nrefenv = mem.heap.refenv.map { case (l, fs) => (locReplacement(l), fs.map { case (f, ols) => (f, ols.map(locReplacement)) } ) }
+    CMem(nstack, CHeap(ntypeenv, nchildenv, nrefenv))
+  }
+
+  def gc(cmem: CMem, retainvars: Option[Set[Vars]] = None, resetlocs: Boolean = false): CMem = {
+    val gced = retainVars(cmem, retainvars.getOrElse(cmem.stack.keys.toSet))
+    if (resetlocs) reset(gced) else gced
+  }
 
 }

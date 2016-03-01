@@ -226,8 +226,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val ss = Relation.unary(s"ConcreteSymbolicSet$counter")
     val s = Variable.unary("s")
     val nameExpr = idopt.cata({ case id => IntConstant.constant(id).toExpression }, Expression.NONE)
-    val nameConstraint = ((s.join(SymbolicSetRel.name) eq nameExpr) and
-      idopt.cata(_ => s.join(TypesRel.typeOfSet) eq Expression.NONE, Formula.TRUE)) forAll (s oneOf ss)
+    val nameConstraint = (s.join(SymbolicSetRel.name) eq nameExpr) forAll (s oneOf ss)
     val subsetConstraint = (s in SymbolicSetRel.self) forAll (s oneOf ss)
     (ss, nameConstraint and subsetConstraint)
   }
@@ -472,7 +471,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         val typename = typ.replaceFirst("type'", "")
         typeMap + (locName(loc) -> Class(typename))
       }
-      val (childRels, refRels) = locFields.partition { case (l,f,ss) => defs.childfields.contains(f) }
+      val (childRels, refRels) = locFields.partition { case (l,f,ss) => defs.childfields.contains(f.replaceFirst("field'","")) }
       def convertFieldmap(rels: Set[(String, String, String)]) : Map[Instances, Map[Fields, Set[Instances]]] = {
         rels.foldLeft(Map[Instances, Map[Fields, Set[Instances]]]()) { (map, rel) =>
           val (l, f, ss) = rel
@@ -484,7 +483,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       }
       val childMap = convertFieldmap(childRels)
       val refMap = convertFieldmap(refRels)
-      CMem(stack, CHeap(typeMap, childMap, refMap))
+      val extracted = CMem(stack, CHeap(typeMap, childMap, refMap))
+      GarbageCollection.gc(extracted, resetlocs = true)
     }
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
       case Single => s.join(SymbolicSetRel.syms).one
@@ -514,7 +514,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val s = Variable.unary("s")
       val t = Variable.unary("t")
       (s.join(SymbolicSetRel.name) eq IntConstant.constant(ssym.id).toExpression implies
-        (cardConstraint(s, ssdesc.crd) and (s.join(TypesRel.typeOfSet) eq t)) forAll
+        (cardConstraint(s, ssdesc.crd) and (t in s.join(TypesRel.typeOfSet).join(TypesRel.isSubType))) forAll
           ((s oneOf SymbolicSetRel.self) and (t oneOf TypesRel.typerels(ssdesc.cl)))) and constraints
     }
     val svconstraints = smem.heap.svltion.foldLeft(Formula.TRUE) { (constraints, sinfo) =>
@@ -530,7 +530,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           val s = Variable.unary("s")
           val t = Variable.unary("t")
           (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies
-            (s.join(TypesRel.typeOfSym) eq t)) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
+            (t in s.join(TypesRel.typeOfSym).join(TypesRel.isSubType))) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
       }) and constraints
     }
     val fieldIntMap = FieldsRel.fieldsrels.keySet.zipWithIndex.toMap
@@ -585,7 +585,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       spatialEvalRes <- translateSpatial(iest)
       (spatialEvalState, spatialConstraints) = spatialEvalRes
       est  = mergeEvalState(iest, spatialEvalState)
-      allConstraints = staticConstraints and ssvconstraints and svconstraints and pureConstraints and spatialConstraints and est.constraints // and ...
+      allConstraints = staticConstraints and ssvconstraints and svconstraints and varConstraints and pureConstraints and spatialConstraints and est.constraints // and ...
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
       solution = solver.solve(allConstraints, bounds)
       instance <- solution.outcome match {
