@@ -54,6 +54,11 @@ package object ast {
     def supertypes(c : Class): Set[Class] =
      defs(c).superclass.toSet.|>(s => s ++ s.flatMap(supertypes)) + Class("Any")
 
+    def definingClass(c : Class, f : Fields): Class = {
+      if (defs(c).children.contains(f) || defs(c).refs.contains(f)) c
+      else definingClass(defs(c).superclass.get, f)
+    }
+
     val directSubtypes: Map[Class, Set[Class]] = defs.mapValues(_ => Set[Class]()) ++ {
       defs.values.foldLeft(Map[Class, Set[Class]]())((m : Map[Class, Set[Class]], cd: ClassDefinition) =>
         cd.superclass.cata(sup => m.adjust(sup)(_ + Class(cd.name)), m)
