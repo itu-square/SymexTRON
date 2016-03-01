@@ -9,7 +9,7 @@ import syntax.ast.Statement._
   */
 trait BlogPostFeedExample extends Example {
   override val pres: Set[SMem] = Set(
-    SMem(Map("post" -> SetLit(Seq(Symbol(-1)))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned, Map())), Map(), Map(), Set()))
+    SMem(Map("post" -> SetLit(Seq(Symbol(-1)))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("AggregatePost"), SUnowned, Map())), Map(), Map(), Set()))
   )
 
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(

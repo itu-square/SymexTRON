@@ -120,6 +120,31 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val f2 = Variable.unary("f2")
       ((f1 eq f2) iff (f1.join(name) eq f2.join(name))) forAll ((f1 oneOf self) and (f2 oneOf self))
     }
+    val childs = Relation.unary("Fields$child")
+    lazy val childsTyping = {
+      val f = Variable.unary("f")
+      f in self forAll (f oneOf childs)
+    }
+    val refs = Relation.unary("Fields$ref")
+    lazy val refsTyping = {
+      val f = Variable.unary("f")
+      f in self forAll (f oneOf refs)
+    }
+    lazy val childsRefsDisjoint = {
+      (childs intersection refs) eq Expression.NONE
+    }
+    lazy val childsDefFields = {
+      defs.childfields.foldLeft(Formula.TRUE) { (constraints, field) =>
+        val f = Variable.unary("f")
+        constraints and (f in childs forAll (f oneOf fieldsrels(field)))
+      }
+    }
+    lazy val refsDefFields = {
+      defs.reffields.foldLeft(Formula.TRUE) { (constraints, field) =>
+        val f = Variable.unary("f")
+        constraints and (f in refs forAll (f oneOf fieldsrels(field)))
+      }
+    }
     val fieldsrels = (defs.childfields ++ defs.reffields).map(f => (f, Relation.unary(s"Field$$$f"))).toMap
   }
 
@@ -205,9 +230,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         val fieldTyping = (cd.children ++ cd.refs).foldLeft(Formula.TRUE) { (constraints, finfo) =>
           val (field, (oc, crd)) = finfo
           val cardConstraint = crd match {
-            case Single => ss.one
+            case Single => ss.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
             case Many => Formula.TRUE
-            case Opt => ss.lone
+            case Opt => ss.join(SymbolicSetRel.syms).count lte IntConstant.constant(1)
           }
           (t in l.join(typeOfLoc).join(isSubType)) implies
             (((l product f product ss) in LocsRel.fields) and (ot in ss.join(typeOfSet).join(isSubType)) and
@@ -219,6 +244,33 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       }
     }
     val typerels = defs.keys.map(c => (c,Relation.unary(s"Type$$${c.name}"))).toMap
+  }
+
+  object OwnershipRel {
+    val owner = Relation.binary("owner")
+    lazy val ownerTyping = {
+      val l = Variable.unary("l")
+      (l.join(owner).lone and (l.join(owner) in LocsRel.self)) forAll(l oneOf LocsRel.self) and
+        (owner.join(Expression.UNIV) in LocsRel.self)
+    }
+    lazy val ownerDefinition = {
+      val l = Variable.unary("l")
+      val ss = Variable.unary("ss")
+      val s = Variable.unary("s")
+      val ol = Variable.unary("ol")
+      val f = Variable.unary("f")
+
+      (ol.join(owner) eq l) iff
+        ((((l product f product ss) in LocsRel.fields) and
+          (s in ss.join(SymbolicSetRel.syms)) and
+          (s.join(SymbolsRel.loc) eq ol)
+          ) `forSome` ((f oneOf FieldsRel.childs) and (ss oneOf SymbolicSetRel.self) and (s oneOf SymbolsRel.self)))  forAll
+                   ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
+    }
+    lazy val ownerAcyclic = {
+      val l = Variable.unary("l")
+      (l in l.join(owner.closure)).not forAll (l oneOf LocsRel.self)
+    }
   }
 
   def freshSymbolicSetRel(idopt: Option[Symbols]): (Relation, Formula) = {
@@ -235,10 +287,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolsRel.locTyping and
    SymbolicSetRel.symsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
    LocsRel.nameTyping and LocsRel.nameUniqueness and LocsRel.fieldsTyping and
-   FieldsRel.nameTyping and FieldsRel.nameUniqueness and
+   FieldsRel.nameTyping and FieldsRel.nameUniqueness and FieldsRel.childsTyping and FieldsRel.refsTyping and
+   FieldsRel.childsRefsDisjoint and FieldsRel.childsDefFields and FieldsRel.refsDefFields and
    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
    TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
-   TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and TypesRel.typeOfFieldCorrectness
+   TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and
+   TypesRel.typeOfFieldCorrectness and OwnershipRel.ownerTyping and OwnershipRel.ownerDefinition and OwnershipRel.ownerAcyclic
   }
 
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
@@ -295,6 +349,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
     for ((field, frelname) <- FieldsRel.fieldsrels) bounds.boundExactly(frelname, f setOf fieldobjs(field)._2)
     bounds.boundExactly(FieldsRel.self, f setOf (fieldobjs.values.map(_._2).toSeq :_*))
+    bounds.bound(FieldsRel.childs, f setOf (fieldobjs.values.map(_._2).toSeq :_*))
+    bounds.bound(FieldsRel.refs, f setOf (fieldobjs.values.map(_._2).toSeq :_*))
     val fieldnameUpper = f noneOf 2
     for ((fieldname, fieldid) <- fieldobjs.values) fieldnameUpper.add((f tuple fieldid) product (f tuple fieldname))
     bounds.bound(FieldsRel.name, fieldnameUpper)
@@ -346,6 +402,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val typeOfLocUpper = f noneOf 2
     for (lid <- locobjs.values.toSeq; typ <- types.values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
     bounds.bound(TypesRel.typeOfLoc, typeOfLocUpper)
+
+    val ownerUpper = f noneOf 2
+    for (lid <- locobjs.values.toSeq; olid <- locobjs.values.toSeq) ownerUpper.add((f tuple lid) product (f tuple olid))
+    bounds.bound(OwnershipRel.owner, ownerUpper)
     bounds
   }
 
@@ -487,9 +547,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       GarbageCollection.gc(extracted, resetlocs = true)
     }
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
-      case Single => s.join(SymbolicSetRel.syms).one
+      case Single => s.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
       case Many => Formula.TRUE
-      case Opt => s.join(SymbolicSetRel.syms).lone
+      case Opt =>  s.join(SymbolicSetRel.syms).count lte IntConstant.constant(1)
     }
     val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
     val varIntMap = smem.stack.keySet.zipWithIndex.toMap
