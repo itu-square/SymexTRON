@@ -1,3 +1,4 @@
+import scala.collection.immutable.Nil
 import scala.language.higherKinds
 
 import scala.annotation.elidable
@@ -124,6 +125,16 @@ package object helper {
   implicit class LiftMatch[A](a : A) {
     def liftMatch[B,M[_]](f : PartialFunction[A,B])(implicit monadPlus: MonadPlus[M]): M[B] =
       if (f.isDefinedAt(a)) monadPlus.point(f(a)) else monadPlus.empty
+  }
+  implicit class ListNormalizeOps[A](l : List[A]) {
+    def normalizeMonoidal(implicit monoid: Monoid[A]): A = l match {
+      case Nil => monoid.zero
+      case x :: xs if x == monoid.zero => xs.normalizeMonoidal
+      case x :: xs => xs match {
+        case Nil => x
+        case _ => monoid.append(x, xs.normalizeMonoidal)
+      }
+    }
   }
 }
 

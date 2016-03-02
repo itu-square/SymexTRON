@@ -7,6 +7,7 @@ import kodkod.engine.Solution.Outcome
 import kodkod.engine.Solver
 import kodkod.engine.satlab.SATFactory
 import kodkod.instance.{TupleSet, Bounds, Instance, Universe}
+import monocle.Monocle
 import semantics.Subst._
 import semantics.domains.SHeap._
 import semantics.domains.SMem._
@@ -16,6 +17,7 @@ import syntax.ast._
 
 import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
+import scala.collection.immutable.Nil
 import scala.language.higherKinds
 import scalaz.Scalaz.{none, unfold => generate}
 import scalaz.concurrent.Task
@@ -23,7 +25,7 @@ import scalaz.stream._
 import scalaz.syntax.either._
 import scalaz.syntax.monad._
 import scalaz.syntax.std.option._
-import scalaz.{EitherT, \/}
+import scalaz.{Lens, Monoid, EitherT, \/}
 
 class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition],
                   beta: Int, delta: Int, optimistic: Boolean)
@@ -35,7 +37,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
 
   def mergeEvalState(inState: EvalState, outState: EvalState): EvalState =
-    EvalState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, inState.constraints and outState.constraints, inState.ssymmap ++ outState.ssymmap)
+    EvalState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, allFormulae(List(inState.constraints, outState.constraints)), inState.ssymmap ++ outState.ssymmap)
 
   var counter = 0
 
@@ -134,16 +136,16 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (childs intersection refs) eq Expression.NONE
     }
     lazy val childsDefFields = {
-      defs.childfields.foldLeft(Formula.TRUE) { (constraints, field) =>
+      allFormulae(defs.childfields.toList.map { field =>
         val f = Variable.unary("f")
-        constraints and (f in childs forAll (f oneOf fieldsrels(field)))
-      }
+        f in childs forAll (f oneOf fieldsrels(field))
+      })
     }
     lazy val refsDefFields = {
-      defs.reffields.foldLeft(Formula.TRUE) { (constraints, field) =>
+      allFormulae(defs.reffields.toList.map { field =>
         val f = Variable.unary("f")
-        constraints and (f in refs forAll (f oneOf fieldsrels(field)))
-      }
+        f in refs forAll (f oneOf fieldsrels(field))
+      })
     }
     val fieldsrels = (defs.childfields ++ defs.reffields).map(f => (f, Relation.unary(s"Field$$$f"))).toMap
   }
@@ -216,19 +218,17 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val ss = Variable.unary("ss")
       val t = Variable.unary("t")
       val ot = Variable.unary("ot")
-      defs.foldLeft(Formula.TRUE) { (constraints, cinfo) =>
-        val (c, cd) = cinfo
+      allFormulae(defs.toList.map { case (c, cd) =>
         val supersOfC = defs.supertypes(c) + c
         val fieldsOfC = (defs.refsOf(supersOfC) ++ defs.childrenOf(supersOfC)).keySet
         val complementOfFieldsOfC = (defs.childfields ++ defs.reffields) diff fieldsOfC
-        val fieldAbsence = complementOfFieldsOfC.foldLeft(Formula.TRUE) { (constraints, field) =>
+        val fieldAbsence = allFormulae(complementOfFieldsOfC.toList.map { field =>
           (l.join(typeOfLoc) eq t) implies
             ((l product f product ss) in LocsRel.fields).not forAll
             ((ss oneOf SymbolicSetRel.self) and (l oneOf LocsRel.self) and
-              (f oneOf FieldsRel.fieldsrels(field)) and (t oneOf TypesRel.typerels(c))) and constraints
-        }
-        val fieldTyping = (cd.children ++ cd.refs).foldLeft(Formula.TRUE) { (constraints, finfo) =>
-          val (field, (oc, crd)) = finfo
+              (f oneOf FieldsRel.fieldsrels(field)) and (t oneOf TypesRel.typerels(c)))
+        })
+        val fieldTyping = allFormulae((cd.children ++ cd.refs).toList.map { case (field, (oc, crd)) =>
           val cardConstraint = crd match {
             case Single => ss.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
             case Many => Formula.TRUE
@@ -238,10 +238,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             (((l product f product ss) in LocsRel.fields) and (ot in ss.join(typeOfSet).join(isSubType)) and
                cardConstraint) `forSome` (ss oneOf SymbolicSetRel.self) forAll
                  ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
-                  (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc))) and constraints
-        }
-        fieldTyping and fieldAbsence and constraints
-      }
+                  (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc)))
+        })
+        allFormulae(List(fieldTyping, fieldAbsence))
+      })
     }
     val typerels = defs.keys.map(c => (c,Relation.unary(s"Type$$${c.name}"))).toMap
   }
@@ -423,16 +423,16 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Symbol(symident) => sym.join(SymbolsRel.name) eq IntConstant.constant(symident).toExpression
           }) implies (if (isNegated) symInSyms.not else symInSyms) forAll ((sym oneOf SymbolsRel.self) and (x oneOf r2))
         }
-      } yield (EvalState(rs2, is2, formula and f2, th2), formula)
+      } yield (EvalState(rs2, is2, allFormulae(List(formula, f2)), th2), formula)
     case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
-    case True() => (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), Formula.TRUE).right
+    case True() => (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), if (isNegated) Formula.FALSE else Formula.TRUE).right
     case And(b1,b2) =>
       for {
         eb1 <- evalBoolExpr(b1, th, isNegated)
         (EvalState(rs1, is1, fs1, th1), r1) = eb1
         eb2 <- evalBoolExpr(b2, th1, isNegated)
         (EvalState(rs2, is2, fs2, th2), r2) = eb2
-      } yield (EvalState(rs1 union rs2, is1 union is2, fs1 and fs2, th2), if (isNegated) r1 or r2 else r1 and r2)
+      } yield (EvalState(rs1 union rs2, is1 union is2, allFormulae(List(fs1, fs2)), th2), if (isNegated) anyFormulae(List(r1, r2)) else allFormulae(List(r1,r2)))
     case Not(b0) => for {
         eb <- evalBoolExpr(b0, th, !isNegated)
       } yield eb
@@ -482,8 +482,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       if (th.contains(ident)) (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), th(ident)).right[String]
       else {
         val (s, nameConstraint) = freshSymbolicSetRel(ident.some)
-        val formula = Formula.TRUE
-        (EvalState(Set[Relation](s), Set[Integer](), formula and nameConstraint, th + (ident -> s)), s).right[String]
+        (EvalState(Set[Relation](s), Set[Integer](), nameConstraint, th + (ident -> s)), s).right[String]
       }
   }
 
@@ -501,51 +500,14 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         val x2 = Variable.unary("x2")
         x.join(SymbolicSetRel.syms) eq op(x1.join(SymbolicSetRel.syms),x2.join(SymbolicSetRel.syms)) forAll ((x oneOf s) and (x1 oneOf r1) and (x2 oneOf r2))
       }
-    } yield (EvalState(Set(s) union rs1 union rs2, is1 union is2, formula and f1 and f2 and nameConstraint, th2), s)
+    } yield (EvalState(Set(s) union rs1 union rs2, is1 union is2, allFormulae(List(formula, f1, f2, nameConstraint)), th2), s)
   }
 
   def concretise(smem: SMem): String \/ CMem = {
-    def extractConcreteMemory(instance: Instance): CMem = {
-      def extractSet[K](ts: TupleSet): Set[K] = ts.foldLeft(Set[K]()) { (set, tuple) =>
-        set + tuple.atom(0).asInstanceOf[K]
-      }
-      def extractMap[K,V](ts: TupleSet): Map[K,Set[V]] = ts.foldLeft(Map[K,Set[V]]()) { (map, tuple) =>
-        map.adjust(tuple.atom(0).asInstanceOf[K])(_ + tuple.atom(1).asInstanceOf[V])
-      }
-      def extractTernary[A,B,C](ts: TupleSet): Set[(A,B,C)] = ts.foldLeft(Set[(A,B,C)]()) { (set, tuple) =>
-        set + ((tuple.atom(0).asInstanceOf[A], tuple.atom(1).asInstanceOf[B], tuple.atom(2).asInstanceOf[C]))
-      }
-      val varVals = extractMap[String, String](instance.tuples(VarsRel.vals)).mapValues(_.head)
-      val setSyms = extractMap[String, String](instance.tuples(SymbolicSetRel.syms))
-      val symsLoc = extractMap[String, String](instance.tuples(SymbolsRel.loc)).mapValues(_.head)
-      val locName = extractMap[String, Int](instance.tuples(LocsRel.name)).mapValues(_.head.intValue)
-      val typeOfLoc = extractMap[String, String](instance.tuples(TypesRel.typeOfLoc)).mapValues(_.head)
-      val locFields = extractTernary[String, String, String](instance.tuples(LocsRel.fields))
-      val stack = varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
-        val (vr, set) = kv
-        val varname = vr.replaceFirst("var'", "")
-        stack + (varname -> setSyms.get(varVals(vr)).cata(_.map(s => locName(symsLoc(s))), Set()))
-      }
-      val typeMap = typeOfLoc.foldLeft(Map[Instances, Class]()) { (typeMap, kv) =>
-        val (loc, typ) = kv
-        val typename = typ.replaceFirst("type'", "")
-        typeMap + (locName(loc) -> Class(typename))
-      }
-      val (childRels, refRels) = locFields.partition { case (l,f,ss) => defs.childfields.contains(f.replaceFirst("field'","")) }
-      def convertFieldmap(rels: Set[(String, String, String)]) : Map[Instances, Map[Fields, Set[Instances]]] = {
-        rels.foldLeft(Map[Instances, Map[Fields, Set[Instances]]]()) { (map, rel) =>
-          val (l, f, ss) = rel
-          val locname = locName(l)
-          val fieldname = f.replaceFirst("field'", "")
-          val syms = setSyms.get(ss).cata(_.map(s => locName(symsLoc(s))), Set[Instances]())
-          map.updated(locname, map.get(locname).cata(fs => fs + (fieldname -> syms), Map(fieldname -> syms)))
-        }
-      }
-      val childMap = convertFieldmap(childRels)
-      val refMap = convertFieldmap(refRels)
-      val extracted = CMem(stack, CHeap(typeMap, childMap, refMap))
-      GarbageCollection.gc(extracted, resetlocs = true)
-    }
+    concretisationConstraints(smem).flatMap((findSolution _).tupled).map(extractConcreteMemory)
+  }
+
+  def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds) = {
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
       case Single => s.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
       case Many => Formula.TRUE
@@ -553,7 +515,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
     val varIntMap = smem.stack.keySet.zipWithIndex.toMap
-    val varevalres = smem.stack.foldLeft((initEvalState, Formula.TRUE).right[String]) { (str, vinfo) =>
+    val varevalres = smem.stack.foldLeft((initEvalState, List[Formula]()).right[String]) { (str, vinfo) =>
       val (vr, exp) = vinfo
       for {
         st <- str
@@ -563,23 +525,20 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         varconstraint = {
           val v = Variable.unary("v")
           val ss = Variable.unary("ss")
-          val valsConstraint = (v.join(VarsRel.name) eq IntConstant.constant(varIntMap(vr)).toExpression) implies
-                                   (v.join(VarsRel.vals) eq ss) forAll ((ss oneOf setrel) and (v oneOf VarsRel.self))
-          valsConstraint
+          (v.join(VarsRel.name) eq IntConstant.constant(varIntMap(vr)).toExpression) implies
+                       (v.join(VarsRel.vals) eq ss) forAll ((ss oneOf setrel) and (v oneOf VarsRel.self))
         }
-      } yield (EvalState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), constraints and varconstraint)
-    }
-    val ssvconstraints = smem.heap.ssvltion.foldLeft(Formula.TRUE) { (constraints, ssinfo) =>
-      val (ssym, ssdesc) = ssinfo
+      } yield (EvalState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varconstraint :: constraints)
+    }.map { case (est, constraints) => (est, allFormulae(constraints)) }
+    val ssvconstraints = allFormulae(smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
       val s = Variable.unary("s")
       val t = Variable.unary("t")
-      (s.join(SymbolicSetRel.name) eq IntConstant.constant(ssym.id).toExpression implies
+      s.join(SymbolicSetRel.name) eq IntConstant.constant(ssym.id).toExpression implies
         (cardConstraint(s, ssdesc.crd) and (t in s.join(TypesRel.typeOfSet).join(TypesRel.isSubType))) forAll
-          ((s oneOf SymbolicSetRel.self) and (t oneOf TypesRel.typerels(ssdesc.cl)))) and constraints
-    }
-    val svconstraints = smem.heap.svltion.foldLeft(Formula.TRUE) { (constraints, sinfo) =>
-      val (sym, sdesc) = sinfo
-      (sdesc match {
+        ((s oneOf SymbolicSetRel.self) and (t oneOf TypesRel.typerels(ssdesc.cl)))
+    })
+    val svconstraints = allFormulae(smem.heap.svltion.toList.map { case (sym, sdesc) =>
+      sdesc match {
         case Loced(loc) =>
           val s = Variable.unary("s")
           val l = Variable.unary("l")
@@ -591,10 +550,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           val t = Variable.unary("t")
           (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies
             (t in s.join(TypesRel.typeOfSym).join(TypesRel.isSubType))) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
-      }) and constraints
-    }
+      }
+    })
     val fieldIntMap = FieldsRel.fieldsrels.keySet.zipWithIndex.toMap
-    def translateSpatial(initEvalState: EvalState) = smem.heap.initSpatial.foldLeft((initEvalState, Formula.TRUE).right[String]) { (st, locinfo) =>
+    def translateSpatial(initEvalState: EvalState) = smem.heap.initSpatial.foldLeft((initEvalState, List[Formula]()).right[String]) { (st, locinfo) =>
       val (loc, sdesc) = locinfo
       val l = Variable.unary("l")
       val t = Variable.unary("t")
@@ -605,15 +564,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           case AbstractDesc => t2 in t.join(TypesRel.isSubType)
           case PartialDesc(hasExact, possible) =>
             val exactConstraint = if (!hasExact) (t eq t2).not else Formula.TRUE
-            val possibleConstraints = possible.foldLeft(Formula.FALSE) { (constraint,c) =>
-              TypesRel.typerels(c) in t.join(TypesRel.isSubType) or constraint
-            }
-            (t2 in t.join(TypesRel.isSubType)) and exactConstraint and possibleConstraints
+            val possibleConstraints = anyFormulae(possible.toList.map(c => TypesRel.typerels(c) in t.join(TypesRel.isSubType)))
+            allFormulae(List(t2 in t.join(TypesRel.isSubType), exactConstraint, possibleConstraints))
       }) `forSome` ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.self)) forAll (l oneOf LocsRel.self)
       for {
         evalres <- st
         (evalstate, constraints) = evalres
-        fieldEvalRes <- (sdesc.children ++ sdesc.refs).foldLeft((evalstate, Formula.TRUE).right[String]) { (st, fieldinfo) =>
+        fieldEvalRes <- (sdesc.children ++ sdesc.refs).foldLeft((evalstate, List[Formula]()).right[String]) { (st, fieldinfo) =>
           val (field, fieldval) = fieldinfo
           for {
             evalres <- st
@@ -628,13 +585,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                   (f.product(s) in l.join(LocsRel.fields)) forAll
                     ((l oneOf LocsRel.self) and (f oneOf FieldsRel.self) and (s oneOf fieldvalRel))
             }
-          } yield (mergeEvalState(evalstate, fieldvalEvalState), constraints and fieldconstraint)
+          } yield (mergeEvalState(evalstate, fieldvalEvalState), fieldconstraint :: constraints)
         }
         (fieldEvalState, fieldConstraints) = fieldEvalRes
-      } yield (mergeEvalState(evalstate, fieldEvalState), constraints and typeConstraint and fieldConstraints)
-    }
-    val solver = new Solver
-    solver.options.setSolver(SATFactory.DefaultSAT4J)
+      } yield (mergeEvalState(evalstate, fieldEvalState), typeConstraint :: (fieldConstraints ++ constraints))
+    }.map { case (est, constraints) => (est, allFormulae(constraints)) }
+
     for {
       ver <- varevalres
       (varEvalState, varConstraints) = ver
@@ -645,16 +601,73 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       spatialEvalRes <- translateSpatial(iest)
       (spatialEvalState, spatialConstraints) = spatialEvalRes
       est  = mergeEvalState(iest, spatialEvalState)
-      allConstraints = staticConstraints and ssvconstraints and svconstraints and varConstraints and pureConstraints and spatialConstraints and est.constraints // and ...
+      allConstraints = allFormulae(
+        List(staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints, spatialConstraints, est.constraints))
+      _ = println(allConstraints)
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
-      solution = solver.solve(allConstraints, bounds)
-      instance <- solution.outcome match {
-        case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE =>
-          val instance = solution.instance
-          extractConcreteMemory(instance).right
-        case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE => s"Unsatisfiable constraints: $allConstraints".left
+    } yield (allConstraints, bounds)
+  }
+
+  def allFormulae(fs: List[Formula]): Formula = {
+    implicit val allFormulaMonoid = Monoid.instance[Formula](_ and _, Formula.TRUE)
+    fs.normalizeMonoidal
+  }
+
+  def anyFormulae(fs: List[Formula]): Formula = {
+    implicit val anyFormulaMonoid = Monoid.instance[Formula](_ or _, Formula.FALSE)
+    fs.normalizeMonoidal
+  }
+
+  def findSolution(constraints: Formula, bounds: Bounds): String \/ Instance = {
+    val solver = new Solver
+    solver.options.setSolver(SATFactory.DefaultSAT4J)
+    val solution = solver.solve(constraints, bounds)
+    solution.outcome match {
+      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
+      case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE => s"Unsatisfiable! constraints: $constraints, bounds: $bounds".left
+    }
+  }
+
+  def extractConcreteMemory(instance: Instance): CMem = {
+    def extractSet[K](ts: TupleSet): Set[K] = ts.foldLeft(Set[K]()) { (set, tuple) =>
+      set + tuple.atom(0).asInstanceOf[K]
+    }
+    def extractMap[K,V](ts: TupleSet): Map[K,Set[V]] = ts.foldLeft(Map[K,Set[V]]()) { (map, tuple) =>
+      map.adjust(tuple.atom(0).asInstanceOf[K])(_ + tuple.atom(1).asInstanceOf[V])
+    }
+    def extractTernary[A,B,C](ts: TupleSet): Set[(A,B,C)] = ts.foldLeft(Set[(A,B,C)]()) { (set, tuple) =>
+      set + ((tuple.atom(0).asInstanceOf[A], tuple.atom(1).asInstanceOf[B], tuple.atom(2).asInstanceOf[C]))
+    }
+    val varVals = extractMap[String, String](instance.tuples(VarsRel.vals)).mapValues(_.head)
+    val setSyms = extractMap[String, String](instance.tuples(SymbolicSetRel.syms))
+    val symsLoc = extractMap[String, String](instance.tuples(SymbolsRel.loc)).mapValues(_.head)
+    val locName = extractMap[String, Int](instance.tuples(LocsRel.name)).mapValues(_.head.intValue)
+    val typeOfLoc = extractMap[String, String](instance.tuples(TypesRel.typeOfLoc)).mapValues(_.head)
+    val locFields = extractTernary[String, String, String](instance.tuples(LocsRel.fields))
+    val stack = varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
+      val (vr, set) = kv
+      val varname = vr.replaceFirst("var'", "")
+      stack + (varname -> setSyms.get(varVals(vr)).cata(_.map(s => locName(symsLoc(s))), Set()))
+    }
+    val typeMap = typeOfLoc.foldLeft(Map[Instances, Class]()) { (typeMap, kv) =>
+      val (loc, typ) = kv
+      val typename = typ.replaceFirst("type'", "")
+      typeMap + (locName(loc) -> Class(typename))
+    }
+    val (childRels, refRels) = locFields.partition { case (l,f,ss) => defs.childfields.contains(f.replaceFirst("field'","")) }
+    def convertFieldmap(rels: Set[(String, String, String)]) : Map[Instances, Map[Fields, Set[Instances]]] = {
+      rels.foldLeft(Map[Instances, Map[Fields, Set[Instances]]]()) { (map, rel) =>
+        val (l, f, ss) = rel
+        val locname = locName(l)
+        val fieldname = f.replaceFirst("field'", "")
+        val syms = setSyms.get(ss).cata(_.map(s => locName(symsLoc(s))), Set[Instances]())
+        map.updated(locname, map.get(locname).cata(fs => fs + (fieldname -> syms), Map(fieldname -> syms)))
       }
-    } yield instance
+    }
+    val childMap = convertFieldmap(childRels)
+    val refMap = convertFieldmap(refRels)
+    val extracted = CMem(stack, CHeap(typeMap, childMap, refMap))
+    GarbageCollection.gc(extracted, resetlocs = true)
   }
 
   def partitionSet(ees: Set[Symbol], targetCl: Class, mem: SMem): Process[Task, (Set[Symbol], SMem)] = {
