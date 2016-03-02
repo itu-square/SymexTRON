@@ -4,7 +4,7 @@ import helper.Counter
 import semantics.ModelFinder
 import syntax.ast.{Class,ClassDefinition, Statement}
 import semantics.domains._
-import testing.TestGenerator
+import testing.WhiteBoxTestGenerator
 
 import scalaz.concurrent.Task
 import scalaz.stream.io

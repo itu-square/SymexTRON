@@ -11,23 +11,24 @@ import scalaz.concurrent.Task
 import java.util.concurrent.ScheduledExecutorService
 import helper._
 
-class TestGenerator(defs: Map[Class, ClassDefinition],
-                    beta: Int, delta: Int, kappa: Int) {
+class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
+                            beta: Int, delta: Int, kappa: Int) {
   val symbExec = new SymbolicExecutor(defs, beta, delta, kappa)
 
   implicit val S: ScheduledExecutorService = DefaultScheduler
 
   def generateTests(pres : Set[SMem], s : Statement,
-        timeout : FiniteDuration = TestGenerator.defaultTimeout,
-        coverage : Double = TestGenerator.defaultCoverageTarget): Process[Task, CMem] =
+                    timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
+                    coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, CMem] =
     generateTestsE(pres, s, timeout, coverage)
                  .map(_.fold(_ => none, _.some))
                  .filter(_.isDefined).map(_.get)
 
   def generateTestsE(pres : Set[SMem], s : Statement,
-      timeout : FiniteDuration = TestGenerator.defaultTimeout,
-      coverage : Double = TestGenerator.defaultCoverageTarget): Process[Task, String \/ CMem] = {
+                     timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
+                     coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, String \/ CMem] = {
       val concExec = new ConcreteExecutor(defs, s)
+      // TODO Rewrite using writer monad to be pure
       sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
               .map(_.fold(err => err.left, sm => convertMem(sm)))
@@ -83,7 +84,7 @@ class TestGenerator(defs: Map[Class, ClassDefinition],
 
 }
 
-object TestGenerator {
+object WhiteBoxTestGenerator {
   val defaultTimeout = 1L.minutes
 
   val defaultCoverageTarget = 95.0

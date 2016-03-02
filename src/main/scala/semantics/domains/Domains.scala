@@ -28,10 +28,10 @@ object DescType {
   val _dt_partial = GenPrism[DescType, PartialDesc]
 }
 
-case class SpatialDesc(c : Class, desctype : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]], descendantpools: DescendantPools)
+case class SpatialDesc(cl : Class, desctype : DescType, children : Map[Fields, SetExpr[IsSymbolic.type]], refs : Map[Fields, SetExpr[IsSymbolic.type]], descendantpools: DescendantPools)
 
 object SpatialDesc {
-  val _sd_c = GenLens[SpatialDesc](_.c)
+  val _sd_c = GenLens[SpatialDesc](_.cl)
   val _sd_desctype = GenLens[SpatialDesc](_.desctype)
   val _sd_children = GenLens[SpatialDesc](_.children)
   val _sd_refs = GenLens[SpatialDesc](_.refs)

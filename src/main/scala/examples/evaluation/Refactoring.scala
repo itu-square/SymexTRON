@@ -274,7 +274,7 @@ object Refactoring {
       import scalaz.concurrent.Task
       import scalaz.stream._
 
-      val tg = new TestGenerator(FullClassModel.allDefsWithKeys, beta=1, delta=1, kappa=2)
+      val tg = new WhiteBoxTestGenerator(FullClassModel.allDefsWithKeys, beta=1, delta=1, kappa=2)
       val task: Task[Unit] = tg.generateTestsE(Set(initialMems : _*), refactoring).map(_.toString).to(io.stdOutLines).run
       println("-" * 20)
       println(s"Starting execution of $name")

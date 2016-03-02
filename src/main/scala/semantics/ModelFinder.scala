@@ -246,7 +246,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val typerels = defs.keys.map(c => (c,Relation.unary(s"Type$$${c.name}"))).toMap
   }
 
-  object OwnershipRel {
+  object ReachabilityRel {
     val owner = Relation.binary("owner")
     lazy val ownerTyping = {
       val l = Variable.unary("l")
@@ -259,7 +259,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val s = Variable.unary("s")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
-
       (ol.join(owner) eq l) iff
         ((((l product f product ss) in LocsRel.fields) and
           (s in ss.join(SymbolicSetRel.syms)) and
@@ -270,6 +269,36 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     lazy val ownerAcyclic = {
       val l = Variable.unary("l")
       (l in l.join(owner.closure)).not forAll (l oneOf LocsRel.self)
+    }
+    val referencedBy = Relation.binary("referencedBy")
+    lazy val referencedByTyping = {
+      val l = Variable.unary("l")
+      l.join(referencedBy) in LocsRel.self forAll(l oneOf LocsRel.self) and
+        (referencedBy.join(Expression.UNIV) in LocsRel.self)
+    }
+    lazy val referencedByDefinition = {
+      val l = Variable.unary("l")
+      val ss = Variable.unary("ss")
+      val s = Variable.unary("s")
+      val ol = Variable.unary("ol")
+      val f = Variable.unary("f")
+      ((ol product l) in referencedBy) iff
+        ((((l product f product ss) in LocsRel.fields) and
+          (s in ss.join(SymbolicSetRel.syms)) and
+          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.refs) and (ss oneOf SymbolicSetRel.self) and (s oneOf SymbolsRel.self))) forAll
+              ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
+    }
+    val reachableBy = Relation.binary("reachableBy")
+    lazy val reachableByTyping = {
+      val l = Variable.unary("l")
+      l.join(reachableBy) in LocsRel.self forAll(l oneOf LocsRel.self) and
+        (reachableBy.join(Expression.UNIV) in LocsRel.self)
+    }
+    lazy val reachableByDefinition = {
+      val l = Variable.unary("l")
+      val ol = Variable.unary("ol")
+      ((ol product l) in reachableBy) iff
+        (((ol product l) in owner.closure) or ((ol product l) in referencedBy.closure)) forAll ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
   }
 
@@ -292,7 +321,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
    TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
    TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and
-   TypesRel.typeOfFieldCorrectness and OwnershipRel.ownerTyping and OwnershipRel.ownerDefinition and OwnershipRel.ownerAcyclic
+   TypesRel.typeOfFieldCorrectness and ReachabilityRel.ownerTyping and ReachabilityRel.ownerDefinition and ReachabilityRel.ownerAcyclic and
+   ReachabilityRel.referencedByTyping and ReachabilityRel.referencedByDefinition and ReachabilityRel.reachableByTyping and ReachabilityRel.reachableByDefinition
   }
 
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
@@ -403,9 +433,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for (lid <- locobjs.values.toSeq; typ <- types.values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
     bounds.bound(TypesRel.typeOfLoc, typeOfLocUpper)
 
-    val ownerUpper = f noneOf 2
-    for (lid <- locobjs.values.toSeq; olid <- locobjs.values.toSeq) ownerUpper.add((f tuple lid) product (f tuple olid))
-    bounds.bound(OwnershipRel.owner, ownerUpper)
+    val locReachUpper = f noneOf 2
+    for (lid <- locobjs.values.toSeq; olid <- locobjs.values.toSeq) locReachUpper.add((f tuple lid) product (f tuple olid))
+    bounds.bound(ReachabilityRel.owner, locReachUpper)
+    bounds.bound(ReachabilityRel.referencedBy, locReachUpper)
+    bounds.bound(ReachabilityRel.reachableBy, locReachUpper)
     bounds
   }
 
@@ -559,7 +591,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val t = Variable.unary("t")
       val t2 = Variable.unary("t2")
       val typeConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) implies
-        (l.join(TypesRel.typeOfLoc) eq t) and (t2 in TypesRel.typerels(sdesc.c)) and (sdesc.desctype match {
+        (l.join(TypesRel.typeOfLoc) eq t) and (t2 in TypesRel.typerels(sdesc.cl)) and (sdesc.desctype match {
           case ExactDesc => t eq t2
           case AbstractDesc => t2 in t.join(TypesRel.isSubType)
           case PartialDesc(hasExact, possible) =>
@@ -603,7 +635,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       est  = mergeEvalState(iest, spatialEvalState)
       allConstraints = allFormulae(
         List(staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints, spatialConstraints, est.constraints))
-      _ = println(allConstraints)
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
     } yield (allConstraints, bounds)
   }
@@ -688,7 +719,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         res <- {
           val symsvltion = nmem.heap.svltion(sym)
           val symc = symsvltion match {
-            case Loced(l) => nmem.heap.currentSpatial(l).c
+            case Loced(l) => nmem.heap.currentSpatial(l).cl
             case UnknownLoc(ncl, ownership, descendantpool) => ncl
           }
           if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nmem))
@@ -856,7 +887,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         case UnknownOwner => true
         case NewlyCreated => false
         case _ => !isUnknown  }
-      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).c) }.keySet
+      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) }.keySet
     }
     def addNewLoc(newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
       val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
@@ -935,14 +966,14 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
            (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
            res <- EitherT[Process0, String, (SpatialDesc, SHeap)](
                   if (containsTargetField(psdesc)) (psdesc, nheap).right.point[Process0]
-                  else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
+                  else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
         } yield res).run
       }
     }
     def unfoldAbstract(sdesc: SpatialDesc, cd: ClassDefinition, heap: SHeap): (SpatialDesc, SHeap) = {
       val (newsslvtionc, newchildren) = unfoldFieldSet(loc, cd.children, owned = true)
       val (newsslvtionr, newrefs) = unfoldFieldSet(loc, cd.refs, owned = true)
-      val psdesctype = PartialDesc(hasExact = true, defs.directSubtypes(sdesc.c))
+      val psdesctype = PartialDesc(hasExact = true, defs.directSubtypes(sdesc.cl))
       val pschildren = sdesc.children ++ newchildren
       val psrefs = sdesc.refs ++ newrefs
       val psdesc = (_sd_desctype.set(psdesctype) andThen
@@ -956,14 +987,14 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     heap.currentSpatial.get(loc).cata({ sdesc =>
       if (containsTargetField(sdesc)) Process((sdesc, heap).right)
       else sdesc.desctype match {
-        case ExactDesc => Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${sdesc.c.name} has no field $targetField".left)
+        case ExactDesc => Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${sdesc.cl.name} has no field $targetField".left)
         case AbstractDesc =>
-          defs.get(sdesc.c).cata({ cd =>
+          defs.get(sdesc.cl).cata({ cd =>
             val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
             if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-            else unfoldPartial(psdesc.c, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
-          }, Process(s"No such class: ${sdesc.c.name}".left))
-        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.c, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
+            else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
+          }, Process(s"No such class: ${sdesc.cl.name}".left))
+        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.cl, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
       }
     }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
   }
