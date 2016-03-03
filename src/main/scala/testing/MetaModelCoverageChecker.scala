@@ -1,7 +1,7 @@
 package testing
 
 import semantics.domains.{Instances, CMem}
-import _root_.syntax.ast.{Single, Fields, Class, ClassDefinition}
+import syntax.ast.{Single, Fields, Class, ClassDefinition}
 
 import scalaz._, Scalaz._
 
@@ -12,11 +12,11 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition]) {
   case class MetaModelCoverage(classesCovered: Set[Class], fieldsCovered: Set[(Class, Fields)],
                                classesRelevant: Set[Class], fieldsRelevant: Set[(Class, Fields)])
 
-  def relevantPartialCoverage(inputTypes: Set[Class], mems: Set[CMem]) = {
+  def relevantPartialCoverage(inputTypes: Set[Class], mems: Set[CMem]): MetaModelCoverage = {
     def relevantFeatures(todoClasses: Set[Class],
                          visitedClasses: Set[Class],
-                         relevantFields: Set[(Class, Fields)]): MetaModelCoverage = {
-      if (todoClasses.isEmpty) MetaModelCoverage(visitedClasses, relevantFields, visitedClasses, relevantFields)
+                         relevantFields: Set[(Class, Fields)]): (Set[Class], Set[(Class, Fields)])  = {
+      if (todoClasses.isEmpty) (visitedClasses, relevantFields)
       else {
         val clazz = todoClasses.head
         val classDef = defs(clazz)

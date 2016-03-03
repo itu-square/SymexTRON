@@ -36,6 +36,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   private type EvalRes[T] = (EvalState, T)
 
 
+  private
   def mergeEvalState(inState: EvalState, outState: EvalState): EvalState =
     EvalState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, allFormulae(List(inState.constraints, outState.constraints)), inState.ssymmap ++ outState.ssymmap)
 
@@ -325,6 +326,34 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
    ReachabilityRel.referencedByTyping and ReachabilityRel.referencedByDefinition and ReachabilityRel.reachableByTyping and ReachabilityRel.reachableByDefinition
   }
 
+  def classPresenceConstraint(clazz: Class): Formula = {
+    val v = Variable.unary("v")
+    val s = Variable.unary("s")
+    val l = Variable.unary("l")
+    val t = Variable.unary("t")
+    (s in v.join(VarsRel.vals).join(SymbolicSetRel.syms)) and
+      ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+        (l.join(TypesRel.typeOfLoc) eq t) `forSome`
+          ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (l oneOf LocsRel.self)) forAll
+            (t oneOf TypesRel.typerels(clazz))
+  }
+
+  def fieldPresenceConstraint(field: (Class, Fields), fieldmap: Map[String, Int]): Formula = {
+    val v = Variable.unary("v")
+    val s = Variable.unary("s")
+    val l = Variable.unary("l")
+    val f = Variable.unary("f")
+    val t = Variable.unary("t")
+    val ss = Variable.unary("ss")
+    (s in v.join(VarsRel.vals).join(SymbolicSetRel.syms)) and
+      ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+        (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
+          (f.join(FieldsRel.name) eq IntConstant.constant(fieldmap(field._2)).toExpression) and
+            ((l product f product ss) in LocsRel.fields) `forSome`
+              ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (l oneOf LocsRel.self) and
+                (f oneOf FieldsRel.self) and (ss oneOf SymbolicSetRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
+  }
+
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
     val additionallocs = {
       // See if .max works instead of maximum
@@ -536,10 +565,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def concretise(smem: SMem): String \/ CMem = {
-    concretisationConstraints(smem).flatMap((findSolution _).tupled).map(extractConcreteMemory)
+    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>  findSolution(cs, bs) }.map(extractConcreteMemory)
   }
 
-  def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds) = {
+  def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds, Map[String, Int]) = {
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
       case Single => s.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
       case Many => Formula.TRUE
@@ -636,7 +665,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       allConstraints = allFormulae(
         List(staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints, spatialConstraints, est.constraints))
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
-    } yield (allConstraints, bounds)
+    } yield (allConstraints, bounds, fieldIntMap)
   }
 
   def allFormulae(fs: List[Formula]): Formula = {
