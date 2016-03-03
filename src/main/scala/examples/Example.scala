@@ -4,7 +4,7 @@ import helper.Counter
 import semantics.ModelFinder
 import syntax.ast.{Class,ClassDefinition, Statement}
 import semantics.domains._
-import testing.WhiteBoxTestGenerator
+import testing.{BlackBoxTestGenerator, WhiteBoxTestGenerator}
 
 import scalaz.concurrent.Task
 import scalaz.stream.io
@@ -20,8 +20,8 @@ trait Example {
 
   def main(args: Array[String]): Unit = {
     val defsWithKeys = classDefs.map(cd => Class(cd.name) -> cd).toMap
-    val modelFinder = new ModelFinder(new Counter(0), new Counter(0), defsWithKeys, beta=10, delta=5, optimistic = false)
-    println(modelFinder.concretise(pres.head))
+    val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = 5)
+    bbtestgenerator.generateTests(pres).map(_.toString).to(io.stdOutLines).run.run
     /*val tg = new TestGenerator(defsWithKeys, beta=10, delta=5, kappa=2)
     val task: Task[Unit] = tg.generateTests(pres, prog).map(_.toString).to(io.stdOutLines).run
     task.run*/

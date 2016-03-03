@@ -23,8 +23,10 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition]) {
         val fields = (classDef.children.keys ++ classDef.refs.keys).toSet
         val reachedByOwnership = classDef.children.values.map(_._1).toSet
         val reachedByRequiredRef = classDef.refs.values.collect { case (c, Single) => c }.toSet
-        val newTodoClasses: Set[Class] = (todoClasses.tail ++ reachedByOwnership ++ reachedByRequiredRef) diff (visitedClasses + clazz)
-        relevantFeatures(newTodoClasses, visitedClasses + clazz, relevantFields ++ fields.map(clazz -> _))
+        val reachedBySubtyping = defs.subtypes(clazz)
+        val classesRelevant = visitedClasses + clazz
+        val newTodoClasses: Set[Class] = (todoClasses.tail ++ reachedByOwnership ++ reachedByRequiredRef ++ reachedBySubtyping) diff classesRelevant
+        relevantFeatures(newTodoClasses, classesRelevant, relevantFields ++ fields.map(clazz -> _))
       }
     }
     val (relevantClasses, relevantFields) = relevantFeatures(inputTypes, Set[Class](),Set[(Class,Fields)]())
