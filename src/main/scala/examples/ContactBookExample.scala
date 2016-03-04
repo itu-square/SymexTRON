@@ -9,7 +9,7 @@ import syntax.ast._
   */
 object ContactBookExample extends Example {
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-    new ClassDefinition("ContactBook", Map("persons" -> (Class("Person"), Opt)), Map())
+    new ClassDefinition("ContactBook", Map("persons" -> (Class("Person"), Many)), Map())
   , new ClassDefinition("Person", Map("age" -> (Class("Age"), Single),
                                       "name" -> (Class("String"), Single)), Map())
   , new ClassDefinition("Age", Map(), Map())
