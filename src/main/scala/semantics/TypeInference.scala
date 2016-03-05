@@ -14,7 +14,7 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
   def inferSetType(ee : SetExpr[IsSymbolic.type], heap: SHeap): Option[Class] = ee match {
     case SetLit(es) => es match {
       case Seq() => none
-      case (sym:Symbol) +: es => inferSetLitType(sym, es, heap).some
+      case (sym:Symbol) +: oes => inferSetLitType(sym, oes, heap).some
     }
     case Union(e1, e2) =>
       val t1opt = inferSetType(e1, heap)
@@ -25,14 +25,6 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
           t1.some
         ), t2opt
       )
-    case Part(syms) =>
-      syms match {
-        case Seq() => none
-        case sym +: syms =>
-          syms.foldLeft(heap.ssvltion(sym).cl) { (cl, sym) =>
-            defs.lub(cl, heap.ssvltion(sym).cl)
-          }.some
-      }
     case Diff(e1, e2) =>
       for {
         t1 <- inferSetType(e1, heap)
