@@ -559,8 +559,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       case Opt =>  s.join(SymbolicSetRel.syms).count lte IntConstant.constant(1)
     }
     val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
-    val varIntMap = smem.stack.keySet.zipWithIndex.toMap
-    val varevalres = smem.stack.foldLeft((initEvalState, List[Formula]()).right[String]) { (str, vinfo) =>
+    val varIntMap = smem.initStack.keySet.zipWithIndex.toMap
+    val varevalres = smem.initStack.foldLeft((initEvalState, List[Formula]()).right[String]) { (str, vinfo) =>
       val (vr, exp) = vinfo
       for {
         st <- str
@@ -957,11 +957,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, (Class, Cardinality)], owned: Boolean): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
     fieldSet.foldLeft((Map(): SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]())) { (st, fieldkv) =>
+      val (svltion, fields) = st
       fieldkv match {
         case (f, (cl, crd)) =>
           val sym = SetSymbol(symcounter.++())
           // TODO Partition descendant pools
-          (st._1 + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), st._2)
+          (svltion + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), fields + (f -> sym))
       }
     }
   }
@@ -987,7 +988,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     def unfoldAbstract(sdesc: SpatialDesc, cd: ClassDefinition, heap: SHeap): (SpatialDesc, SHeap) = {
       val (newsslvtionc, newchildren) = unfoldFieldSet(loc, cd.children, owned = true)
-      val (newsslvtionr, newrefs) = unfoldFieldSet(loc, cd.refs, owned = true)
+      val (newsslvtionr, newrefs) = unfoldFieldSet(loc, cd.refs, owned = false)
       val psdesctype = PartialDesc(hasExact = true, defs.directSubtypes(sdesc.cl))
       val pschildren = sdesc.children ++ newchildren
       val psrefs = sdesc.refs ++ newrefs
@@ -997,7 +998,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val nheap = (_sh_currentSpatial.modify(_ + (loc -> psdesc)) andThen
                   _sh_initSpatial.modify(_ + (loc -> psdesc)) andThen
                   _sh_ssvltion.modify(_ ++ newsslvtionc ++ newsslvtionr))(heap)
-      (psdesc, nheap)
+      val res = (psdesc, nheap)
+      println("-" * 10)
+      println(cd)
+      println(newrefs)
+      println(psdesc)
+      println("-" * 10)
+      res
     }
     heap.currentSpatial.get(loc).cata({ sdesc =>
       if (containsTargetField(sdesc)) Process((sdesc, heap).right)

@@ -22,8 +22,7 @@ trait Example {
     val defsWithKeys = classDefs.map(cd => Class(cd.name) -> cd).toMap
     val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = 5)
     bbtestgenerator.generateTests(pres).map(_.toString).to(io.stdOutLines).run.run
-    /*val tg = new TestGenerator(defsWithKeys, beta=10, delta=5, kappa=2)
-    val task: Task[Unit] = tg.generateTests(pres, prog).map(_.toString).to(io.stdOutLines).run
-    task.run*/
+    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 5, 2)
+    wwtestgenerator.generateTestsE(pres, prog).map(_.toString).to(io.stdOutLines).run.run
   }
 }

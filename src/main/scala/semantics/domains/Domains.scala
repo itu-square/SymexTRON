@@ -58,10 +58,12 @@ object SHeap {
     SHeap(ssvltion, svltion, locOwnership, spatial, spatial, pure)
 }
 
-case class SMem(stack: SStack, heap: SHeap)
+// TODO Pair up initStack/initHeap currentStack/currentHeap
+case class SMem(initStack: SStack, currentStack: SStack, heap: SHeap)
 
 object SMem {
-  val _sm_stack = GenLens[SMem](_.stack)
+  val _sm_initStack = GenLens[SMem](_.initStack)
+  val _sm_currentStack = GenLens[SMem](_.currentStack)
   val _sm_heap = GenLens[SMem](_.heap)
 }
 

@@ -42,7 +42,7 @@ object Refactoring {
                    Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))))
                  )
         )
-        SMem(inputStack, inputHeap)
+        SMem(inputStack, inputStack, inputHeap)
   }
 
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
@@ -99,7 +99,7 @@ object Refactoring {
             Eq(SetLit(Seq()), ISect(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
           )
         )
-        SMem(inputStack, inputHeap)
+        SMem(inputStack, inputStack, inputHeap)
   }
 
   // Input:: package: Package, class: Class, old_method : Method, new_method : Method
@@ -158,7 +158,7 @@ object Refactoring {
            Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map(), Map())),
            Set()
          )
-         SMem(inputStack, inputHeap)
+         SMem(inputStack, inputStack, inputHeap)
    }
 
   // Input:: class1 : Class, class2 : Class, sc_name : String
@@ -222,7 +222,7 @@ object Refactoring {
               ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Seq(Symbol(classNameId))), "super" -> SetSymbol(classSuperId)), Map())),
           Set(Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))))
         )
-        SMem(inputStack, inputHeap)
+        SMem(inputStack, inputStack, inputHeap)
   }
 
   // Assumes that methods that have the same name as the delegate are delegated methods and that field is private

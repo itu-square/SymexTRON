@@ -12,10 +12,13 @@ object IntListExample extends Example {
     new ClassDefinition("IntList", Map("next" -> (Class("IntList"), Opt)),
                                    Map("data" -> (Class("Int"), Single)))
   )
-  override val pres: Set[SMem] = Set(
-    SMem(Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2)))),
-             SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Map())), Map(), Map(), Set()))
-  )
+  override val pres: Set[SMem] = {
+    val stack = Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2))))
+    Set(
+      SMem(stack, stack,
+        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Map())), Map(), Map(), Set()))
+    )
+  }
 
   override val prog: Statement = stmtSeq(
      assignVar("containselem", SetLit(Seq()))

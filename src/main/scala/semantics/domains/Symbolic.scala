@@ -71,7 +71,7 @@ trait SymbolicOps {
   }
 
   implicit class SymbolicSMem(mem : SMem) extends Symbolic {
-    override val symbols = mem.stack.symbols ++ mem.heap.symbols
+    override val symbols = mem.currentStack.symbols ++ mem.heap.symbols
   }
 
   implicit class SymbolIds(s : Set[SetSymbol \/ Symbol]) {

@@ -122,7 +122,7 @@ object PrettyPrinter {
     sep(sep(sep(sep(pretty(heap.ssvltion) , ";", pretty(heap.svltion)), ";", pretty(heap.locOwnership)), ";", s"${pretty(heap.currentSpatial)}"), "∧", s"(${pretty(heap.pure)})")
 
   def pretty(mem : SMem): String =
-    sep(s"${pretty(mem.stack)}", ";", s"${pretty(mem.heap)}")
+    sep(s"${pretty(mem.currentStack)}", ";", s"${pretty(mem.heap)}")
 
   def sep(s1 : String, ss : String, s2 : String) =
     if (s2.trim.isEmpty) s1
