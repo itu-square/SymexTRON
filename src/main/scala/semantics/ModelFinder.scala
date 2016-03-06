@@ -80,10 +80,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     lazy val fieldsTyping = {
       val l = Variable.unary("l")
       val f = Variable.unary("f")
-      val ss = Variable.unary("s")
-      (l.join(fields) in FieldsRel.self.product(SymbolicSetRel.self) and
-        ((f.join(l.join(fields)).lone and (f.join(l.join(fields)) in SymbolicSetRel.self)) forAll (f oneOf FieldsRel.self)) and
-          ((l.join(fields).join(ss) in FieldsRel.self) forAll (ss oneOf SymbolicSetRel.self))
+      val s = Variable.unary("s")
+      (l.join(fields) in FieldsRel.self.product(SymbolsRel.self) and
+        (f.join(l.join(fields)) in SymbolsRel.self forAll (f oneOf FieldsRel.self)) and
+          ((l.join(fields).join(s) in FieldsRel.self) forAll (s oneOf SymbolsRel.self))
         ) forAll (l oneOf self) and
           (fields.join(Expression.UNIV).join(Expression.UNIV) in self)
     }
@@ -336,7 +336,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val s = Variable.unary("s")
     val l = Variable.unary("l")
     val t = Variable.unary("t")
-    (s in v.join(VarsRel.vals).join(SymbolicSetRel.syms)) and
+    (s in v.join(VarsRel.vals)) and
       ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (l.join(TypesRel.typeOfLoc) eq t) `forSome`
           ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (l oneOf LocsRel.self)) forAll
@@ -346,17 +346,17 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def fieldPresenceConstraint(field: (Class, Fields), fieldmap: Map[String, Int]): Formula = {
     val v = Variable.unary("v")
     val s = Variable.unary("s")
+    val s2 = Variable.unary("s2")
     val l = Variable.unary("l")
     val f = Variable.unary("f")
     val t = Variable.unary("t")
-    val ss = Variable.unary("ss")
-    (s in v.join(VarsRel.vals).join(SymbolicSetRel.syms)) and
+    (s in v.join(VarsRel.vals)) and
       ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
           (f.join(FieldsRel.name) eq IntConstant.constant(fieldmap(field._2)).toExpression) and
-            ((l product f product ss) in LocsRel.fields) `forSome`
-              ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (l oneOf LocsRel.self) and
-                (f oneOf FieldsRel.self) and (ss oneOf SymbolicSetRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
+            ((l product f product s2) in LocsRel.fields) `forSome`
+              ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (s2 oneOf SymbolsRel.self) and (l oneOf LocsRel.self) and
+                (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
   }
 
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
