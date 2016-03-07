@@ -46,11 +46,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   object SymbolicSetRel {
     val self = Relation.unary("SymbolicSet")
-    val syms = Relation.binary("SymbolicSet/syms")
-    lazy val symsTyping = {
+    val locs = Relation.binary("SymbolicSet/locs")
+    lazy val locsTyping = {
       val ss = Variable.unary("ss")
-      ((ss.join(syms) in SymbolsRel.self) forAll (ss oneOf self)) and
-        (syms.join(Expression.UNIV) in self)
+      ((ss.join(locs) in LocsRel.self) forAll (ss oneOf self)) and
+        (locs.join(Expression.UNIV) in self)
     }
     val name = Relation.binary("SymbolicSet/name")
     lazy val nameTyping = {
@@ -82,10 +82,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     lazy val fieldsTyping = {
       val l = Variable.unary("l")
       val f = Variable.unary("f")
-      val s = Variable.unary("s")
-      (l.join(fields) in FieldsRel.self.product(SymbolsRel.self) and
-        (f.join(l.join(fields)) in SymbolsRel.self forAll (f oneOf FieldsRel.self)) and
-          ((l.join(fields).join(s) in FieldsRel.self) forAll (s oneOf SymbolsRel.self))
+      val ol = Variable.unary("ol")
+      (l.join(fields) in FieldsRel.self.product(self) and
+        (f.join(l.join(fields)) in self forAll (f oneOf FieldsRel.self)) and
+          ((l.join(fields).join(ol) in FieldsRel.self) forAll (ol oneOf self))
         ) forAll (l oneOf self) and
           (fields.join(Expression.UNIV).join(Expression.UNIV) in self)
     }
@@ -107,7 +107,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val vals = Relation.binary("Vars/vals")
     lazy val valsTyping = {
       val v = Variable.unary("v")
-      (v.join(vals).one and (v.join(vals) in SymbolsRel.self)) forAll (v oneOf self) and
+      (v.join(vals).one and (v.join(vals) in LocsRel.self)) forAll (v oneOf self) and
         (vals.join(Expression.UNIV) in self)
     }
   }
@@ -206,19 +206,19 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       (s.join(SymbolsRel.loc) eq l) implies (s.join(typeOfSym) eq l.join(typeOfLoc)) forAll
         ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
     }
-    lazy val typeOfSymTypeOfSetSubtyping = {
-      val s = Variable.unary("s")
+    lazy val typeOfLocTypeOfSetSubtyping = {
+      val l = Variable.unary("l")
       val ss = Variable.unary("ss")
       val t = Variable.unary("t")
       val ts = Variable.unary("ts")
-      ((s.join(typeOfSym) eq t) and (ss.join(typeOfSet) eq ts) and (s in ss.join(SymbolicSetRel.syms)) implies
+      ((l.join(typeOfLoc) eq t) and (ss.join(typeOfSet) eq ts) and (l in ss.join(SymbolicSetRel.locs)) implies
         (ts in t.join(isSubType))) forAll
-          ((s oneOf SymbolsRel.self) and (ss oneOf SymbolicSetRel.self) and (t oneOf self) and (ts oneOf self))
+          ((l oneOf LocsRel.self) and (ss oneOf SymbolicSetRel.self) and (t oneOf self) and (ts oneOf self))
     }
     lazy val typeOfFieldCorrectness = {
       val l = Variable.unary("l")
       val f = Variable.unary("f")
-      val s = Variable.unary("s")
+      val ol = Variable.unary("ol")
       val t = Variable.unary("t")
       val ot = Variable.unary("ot")
       allFormulae(defs.toList.map { case (c, cd) =>
@@ -227,8 +227,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         val complementOfFieldsOfC = (defs.childfields ++ defs.reffields) diff fieldsOfC
         val fieldAbsence = allFormulae(complementOfFieldsOfC.toList.map { field =>
           (l.join(typeOfLoc) eq t) implies
-            ((l product f product s) in LocsRel.fields).not forAll
-            ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self) and
+            ((l product f product ol) in LocsRel.fields).not forAll
+            ((ol oneOf LocsRel.self) and (l oneOf LocsRel.self) and
               (f oneOf FieldsRel.fieldsrels(field)) and (t oneOf TypesRel.typerels(c)))
         })
         val fieldTyping = allFormulae((cd.children ++ cd.refs).toList.map { case (field, (oc, crd)) =>
@@ -239,11 +239,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           }) forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
             (t oneOf TypesRel.typerels(c)))
           val existenceConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies
-            ((l product f product s) in LocsRel.fields) `forSome` (s oneOf SymbolsRel.self) forAll
+            ((l product f product ol) in LocsRel.fields) `forSome` (ol oneOf LocsRel.self) forAll
                  ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
                   (t oneOf TypesRel.typerels(c)))
           val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies
-            (ot in f.join(l.join(LocsRel.fields)).join(typeOfSym).join(isSubType)) forAll
+            (ot in f.join(l.join(LocsRel.fields)).join(typeOfLoc).join(isSubType)) forAll
             ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
               (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc)))
           allFormulae(List(existenceConstraint,cardConstraint,typingConstraint))
@@ -263,15 +263,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     lazy val ownerDefinition = {
       val l = Variable.unary("l")
-      val ss = Variable.unary("ss")
       val s = Variable.unary("s")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
       (ol.join(owner) eq l) iff
-        ((((l product f product ss) in LocsRel.fields) and
-          (s in ss.join(SymbolicSetRel.syms)) and
-          (s.join(SymbolsRel.loc) eq ol)
-          ) `forSome` ((f oneOf FieldsRel.childs) and (ss oneOf SymbolicSetRel.self) and (s oneOf SymbolsRel.self)))  forAll
+        ((((l product f product s) in LocsRel.fields) and
+          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.childs) and (s oneOf SymbolsRel.self)))  forAll
                    ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     lazy val ownerAcyclic = {
@@ -286,14 +283,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     lazy val referencedByDefinition = {
       val l = Variable.unary("l")
-      val ss = Variable.unary("ss")
       val s = Variable.unary("s")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
       ((ol product l) in referencedBy) iff
-        ((((l product f product ss) in LocsRel.fields) and
-          (s in ss.join(SymbolicSetRel.syms)) and
-          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.refs) and (ss oneOf SymbolicSetRel.self) and (s oneOf SymbolsRel.self))) forAll
+        ((((l product f product s) in LocsRel.fields) and
+          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.refs) and (s oneOf SymbolsRel.self))) forAll
               ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     val reachableBy = Relation.binary("reachableBy")
@@ -322,42 +317,42 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def staticConstraints : Formula = {
    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolsRel.locTyping and
-   SymbolicSetRel.symsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
+   SymbolicSetRel.locsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
    LocsRel.nameTyping and LocsRel.nameUniqueness and LocsRel.fieldsTyping and
    FieldsRel.nameTyping and FieldsRel.nameUniqueness and FieldsRel.childsTyping and FieldsRel.refsTyping and
    FieldsRel.childsRefsDisjoint and FieldsRel.childsDefFields and FieldsRel.refsDefFields and
    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
    TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
-   TypesRel.isSubTypeTyping and TypesRel.typeOfSymTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and
+   TypesRel.isSubTypeTyping and TypesRel.typeOfLocTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and
    TypesRel.typeOfFieldCorrectness and ReachabilityRel.ownerTyping and ReachabilityRel.ownerDefinition and ReachabilityRel.ownerAcyclic and
    ReachabilityRel.referencedByTyping and ReachabilityRel.referencedByDefinition and ReachabilityRel.reachableByTyping and ReachabilityRel.reachableByDefinition
   }
 
   def classPresenceConstraint(clazz: Class): Formula = {
     val v = Variable.unary("v")
-    val s = Variable.unary("s")
     val l = Variable.unary("l")
+    val ol = Variable.unary("ol")
     val t = Variable.unary("t")
-    (s in v.join(VarsRel.vals)) and
-      ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+    (ol in v.join(VarsRel.vals)) and
+      ((ol product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (l.join(TypesRel.typeOfLoc) eq t) `forSome`
-          ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (l oneOf LocsRel.self)) forAll
+          ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (l oneOf LocsRel.self)) forAll
             (t oneOf TypesRel.typerels(clazz))
   }
 
   def fieldPresenceConstraint(field: (Class, Fields), fieldmap: Map[String, Int]): Formula = {
     val v = Variable.unary("v")
-    val s = Variable.unary("s")
-    val s2 = Variable.unary("s2")
+    val ol = Variable.unary("ol")
+    val ool = Variable.unary("ool")
     val l = Variable.unary("l")
     val f = Variable.unary("f")
     val t = Variable.unary("t")
-    (s in v.join(VarsRel.vals)) and
-      ((s.join(SymbolsRel.loc) product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+    (ol in v.join(VarsRel.vals)) and
+      ((ol product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
           (f.join(FieldsRel.name) eq IntConstant.constant(fieldmap(field._2)).toExpression) and
-            ((l product f product s2) in LocsRel.fields) `forSome`
-              ((v oneOf VarsRel.self) and (s oneOf SymbolsRel.self) and (s2 oneOf SymbolsRel.self) and (l oneOf LocsRel.self) and
+            ((l product f product ool) in LocsRel.fields) `forSome`
+              ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (ool oneOf LocsRel.self) and (l oneOf LocsRel.self) and
                 (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
   }
 
@@ -367,36 +362,29 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val maxid = try { locs.map(_.id).max + 1 } catch { case e:UnsupportedOperationException => 0 }
       (maxid until (maxid + delta)).map(Loc)
     }
-    val additionalsyms = {
-      val maxsym = try { symnames.max + 1 } catch { case e:UnsupportedOperationException => 0 }
-      (maxsym until (maxsym + delta)).map(Int.box)
-    }
     val locobjs = locs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
     val additionalocobjs =  additionallocs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
     val allLocobjs = locobjs ++ additionalocobjs
     val symids = symnames.map(i => (i, s"sym'$i")).toMap
-    val additionalsymids = additionalsyms.map(i => (i, s"sym'$i")).toMap
-    val allSymIds = symids ++ additionalsymids
     val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
     val fieldobjs = fieldmap.map { case (field, i) => (field, (i, s"field'$field")) }
     val varobjs = varmap.map { case (vr, i) => (i, s"var'$vr") }
     val setsymnames: Set[Integer] = setsymmap.keySet.map(s => Int.box(s))
     val allsymbolicsets = symbolicsets.values.toSeq
-    val atoms =  allSymIds.keySet ++ allSymIds.values ++ allsymbolicsets ++ setsymnames ++ types.values ++
+    val atoms = symids.keySet ++ symids.values ++ allsymbolicsets ++ setsymnames ++ types.values ++
       allLocobjs.keySet ++ allLocobjs.values ++ fieldobjs.keySet ++ fieldobjs.values.flatMap { case (i,o) => List(i,o) } ++ varobjs.keySet ++ varobjs.values
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
 
-    for (intval <- allLocobjs.keySet ++ allSymIds.keySet ++ fieldobjs.values.map(_._1) ++ varobjs.keySet)
+    for (intval <- allLocobjs.keySet ++ symids.keySet ++ fieldobjs.values.map(_._1) ++ varobjs.keySet)
       bounds.boundExactly(intval.intValue, f range (f tuple intval, f tuple intval))
 
-    bounds.boundExactly(SymbolsRel.self, f setOf (allSymIds.values.toSeq :_*))
+    bounds.boundExactly(SymbolsRel.self, f setOf (symids.values.toSeq :_*))
 
     val symLocUpper = f noneOf 2
     for (symid <- symids.values.toSeq; locid <- allLocobjs.values.toSeq) symLocUpper.add((f tuple symid) product (f tuple locid))
-    for ((symid, locid) <- additionalsymids.values.toSeq.zip(additionalocobjs.values.toSeq)) symLocUpper.add((f tuple symid) product (f tuple locid))
     bounds.bound(SymbolsRel.loc, symLocUpper)
 
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
@@ -410,7 +398,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for ((varname, varid) <- varobjs) varnameUpper.add((f tuple varid) product (f tuple varname))
     bounds.boundExactly(VarsRel.name, varnameUpper)
     val varvalsUpper = f noneOf 2
-    for (varid <- varobjs.values.toSeq; symid <- allSymIds.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple symid))
+    for (varid <- varobjs.values.toSeq; locid <- allLocobjs.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple locid))
     bounds.bound(VarsRel.vals, varvalsUpper)
 
     for ((field, frelname) <- FieldsRel.fieldsrels) bounds.boundExactly(frelname, f setOf fieldobjs(field)._2)
@@ -421,9 +409,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for ((fieldname, fieldid) <- fieldobjs.values) fieldnameUpper.add((f tuple fieldid) product (f tuple fieldname))
     bounds.bound(FieldsRel.name, fieldnameUpper)
 
-    val ssetrelsymsUpper = f noneOf 2
-    for (symid <- allSymIds.values.toSeq; sset <- allsymbolicsets) ssetrelsymsUpper.add((f tuple sset) product (f tuple symid))
-    bounds.bound(SymbolicSetRel.syms, ssetrelsymsUpper)
+    val ssetrellocsUpper = f noneOf 2
+    for (locid <- allLocobjs.values.toSeq; sset <- allsymbolicsets) ssetrellocsUpper.add((f tuple sset) product (f tuple locid))
+    bounds.bound(SymbolicSetRel.locs, ssetrellocsUpper)
 
     val ssetrelnameUpper = f noneOf 2
     for ((ssym, rel) <- setsymmap) ssetrelnameUpper.add((f tuple symbolicsets(rel)) product (f tuple Int.box(ssym)))
@@ -435,12 +423,12 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.boundExactly(LocsRel.name, locsnameUpper)
 
     val locsfieldsUpper = f noneOf 3
-    for (locid <- allLocobjs.values; fieldid <- fieldobjs.values.map(_._2); symid <- allSymIds.values.toSeq)
-      locsfieldsUpper.add((f tuple locid) product (f tuple fieldid) product (f tuple symid))
+    for (locid <- allLocobjs.values; fieldid <- fieldobjs.values.map(_._2); olocid <- allLocobjs.values.toSeq)
+      locsfieldsUpper.add((f tuple locid) product (f tuple fieldid) product (f tuple olocid))
     bounds.bound(LocsRel.fields, locsfieldsUpper)
 
     val symnameUpper = f noneOf 2
-    for ((sname, sid) <- allSymIds)
+    for ((sname, sid) <- symids)
       symnameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(SymbolsRel.name, symnameUpper)
 
@@ -459,7 +447,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     bounds.bound(TypesRel.typeOfSet, typeOfSetUpper)
     val typeOfSymUpper = f noneOf 2
-    for (sid <- allSymIds.values.toSeq) {
+    for (sid <- symids.values.toSeq) {
       for (typ <- types.values.toSeq) {
         typeOfSymUpper.add((f tuple sid) product (f tuple typ))
       }
@@ -479,7 +467,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def evalBoolExpr(b : BoolExpr[IsSymbolic.type], th : Map[Symbols, Relation], isNegated: Boolean = false)
   : String \/ EvalRes[Formula] = b match {
-    case Eq(e1, e2) => evalBinaryBoolExpr(e1, (e1, e2) => e1.join(SymbolsRel.loc) eq e2.join(SymbolsRel.loc), e2, th, isNegated)
+    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
     case SetMem(e1, e2) => for {
         ee2 <- evalSetExpr(e2, th)
         (EvalState(rs2, is2, f2, th2), et2) = ee2
@@ -525,13 +513,28 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val et = if (es.isEmpty) Expression.NONE
         else {
           val sym = Variable.unary("sym")
+          val loc = Variable.unary("loc")
           val ees = es.map {
-            case Symbol(ident) => sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
+            case Symbol(ident) =>
+              (sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression) and
+                (sym.join(SymbolsRel.loc) eq loc) `forSome` (sym oneOf SymbolsRel.self)
           }.toList
-          anyFormulae(ees) comprehension (sym oneOf SymbolsRel.self)
+          anyFormulae(ees) comprehension (loc oneOf LocsRel.self)
         }
+      val s1 = Variable.unary("s1")
+      val s2 = Variable.unary("s2")
+      val diffConstraints = es.flatMap { case Symbol(ident) =>
+          es.map {
+            case Symbol(ident2) if ident != ident2 =>
+              (s1.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression) and
+                (s2.join(SymbolsRel.name) eq IntConstant.constant(ident2).toExpression) implies
+                  (s1.join(SymbolsRel.loc) eq s2.join(SymbolsRel.loc)).not forAll
+                    ((s1 oneOf SymbolsRel.self) and (s2 oneOf SymbolsRel.self))
+            case _ => Formula.TRUE
+          }
+      }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (EvalState(Set(), symbols.toSet, Formula.TRUE, th), et).right[String]
+      (EvalState(Set(), symbols.toSet, allFormulae(diffConstraints.toList), th), et).right[String]
     case Union(e1, e2) =>
       evalBinarySetExpr(e1, _ union _, e2, th)
     case Diff(e1, e2) =>
@@ -542,7 +545,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       if (th.contains(ident)) (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), th(ident)).right[String]
       else {
         val (s, nameConstraint) = freshSymbolicSetRel(ident)
-        (EvalState(Set[Relation](s), Set[Integer](), nameConstraint, th + (ident -> s)), s.join(SymbolicSetRel.syms)).right[String]
+        (EvalState(Set[Relation](s), Set[Integer](), nameConstraint, th + (ident -> s)), s.join(SymbolicSetRel.locs)).right[String]
       }
   }
 
@@ -562,9 +565,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds, Map[String, Int]) = {
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
-      case Single => s.join(SymbolicSetRel.syms).count eq IntConstant.constant(1)
+      case Single => s.join(SymbolicSetRel.locs).count eq IntConstant.constant(1)
       case Many => Formula.TRUE
-      case Opt =>  s.join(SymbolicSetRel.syms).count lte IntConstant.constant(1)
+      case Opt =>  s.join(SymbolicSetRel.locs).count lte IntConstant.constant(1)
     }
     val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
     val varIntMap = smem.initStack.keySet.zipWithIndex.toMap
@@ -704,15 +707,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       set + ((tuple.atom(0).asInstanceOf[A], tuple.atom(1).asInstanceOf[B], tuple.atom(2).asInstanceOf[C]))
     }
     val varVals = extractMap[String, String](instance.tuples(VarsRel.vals))
-    val setSyms = extractMap[String, String](instance.tuples(SymbolicSetRel.syms))
-    val symsLoc = extractMap[String, String](instance.tuples(SymbolsRel.loc)).mapValues(_.head)
     val locName = extractMap[String, Int](instance.tuples(LocsRel.name)).mapValues(_.head.intValue)
     val typeOfLoc = extractMap[String, String](instance.tuples(TypesRel.typeOfLoc)).mapValues(_.head)
     val locFields = extractTernary[String, String, String](instance.tuples(LocsRel.fields))
     val stack = varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
       val (vr, set) = kv
       val varname = vr.replaceFirst("var'", "")
-      stack + (varname -> varVals.get(vr).cata(_.map(s => locName(symsLoc(s))), Set()))
+      stack + (varname -> varVals.get(vr).cata(_.map(locName), Set()))
     }
     val typeMap = typeOfLoc.foldLeft(Map[Instances, Class]()) { (typeMap, kv) =>
       val (loc, typ) = kv
@@ -722,10 +723,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val (childRels, refRels) = locFields.partition { case (l,f,ss) => defs.childfields.contains(f.replaceFirst("field'","")) }
     def convertFieldmap(rels: Set[(String, String, String)]) : Map[Instances, Map[Fields, Set[Instances]]] = {
       rels.foldLeft(Map[Instances, Map[Fields, Set[Instances]]]()) { (map, rel) =>
-        val (l, f, s) = rel
+        val (l, f, ol) = rel
         val locname = locName(l)
         val fieldname = f.replaceFirst("field'", "")
-        val symLoc = locName(symsLoc(s))
+        val symLoc = locName(ol)
         map.updated(locname,
           map.get(locname).cata(fieldmap => fieldmap.updated(fieldname,
             fieldmap.get(fieldname).cata(locs => locs + symLoc, Set(symLoc))
