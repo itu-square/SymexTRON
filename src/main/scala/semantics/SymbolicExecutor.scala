@@ -30,17 +30,18 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield m
 
   def access(sym: Symbol, f: Fields, heap: SHeap):
-    EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] = for {
-      (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
-      _ = println(s"access-loc: $loc, heap: $nheap")
-      (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
-      _ = println(s"access-sdesc: $sdesc, heap: $nnheap")
-      res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
-       (sdesc.children(f), nnheap).right.point[TProcess]
-      else if (defs.reffields.contains(f))
-        (sdesc.refs(f), nnheap).right.point[TProcess]
-      else s"No value for field $f".left.point[TProcess])
-    } yield res
+    EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] =
+    {
+      for {
+        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
+        (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
+        res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
+          (sdesc.children(f), nnheap).right.point[TProcess]
+        else if (defs.reffields.contains(f))
+          (sdesc.refs(f), nnheap).right.point[TProcess]
+        else s"No value for field $f".left.point[TProcess])
+      } yield res
+    }
 
   def disown(ee: SetExpr[IsSymbolic.type], loc: Loc, f: Fields, heap: SHeap) : SHeap =
     _sh_currentSpatial.modify(_ mapValuesWithKeys { case (loc2, sdesc) =>
@@ -78,8 +79,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     // Todo parallelise using mergeN
     EitherT.right[TProcess, String, SMem](pres).flatMap { case (pre: SMem) =>
       val concretised = modelFinder.concretise(pre)
-      println(s"pre: ${pre.heap.initSpatial}")
-      println(s"concretised: $concretised")
       if (!concretised.isRight) EitherT.left[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".point[TProcess])
       else stmt match {
         case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT.right[TProcess, String, SMem](pre.point[TProcess])) { (memr, s) =>

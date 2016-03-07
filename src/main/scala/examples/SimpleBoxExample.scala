@@ -42,7 +42,7 @@ object SimpleBoxBranchingLoadingExample extends SimpleBoxExample {
   )
 }
 
-object SimpleBoxLadingBranchingExample extends SimpleBoxExample {
+object SimpleBoxLoadingBranchingExample extends SimpleBoxExample {
   import Statement._
 
   override val prog: Statement = stmtSeq(

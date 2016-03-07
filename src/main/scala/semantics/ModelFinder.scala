@@ -5,7 +5,9 @@ import helper._
 import kodkod.ast._
 import kodkod.engine.Solution.Outcome
 import kodkod.engine.Solver
-import kodkod.engine.satlab.SATFactory
+import kodkod.engine.fol2sat.{TranslationLogger, TranslationLog}
+import kodkod.engine.satlab.{ReductionStrategy, SATFactory}
+import kodkod.engine.ucore.CRRStrategy
 import kodkod.instance.{TupleSet, Bounds, Instance, Universe}
 import monocle.Monocle
 import semantics.Subst._
@@ -472,7 +474,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def evalBoolExpr(b : BoolExpr[IsSymbolic.type], th : Map[Symbols, Relation], isNegated: Boolean = false)
   : String \/ EvalRes[Formula] = b match {
-    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
+    case Eq(e1, e2) => evalBinaryBoolExpr(e1, (e1, e2) => e1.join(SymbolsRel.loc) eq e2.join(SymbolsRel.loc), e2, th, isNegated)
     case SetMem(e1, e2) => for {
         ee2 <- evalSetExpr(e2, th)
         (EvalState(rs2, is2, f2, th2), et2) = ee2
@@ -610,7 +612,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           case PartialDesc(hasExact, possible) =>
             val exactConstraint = if (!hasExact) (t eq t2).not else Formula.TRUE
             val possibleConstraints = anyFormulae(possible.toList.map(c => TypesRel.typerels(c) in t.join(TypesRel.isSubType)))
-            allFormulae(List(t2 in t.join(TypesRel.isSubType), exactConstraint, possibleConstraints))
+            allFormulae(List(t2 in t.join(TypesRel.isSubType), anyFormulae(List(exactConstraint, possibleConstraints))))
       }) `forSome` ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.self)) forAll (l oneOf LocsRel.self)
       for {
         evalres <- st
@@ -664,10 +666,25 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   def findSolution(constraints: Formula, bounds: Bounds): String \/ Instance = {
     val solver = new Solver
     solver.options.setSolver(SATFactory.DefaultSAT4J)
+    solver.options.setLogTranslation(2)
     val solution = solver.solve(constraints, bounds)
     solution.outcome match {
       case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
-      case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE => s"Unsatisfiable! constraints: $constraints, bounds: $bounds".left
+      case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
+        val proof = solution.proof
+        val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No proof!"
+        s""" Unsatisfiable!
+             proof:
+             ${core}
+
+             constraints:
+             $constraints
+
+             bounds (relation):
+             ${bounds.upperBounds.map(_.toString).mkString("\n")}
+
+             bounds (ints):
+             ${bounds.intBounds}""".left
     }
   }
 
@@ -998,13 +1015,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val nheap = (_sh_currentSpatial.modify(_ + (loc -> psdesc)) andThen
                   _sh_initSpatial.modify(_ + (loc -> psdesc)) andThen
                   _sh_ssvltion.modify(_ ++ newsslvtionc ++ newsslvtionr))(heap)
-      val res = (psdesc, nheap)
-      println("-" * 10)
-      println(cd)
-      println(newrefs)
-      println(psdesc)
-      println("-" * 10)
-      res
+      (psdesc, nheap)
     }
     heap.currentSpatial.get(loc).cata({ sdesc =>
       if (containsTargetField(sdesc)) Process((sdesc, heap).right)

@@ -26,10 +26,12 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
-  def branchCoverage =  {
-    val coveredBranches = branchCoverageMap.filter(_._2).keys.toSet
-    val allBranches     = progBranches.values.toSet
-    coveredBranches.size * 100 / allBranches.size
+  def coverage = {
+    val coveredBranches = branchCoverageMap.filter(_._2).keySet
+    val allBranches     = progBranches.values.flatMap(_.toSet)
+    val coveredStatements = stmtCoverageMap.filterKeys(stmtCoverageMap).keySet
+    if (allBranches.nonEmpty) coveredBranches.size * 100 / allBranches.size else
+      if (coveredStatements.nonEmpty) 100 else 0
   }
 
   def execute(mem: CMem): String \/ CMem = executeStmt(mem, prog)

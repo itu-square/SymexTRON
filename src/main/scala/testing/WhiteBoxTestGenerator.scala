@@ -32,9 +32,9 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
       sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
               .map(_.fold(err => err.left, sm => symbExec.modelFinder.concretise(sm)))
-              .takeWhile(_ => concExec.branchCoverage <= coverage)
-              .map { mem => mem.fold(_ => (), m => { concExec.execute(m);  println(s"Test coverage: ${concExec.branchCoverage}"); () }); mem }
-              .onComplete { println(s"Test coverage: ${concExec.branchCoverage}"); Process() }
+              .takeWhile(_ => concExec.coverage <= coverage)
+              .map { mem => mem.fold(_ => (), m => { concExec.execute(m);  println(s"Test coverage: ${concExec.coverage}"); () }); mem }
+              .onComplete { println(s"Test coverage: ${concExec.coverage}"); Process() }
               )(wye.interrupt)
   }
 }
