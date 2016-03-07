@@ -519,6 +519,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     } yield (mergeEvalState(est1, est2), formula)
   }
 
+  // TODO Take into account symbol equivalence
   def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Expression] = e match {
     case SetLit(es) =>
       val et = if (es.isEmpty) Expression.NONE

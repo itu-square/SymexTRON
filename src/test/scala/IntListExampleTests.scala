@@ -10,8 +10,8 @@ import CHeap._
 class IntListExampleTests extends FlatSpec
                           with Matchers {
 
-  def execFixture = new ConcreteExecutor(IntListExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
-                                         IntListExample.prog)
+  def execFixture = new ConcreteExecutor(IntListContainsElementExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
+                                         IntListContainsElementExample.prog)
 
   def retainedVars(mem: CMem) = GarbageCollection.gc(mem, retainvars = Some(Set("list", "elem", "containselem")))
 

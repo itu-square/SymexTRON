@@ -7,7 +7,7 @@ import syntax.ast.Statement._
 /**
   * Created by asal on 15/01/2016.
   */
-object IntListExample extends Example {
+trait IntListExample extends Example {
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
     new ClassDefinition("IntList", Map("next" -> (Class("IntList"), Opt)),
                                    Map("data" -> (Class("Int"), Single)))
@@ -19,14 +19,40 @@ object IntListExample extends Example {
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Map())), Map(), Map(), Set()))
     )
   }
+}
 
+object IntListContainsElementExample extends IntListExample {
   override val prog: Statement = stmtSeq(
-     assignVar("containselem", SetLit(Seq()))
-   , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
-        loadField("sublist_data", SetLit(Seq(Var("sublist"))), "data")
-        ,`if`(Eq(SetLit(Seq(Var("elem"))), SetLit(Seq(Var("sublist_data"))))
-             , `new`("containselem", Class("Any"))
-             , stmtSeq())
+    assignVar("containselem", SetLit(Seq()))
+    , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
+      loadField("sublist_data", SetLit(Seq(Var("sublist"))), "data")
+      ,`if`(Eq(SetLit(Seq(Var("elem"))), SetLit(Seq(Var("sublist_data"))))
+        , `new`("containselem", Class("Any"))
+        , stmtSeq())
     ))
   )
+}
+
+object IntListHeadTailEqExample extends IntListExample {
+  override val prog: Statement = `if`(Eq(SetVar("list"), SetLit(Seq())),
+      `new`("res", Class("Any"))
+    , stmtSeq(
+        loadField("head", SetVar("list"), "data")
+      , loadField("list_next", SetVar("list"), "next")
+      , `if`(Eq(SetVar("list_next"), SetLit(Seq())),
+          `new`("res", Class("Any"))
+        , stmtSeq(fix(SetVar("list_next"), stmtSeq(
+             loadField("list_next_next", SetVar("list_next"), "next")
+          , `if`(Eq(SetVar("list_next_next"), SetLit(Seq())),
+                loadField("tail", SetVar("list_next"), "data")
+              , assignVar("list_next", SetVar("list_next_next"))
+            ))
+          )
+        , `if`(Eq(SetVar("head"), SetVar("tail")),
+            `new`("res", Class("Any")),
+             assignVar("res", SetLit(Seq()))
+           ))
+        )
+      )
+    )
 }
