@@ -673,18 +673,17 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No proof!"
-        s""" Unsatisfiable!
-             proof:
-             ${core}
-
-             constraints:
-             $constraints
-
-             bounds (relation):
-             ${bounds.upperBounds.map(_.toString).mkString("\n")}
-
-             bounds (ints):
-             ${bounds.intBounds}""".left
+        s""" | Unsatisfiable!
+             | proof:
+             | ${core}
+             |
+             | constraints:
+             | $constraints
+             |
+             | bounds (relation):
+             | ${bounds.upperBounds.map(_.toString).mkString("\n")}
+             | bounds (ints):
+             | ${bounds.intBounds}""".stripMargin.left
     }
   }
 
