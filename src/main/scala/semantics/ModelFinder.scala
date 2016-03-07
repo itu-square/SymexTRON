@@ -371,27 +371,32 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val maxsym = try { symnames.max + 1 } catch { case e:UnsupportedOperationException => 0 }
       (maxsym until (maxsym + delta)).map(Int.box)
     }
-    val locobjs = (locs ++ additionallocs).map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
-    val symbolids = (symnames ++ additionalsyms).map(i => (i, s"sym'$i")).toMap
+    val locobjs = locs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
+    val additionalocobjs =  additionallocs.map(l => (Int.box(l.id), s"loc'${l.id}")).toMap
+    val allLocobjs = locobjs ++ additionalocobjs
+    val symids = symnames.map(i => (i, s"sym'$i")).toMap
+    val additionalsymids = additionalsyms.map(i => (i, s"sym'$i")).toMap
+    val allSymIds = symids ++ additionalsymids
     val symbolicsets = (for ((r, i) <- setsymexprels.zipWithIndex) yield (r, s"set'$i")).toMap
     val types = for ((c, _) <- TypesRel.typerels) yield (c, s"type'${c.name}")
     val fieldobjs = fieldmap.map { case (field, i) => (field, (i, s"field'$field")) }
     val varobjs = varmap.map { case (vr, i) => (i, s"var'$vr") }
     val setsymnames: Set[Integer] = setsymmap.keySet.map(s => Int.box(s))
     val allsymbolicsets = symbolicsets.values.toSeq
-    val atoms =  symbolids.keySet ++ symbolids.values ++ allsymbolicsets ++ setsymnames ++ types.values ++
-      locobjs.keySet ++ locobjs.values ++ fieldobjs.keySet ++ fieldobjs.values.flatMap { case (i,o) => List(i,o) } ++ varobjs.keySet ++ varobjs.values
+    val atoms =  allSymIds.keySet ++ allSymIds.values ++ allsymbolicsets ++ setsymnames ++ types.values ++
+      allLocobjs.keySet ++ allLocobjs.values ++ fieldobjs.keySet ++ fieldobjs.values.flatMap { case (i,o) => List(i,o) } ++ varobjs.keySet ++ varobjs.values
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
 
-    for (intval <- locobjs.keySet ++ symbolids.keySet ++ fieldobjs.values.map(_._1) ++ varobjs.keySet)
+    for (intval <- allLocobjs.keySet ++ allSymIds.keySet ++ fieldobjs.values.map(_._1) ++ varobjs.keySet)
       bounds.boundExactly(intval.intValue, f range (f tuple intval, f tuple intval))
 
-    bounds.boundExactly(SymbolsRel.self, f setOf (symbolids.values.toSeq :_*))
+    bounds.boundExactly(SymbolsRel.self, f setOf (allSymIds.values.toSeq :_*))
 
     val symLocUpper = f noneOf 2
-    for (symid <- symbolids.values.toSeq; locid <- locobjs.values.toSeq) symLocUpper.add((f tuple symid) product (f tuple locid))
+    for (symid <- symids.values.toSeq; locid <- allLocobjs.values.toSeq) symLocUpper.add((f tuple symid) product (f tuple locid))
+    for ((symid, locid) <- additionalsymids.values.toSeq.zip(additionalocobjs.values.toSeq)) symLocUpper.add((f tuple symid) product (f tuple locid))
     bounds.bound(SymbolsRel.loc, symLocUpper)
 
     for ((r, i) <- symbolicsets) bounds.boundExactly(r, f setOf i)
@@ -405,7 +410,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     for ((varname, varid) <- varobjs) varnameUpper.add((f tuple varid) product (f tuple varname))
     bounds.boundExactly(VarsRel.name, varnameUpper)
     val varvalsUpper = f noneOf 2
-    for (varid <- varobjs.values.toSeq; symid <- symbolids.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple symid))
+    for (varid <- varobjs.values.toSeq; symid <- allSymIds.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple symid))
     bounds.bound(VarsRel.vals, varvalsUpper)
 
     for ((field, frelname) <- FieldsRel.fieldsrels) bounds.boundExactly(frelname, f setOf fieldobjs(field)._2)
@@ -417,25 +422,25 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds.bound(FieldsRel.name, fieldnameUpper)
 
     val ssetrelsymsUpper = f noneOf 2
-    for (symid <- symbolids.values.toSeq; sset <- allsymbolicsets) ssetrelsymsUpper.add((f tuple sset) product (f tuple symid))
+    for (symid <- allSymIds.values.toSeq; sset <- allsymbolicsets) ssetrelsymsUpper.add((f tuple sset) product (f tuple symid))
     bounds.bound(SymbolicSetRel.syms, ssetrelsymsUpper)
 
     val ssetrelnameUpper = f noneOf 2
     for ((ssym, rel) <- setsymmap) ssetrelnameUpper.add((f tuple symbolicsets(rel)) product (f tuple Int.box(ssym)))
     bounds.bound(SymbolicSetRel.name, ssetrelnameUpper)
 
-    bounds.boundExactly(LocsRel.self, f setOf (locobjs.values.toSeq :_*))
+    bounds.boundExactly(LocsRel.self, f setOf (allLocobjs.values.toSeq :_*))
     val locsnameUpper = f noneOf 2
-    for ((locname, locid) <- locobjs) locsnameUpper.add((f tuple locid) product (f tuple locname))
+    for ((locname, locid) <- allLocobjs) locsnameUpper.add((f tuple locid) product (f tuple locname))
     bounds.boundExactly(LocsRel.name, locsnameUpper)
 
     val locsfieldsUpper = f noneOf 3
-    for (locid <- locobjs.values; fieldid <- fieldobjs.values.map(_._2); symid <- symbolids.values.toSeq)
+    for (locid <- allLocobjs.values; fieldid <- fieldobjs.values.map(_._2); symid <- allSymIds.values.toSeq)
       locsfieldsUpper.add((f tuple locid) product (f tuple fieldid) product (f tuple symid))
     bounds.bound(LocsRel.fields, locsfieldsUpper)
 
     val symnameUpper = f noneOf 2
-    for ((sname, sid) <- symbolids)
+    for ((sname, sid) <- allSymIds)
       symnameUpper.add((f tuple sid) product (f tuple sname))
     bounds.bound(SymbolsRel.name, symnameUpper)
 
@@ -454,18 +459,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     bounds.bound(TypesRel.typeOfSet, typeOfSetUpper)
     val typeOfSymUpper = f noneOf 2
-    for (sid <- symbolids.values.toSeq) {
+    for (sid <- allSymIds.values.toSeq) {
       for (typ <- types.values.toSeq) {
         typeOfSymUpper.add((f tuple sid) product (f tuple typ))
       }
     }
     bounds.bound(TypesRel.typeOfSym, typeOfSymUpper)
     val typeOfLocUpper = f noneOf 2
-    for (lid <- locobjs.values.toSeq; typ <- types.values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
+    for (lid <- allLocobjs.values.toSeq; typ <- types.values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
     bounds.bound(TypesRel.typeOfLoc, typeOfLocUpper)
 
     val locReachUpper = f noneOf 2
-    for (lid <- locobjs.values.toSeq; olid <- locobjs.values.toSeq) locReachUpper.add((f tuple lid) product (f tuple olid))
+    for (lid <- allLocobjs.values.toSeq; olid <- allLocobjs.values.toSeq) locReachUpper.add((f tuple lid) product (f tuple olid))
     bounds.bound(ReachabilityRel.owner, locReachUpper)
     bounds.bound(ReachabilityRel.referencedBy, locReachUpper)
     bounds.bound(ReachabilityRel.reachableBy, locReachUpper)
@@ -672,18 +677,18 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
-        val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No proof!"
-        s""" | Unsatisfiable!
-             | proof:
-             | ${core}
+        val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No core!"
+        s""" |Unsatisfiable!
+             |core:
+             |${core}
              |
-             | constraints:
-             | $constraints
+             |constraints:
+             |$constraints
              |
-             | bounds (relation):
-             | ${bounds.upperBounds.map(_.toString).mkString("\n")}
-             | bounds (ints):
-             | ${bounds.intBounds}""".stripMargin.left
+             |bounds (relation):
+             |${bounds.upperBounds.map(_.toString).mkString("\n")}
+             |bounds (ints):
+             |${bounds.intBounds}""".stripMargin.left
     }
   }
 
