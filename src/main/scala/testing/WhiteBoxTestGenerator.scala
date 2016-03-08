@@ -29,13 +29,14 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
                      coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, String \/ CMem] = {
       val concExec = new ConcreteExecutor(defs, s)
       // TODO Rewrite using writer monad to be pure
-      sleep(timeout).wye(
+      symbExec.execute(pres, concExec.prog).map(_.toString).to(io.stdOutLines).run.run
+      /*sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
-              .map(_.fold(err => err.left, sm => symbExec.modelFinder.concretise(sm)))
+              .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm) })
               .takeWhile(_ => concExec.coverage <= coverage)
               .map { mem => mem.fold(_ => (), m => { concExec.execute(m);  println(s"Test coverage: ${concExec.coverage}"); () }); mem }
               .onComplete { println(s"Test coverage: ${concExec.coverage}"); Process() }
-              )(wye.interrupt)
+              )(wye.interrupt)*/???
   }
 }
 

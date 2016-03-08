@@ -32,7 +32,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def access(sym: Symbol, f: Fields, heap: SHeap):
     EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
-      for {
+      val res = for {
         (loc, nheap) <- EitherT[List, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap).toList)
         (sdesc, nnheap) <- EitherT[List, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap).toList)
         res <- EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
@@ -41,6 +41,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           (sdesc.refs(f), nnheap).right.point[List]
         else s"No value for field $f".left.point[List])
       } yield res
+      res
     }
 
   def disown(ee: SetExpr[IsSymbolic.type], loc: Loc, f: Fields, heap: SHeap) : SHeap =
@@ -77,12 +78,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private def executeHelper(pres : Process[Task, SMem], stmt : Statement) : EitherT[TProcess, String, SMem] = {
     // Todo parallelise using mergeN
-    EitherT.right[TProcess, String, SMem](pres).flatMap { (pre: SMem) =>
+    EitherT[TProcess, String, SMem](pres.map(_.right)).flatMap { (pre: SMem) =>
       val concretised = modelFinder.concretise(pre)
       if (!concretised.isRight) {
-        EitherT.left[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".point[TProcess])
+        EitherT[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".left.point[TProcess])
       } else stmt match {
-        case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT.right[TProcess, String, SMem](pre.point[TProcess])) { (memr, s) =>
+        case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[TProcess, String, SMem](pre.right.point[TProcess])) { (memr, s) =>
           memr.flatMap { mem => executeHelper(Process(mem), s) }
         }
         case AssignVar(_,x, e) => for {
@@ -142,7 +143,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 } yield set
             }
             // TODO: Fix ordering so it coincides with concrete executor ordering
-            iterated <- syms.foldLeft(EitherT.right[TProcess, String, SMem](imem.point[TProcess])) { (memr, sym) =>
+            iterated <- syms.foldLeft(EitherT[TProcess, String, SMem](imem.right.point[TProcess])) { (memr, sym) =>
               memr.flatMap { mem => executeHelper(Process(_sm_currentStack.modify(_ + (x -> SetLit(Seq(sym))))(mem)), sb) }
             }
           } yield iterated
@@ -185,9 +186,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def evalBasicExpr[M[_] : Monad](s: SStack, e: BasicExpr[IsProgram.type]): EitherT[M, String, BasicExpr[IsSymbolic.type]] = e match {
     case Var(name) =>
       s.get(name).cata({
-            case SetLit(Seq(evalue)) => EitherT.right(evalue.point[M])
-            case ee => EitherT.left(s"Not a basic expression: $ee".point[M])
-        }, EitherT.left(s"Error while evaluating expression $e".point[M]))
+            case SetLit(Seq(evalue)) => EitherT(evalue.right.point[M])
+            case ee => EitherT(s"Not a basic expression: $ee".left.point[M])
+        }, EitherT(s"Error while evaluating expression $e".left.point[M]))
   }
 
   def evalExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
@@ -223,7 +224,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       for {
         ep <- evalBoolExpr[M](st, p)
       } yield Not(ep)
-    case True() => EitherT.right((True() : BoolExpr[IsSymbolic.type]).point[M])
+    case True() => EitherT((True() : BoolExpr[IsSymbolic.type]).right.point[M])
     case And(p1, p2) =>
       for {
         ep1 <- evalBoolExpr[M](st, p1)

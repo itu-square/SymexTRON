@@ -946,8 +946,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
-                (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(antialias(sym, nheap, loc))).right
+                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right
               })
           case SRef =>
             // Can alias all existing locs or create new locs with unknown owners
@@ -955,15 +954,15 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(newLoc)))(antialias(sym, nheap, loc))).right)
+                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right)
           case SOwned(l, f) =>
             // Can alias existing locs with unknown owners or create new owned locs
             val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, Owned(l,f), nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-                  _sh_locOwnership.modify(_ + (newLoc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
+                (loc, (_sh_svltion.modify(_ + (sym -> Loced(loc))) andThen
+                  _sh_locOwnership.modify(_ + (loc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
         }
         res
         /*
@@ -1001,7 +1000,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       if (!optimistic) err
       else {
         (if(dt.hasExact) err else Process()) ++ (for {
-           nc <- EitherT.right[Process0,String,Class](Process.emitAll(dt.possible.toSeq))
+           nc <- EitherT[Process0,String,Class](Process.emitAll(dt.possible.toSeq).map(_.right))
            cd <- EitherT[Process0, String, ClassDefinition](defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left).point[Process0])
            (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
            res <- EitherT[Process0, String, (SpatialDesc, SHeap)](
