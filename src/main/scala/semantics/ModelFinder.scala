@@ -516,10 +516,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           val loc = Variable.unary("loc")
           val ees = es.map {
             case Symbol(ident) =>
-              (sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression) and
-                (sym.join(SymbolsRel.loc) eq loc) `forSome` (sym oneOf SymbolsRel.self)
+              sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
           }.toList
-          anyFormulae(ees) comprehension (loc oneOf LocsRel.self)
+          (anyFormulae(ees) comprehension (sym oneOf SymbolsRel.self)).join(SymbolsRel.loc)
         }
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
