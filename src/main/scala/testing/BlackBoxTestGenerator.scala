@@ -5,7 +5,7 @@ import kodkod.ast.Formula
 import kodkod.instance.Bounds
 import semantics.ModelFinder
 import semantics.domains.{UnknownLoc, CMem, SMem}
-import syntax.ast.{Fields, ClassDefinition, Class}
+import _root_.syntax.ast.{Vars, Fields, ClassDefinition, Class}
 
 import scalaz._, Scalaz._
 import scalaz.concurrent.Task
@@ -20,7 +20,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
   val metamodelcoverage = new MetaModelCoverageChecker(defs)
 
   private
-  def generateCoveringTests(consideredTypes: Set[Class], constraints: Formula, bounds: Bounds, fieldmap: Map[String, Int], mems: Set[CMem]): Set[CMem] = {
+  def generateCoveringTests(consideredTypes: Set[Class], consideredVars: Set[Vars], constraints: Formula, bounds: Bounds, fieldmap: Map[String, Int], mems: Set[CMem]): Set[CMem] = {
     def gctHelper(mems: Set[CMem], classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Set[CMem] = {
       val coverage = metamodelcoverage.relevantPartialCoverage(consideredTypes, mems)
       val additionalClassesToCover = coverage.classesRelevant diff (coverage.classesCovered ++ classesUncoverable)
@@ -34,7 +34,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
           modelFinder.findSolution(constraints and fieldConstraint, bounds).fold(_ =>
             gctHelper(mems, classesUncoverable, fieldsUncoverable + fieldToCover),
             inst => {
-              val nmem = modelFinder.extractConcreteMemory(inst)
+              val nmem = modelFinder.extractConcreteMemory(inst, consideredVars)
               gctHelper(mems, classesUncoverable, fieldsUncoverable)
             }
           )
@@ -45,7 +45,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
         modelFinder.findSolution(constraints and classConstraint, bounds).fold(_ =>
           gctHelper(mems, classesUncoverable + classToCover, fieldsUncoverable),
           inst => {
-            val nmem = modelFinder.extractConcreteMemory(inst)
+            val nmem = modelFinder.extractConcreteMemory(inst, consideredVars)
             gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
           }
         )
@@ -65,7 +65,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
        startMem <- modelFinder.concretise(pre)
        cc <- modelFinder.concretisationConstraints(pre)
        (constraints, bounds, fieldmap) = cc
-       mems = generateCoveringTests(consideredTypes, constraints, bounds, fieldmap, Set(startMem))
+       mems = generateCoveringTests(consideredTypes, pre.initStack.keySet, constraints, bounds, fieldmap, Set(startMem))
      } yield mems).fold(_ => Process.empty, mems => Process.emitAll(mems.toSeq))
   }
 }

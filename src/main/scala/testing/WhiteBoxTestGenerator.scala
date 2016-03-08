@@ -40,7 +40,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
 }
 
 object WhiteBoxTestGenerator {
-  val defaultTimeout = 1L.minutes
+  val defaultTimeout = 10L.minutes
 
   val defaultCoverageTarget = 95.0
 }

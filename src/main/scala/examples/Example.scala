@@ -23,11 +23,11 @@ trait Example {
     val defsWithKeys = classDefs.map(cd => Class(cd.name) -> cd).toMap
     val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = 5)
     println("""------------ Blackbox test generation -----------------""")
-    bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("mem", mem)).map(_.toString).to(io.stdOutLines).run.run
+    bbtestgenerator.generateTests(pres).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
     val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 5, 2)
     println("""------------ Whitebox test generation -----------------""")
-    wwtestgenerator.generateTests(pres, prog).map(mem => DotConverter.convertCMem("mem", mem)).map(_.toString).to(io.stdOutLines).run.run
+    wwtestgenerator.generateTestsE(pres, prog).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
   }
 }

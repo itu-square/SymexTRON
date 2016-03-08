@@ -18,12 +18,4 @@ package object domains extends SymbolicOps {
   type DescendantPools = Map[Class, SetExpr[IsSymbolic.type]]
   type Instances = Int
   type CStack = Map[Vars, Set[Instances]]
-
-
-  def getSingletonSymbol[M[_] : Monad](e : SetExpr[IsSymbolic.type]): EitherT[M, String, Symbol] = {
-    e match {
-      case SetLit(Seq(sym@Symbol(symid))) => EitherT.right(sym.point[M])
-      case _ => EitherT.left(s"${PrettyPrinter.pretty(e)} is not a single symbol".point[M])
-    }
-  }
 }

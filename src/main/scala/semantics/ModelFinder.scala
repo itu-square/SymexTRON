@@ -107,7 +107,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val vals = Relation.binary("Vars/vals")
     lazy val valsTyping = {
       val v = Variable.unary("v")
-      (v.join(vals).one and (v.join(vals) in LocsRel.self)) forAll (v oneOf self) and
+      (v.join(vals) in LocsRel.self) forAll (v oneOf self) and
         (vals.join(Expression.UNIV) in self)
     }
   }
@@ -238,15 +238,11 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Opt => f.join(l.join(LocsRel.fields)).lone
           }) forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
             (t oneOf TypesRel.typerels(c)))
-          val existenceConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies
-            ((l product f product ol) in LocsRel.fields) `forSome` (ol oneOf LocsRel.self) forAll
-                 ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
-                  (t oneOf TypesRel.typerels(c)))
           val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies
             (ot in f.join(l.join(LocsRel.fields)).join(typeOfLoc).join(isSubType)) forAll
             ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
               (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc)))
-          allFormulae(List(existenceConstraint,cardConstraint,typingConstraint))
+          allFormulae(List(cardConstraint,typingConstraint))
         })
         allFormulae(List(fieldTyping, fieldAbsence))
       })
@@ -541,11 +537,15 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     case ISect(e1, e2) =>
       evalBinarySetExpr(e1, _ intersection _, e2, th)
     case SetSymbol(ident) =>
-      if (th.contains(ident)) (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), th(ident)).right[String]
-      else {
-        val (s, nameConstraint) = freshSymbolicSetRel(ident)
-        (EvalState(Set[Relation](s), Set[Integer](), nameConstraint, th + (ident -> s)), s.join(SymbolicSetRel.locs)).right[String]
-      }
+      val (newrels, newformula, newth, rel) =
+        if (th.contains(ident)) (Set[Relation](), Formula.TRUE, th, th(ident))
+        else {
+          val (s, nameConstraint) = freshSymbolicSetRel(ident)
+          (Set(s), nameConstraint, th + (ident -> s), s)
+        }
+      val l = Variable.unary("l")
+      val ss = Variable.unary("ss")
+      (EvalState(newrels, Set(), newformula, newth), (l in ss.join(SymbolicSetRel.locs)) forAll (ss oneOf rel) comprehension (l oneOf LocsRel.self)).right[String]
   }
 
   def evalBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
@@ -559,7 +559,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def concretise(smem: SMem): String \/ CMem = {
-    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>  findSolution(cs, bs) }.map(extractConcreteMemory)
+    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>  findSolution(cs, bs) }.map(inst =>
+      extractConcreteMemory(inst, smem.initStack.keySet))
   }
 
   def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds, Map[String, Int]) = {
@@ -579,7 +580,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         (EvalState(rs,is,f,th), et) = eexp
         varconstraint = {
           val v = Variable.unary("v")
-          val ss = Variable.unary("ss")
           (v.join(VarsRel.name) eq IntConstant.constant(varIntMap(vr)).toExpression) implies
                        (v.join(VarsRel.vals) eq et) forAll (v oneOf VarsRel.self)
         }
@@ -695,7 +695,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
   }
 
-  def extractConcreteMemory(instance: Instance): CMem = {
+  def extractConcreteMemory(instance: Instance, vars: Set[Vars]): CMem = {
     def extractSet[K](ts: TupleSet): Set[K] = ts.foldLeft(Set[K]()) { (set, tuple) =>
       set + tuple.atom(0).asInstanceOf[K]
     }
@@ -709,7 +709,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val locName = extractMap[String, Int](instance.tuples(LocsRel.name)).mapValues(_.head.intValue)
     val typeOfLoc = extractMap[String, String](instance.tuples(TypesRel.typeOfLoc)).mapValues(_.head)
     val locFields = extractTernary[String, String, String](instance.tuples(LocsRel.fields))
-    val stack = varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
+    val stack = vars.map(v => (v, Set[Instances]())).toMap ++ varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
       val (vr, set) = kv
       val varname = vr.replaceFirst("var'", "")
       stack + (varname -> varVals.get(vr).cata(_.map(locName), Set()))
@@ -939,15 +939,16 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         // TODO check consistency via SAT
         val newLoc = Loc(loccounter.++())
         val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
-        ownership match {
+        val res = ownership match {
           case SUnowned =>
             // Can either alias existing locs with unknown owners or create new unowned locs
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
+            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
             Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
+              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
                 (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(antialias(sym, nheap, loc))).right)
+                _sh_locOwnership.modify(_ + (newLoc -> Unowned)))(antialias(sym, nheap, loc))).right
+              })
           case SRef =>
             // Can alias all existing locs or create new locs with unknown owners
             val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
@@ -964,6 +965,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                 (loc, (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
                   _sh_locOwnership.modify(_ + (newLoc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
         }
+        res
         /*
         TODO: Possible optimization
         val mentioningConstraints = heap.pure.filter(_.symbols.collect({ case \/-(s) => s }).contains(sym))

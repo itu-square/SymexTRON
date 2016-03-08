@@ -30,16 +30,16 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield m
 
   def access(sym: Symbol, f: Fields, heap: SHeap):
-    EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] =
+    EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
       for {
-        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
-        (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
-        res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
-          (sdesc.children(f), nnheap).right.point[TProcess]
+        (loc, nheap) <- EitherT[List, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap).toList)
+        (sdesc, nnheap) <- EitherT[List, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap).toList)
+        res <- EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
+          (sdesc.children(f), nnheap).right.point[List]
         else if (defs.reffields.contains(f))
-          (sdesc.refs(f), nnheap).right.point[TProcess]
-        else s"No value for field $f".left.point[TProcess])
+          (sdesc.refs(f), nnheap).right.point[List]
+        else s"No value for field $f".left.point[List])
       } yield res
     }
 
@@ -77,10 +77,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private def executeHelper(pres : Process[Task, SMem], stmt : Statement) : EitherT[TProcess, String, SMem] = {
     // Todo parallelise using mergeN
-    EitherT.right[TProcess, String, SMem](pres).flatMap { case (pre: SMem) =>
+    EitherT.right[TProcess, String, SMem](pres).flatMap { (pre: SMem) =>
       val concretised = modelFinder.concretise(pre)
-      if (!concretised.isRight) EitherT.left[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".point[TProcess])
-      else stmt match {
+      if (!concretised.isRight) {
+        EitherT.left[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".point[TProcess])
+      } else stmt match {
         case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT.right[TProcess, String, SMem](pre.point[TProcess])) { (memr, s) =>
           memr.flatMap { mem => executeHelper(Process(mem), s) }
         }
@@ -102,20 +103,24 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           } yield updated
           EitherT[TProcess, String, SMem](post.point[TProcess])
         case LoadField(_, x, e, f) => for {
-          sym <- evalExpr[TProcess](pre.currentStack, e).flatMap(getSingletonSymbol[TProcess])
-          (e, heap) <- access(sym, f, pre.heap)
-        } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(heap))(pre)
+          eres <- evalExpr[TProcess](pre.currentStack, e)
+          (sym, mem) <- findSym(pre, eres)
+          (e, nheap) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](Process.emitAll(access(sym, f, mem.heap).run))
+        } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(pre)
         case AssignField(_, e1, f, e2) => for {
-            sym <- evalExpr[TProcess](pre.currentStack, e1).flatMap(getSingletonSymbol[TProcess])
+            e1res <- evalExpr[TProcess](pre.currentStack, e1)
+            (sym, mem) <- findSym(pre, e1res)
             ee2 <- evalExpr[TProcess](pre.currentStack, e2)
-            newheap <- update(sym, f, ee2, pre.heap)
-          } yield _sm_heap.set(newheap)(pre)
+            nheap <- update(sym, f, ee2, mem.heap)
+          } yield _sm_heap.set(nheap)(pre)
         case If(_, cond, ts, fs) => for {
           econd <- evalBoolExpr[TProcess](pre.currentStack, cond)
           newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
           newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
           // TODO rewrite using liftA2?
-          res <-  EitherT[TProcess, String, SMem](executeHelper(Process(newtmem), ts).run.interleave(executeHelper(Process(newfmem), fs).run))
+          execTrue = executeHelper(Process(newtmem), ts).run
+          execFalse = executeHelper(Process(newfmem), fs).run
+          res <-  EitherT[TProcess, String, SMem](execTrue.interleave(execFalse))
         } yield res
         case For(_, x, m, sb) =>
           for {
@@ -157,6 +162,22 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             } yield fixmore
           EitherT[TProcess,String,SMem](fixEqCase(pre).run ++ fixNeqCase(pre, kappa).run)
         }
+      }
+    }
+  }
+
+  private def findSym(mem: SMem, eres: SetExpr[IsSymbolic.type]): DisjunctionT[TProcess, String, (Symbol, SMem)] = {
+    eres match {
+      case SetLit(Seq(s: Symbol)) => EitherT[TProcess, String, (Symbol, SMem)]((s, mem).right.point[TProcess])
+      case ee => {
+        val nsym = Symbol(freshSym)
+        val nsymownership = SUnowned// TODO: Pick proper ownership
+        for {
+          nsymtype <- EitherT[TProcess, String, Class](typeInference.inferSetType(ee, mem.heap).cata(_.right.point[TProcess], s"Empty set $eres".left.point[TProcess]))
+          nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ + (nsym -> UnknownLoc(nsymtype, nsymownership, Map()))) andThen
+                      (_sm_heap ^|-> _sh_pure).modify(_ + Eq(SetLit(Seq(nsym)), ee)))(mem)
+          concretise <- EitherT[TProcess, String, CMem](modelFinder.concretise(nmem).point[TProcess])
+        } yield (nsym, nmem)
       }
     }
   }
