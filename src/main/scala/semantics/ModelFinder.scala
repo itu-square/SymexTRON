@@ -7,7 +7,7 @@ import kodkod.engine.Solution.Outcome
 import kodkod.engine.Solver
 import kodkod.engine.fol2sat.{TranslationLogger, TranslationLog}
 import kodkod.engine.satlab.{ReductionStrategy, SATFactory}
-import kodkod.engine.ucore.CRRStrategy
+import kodkod.engine.ucore.{SCEStrategy, DynamicRCEStrategy}
 import kodkod.instance.{TupleSet, Bounds, Instance, Universe}
 import monocle.Monocle
 import semantics.Subst._
@@ -511,7 +511,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Symbol(ident) =>
               sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
           }.toList
-          (allFormulae(List(anyFormulae(ees), loc in sym.join(SymbolsRel.loc))) `forSome` (sym oneOf SymbolsRel.self)) comprehension (loc oneOf LocsRel.self)
+          (anyFormulae(ees) comprehension (sym oneOf SymbolsRel.self)).join(SymbolsRel.loc)
         }
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
@@ -542,7 +542,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         }
       val l = Variable.unary("l")
       val ss = Variable.unary("ss")
-      (EvalState(newrels, Set(), newformula, newth), (l in ss.join(SymbolicSetRel.locs)) `forSome` (ss oneOf rel) comprehension (l oneOf LocsRel.self)).right[String]
+      val formula = rel.join(SymbolicSetRel.locs)
+      (EvalState(newrels, Set(), newformula, newth), formula).right[String]
   }
 
   def evalBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
@@ -588,7 +589,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val s = Variable.unary("s")
       val t = Variable.unary("t")
       s.join(SymbolicSetRel.name) eq IntConstant.constant(ssym.id).toExpression implies
-        (cardConstraint(s, ssdesc.crd) and (t in s.join(TypesRel.typeOfSet).join(TypesRel.isSubType))) forAll
+        (cardConstraint(s, ssdesc.crd) and (s.join(TypesRel.typeOfSet) eq t)) forAll
         ((s oneOf SymbolicSetRel.self) and (t oneOf TypesRel.typerels(ssdesc.cl)))
     })
     val svconstraints = allFormulae(smem.heap.svltion.toList.map { case (sym, sdesc) =>
@@ -679,7 +680,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.relationTuples.foreach(println); solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
-        val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No core!"
+        val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"
         s""" |Unsatisfiable!
              |core:
              |${core}
