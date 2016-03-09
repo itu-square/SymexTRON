@@ -12,6 +12,10 @@ trait IntListExample extends Example {
     new ClassDefinition("IntList", Map("next" -> (Class("IntList"), Opt)),
                                    Map("data" -> (Class("Int"), Single)))
   )
+
+}
+
+object IntListContainsElementExample extends IntListExample {
   override val pres: Set[SMem] = {
     val stack = Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2))))
     Set(
@@ -19,9 +23,6 @@ trait IntListExample extends Example {
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Map())), Map(), Map(), Set()))
     )
   }
-}
-
-object IntListContainsElementExample extends IntListExample {
   override val prog: Statement = stmtSeq(
     assignVar("containselem", SetLit(Seq()))
     , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
@@ -34,6 +35,13 @@ object IntListContainsElementExample extends IntListExample {
 }
 
 object IntListHeadTailEqExample extends IntListExample {
+  override val pres: Set[SMem] = {
+    val stack = Map("list" -> SetSymbol(-1))
+    Set(
+      SMem(stack, stack,
+        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned, Map())), Map(), Map(), Map(), Set()))
+    )
+  }
   override val prog: Statement = `if`(Eq(SetVar("list"), SetLit(Seq())),
       `new`("res", Class("Any"))
     , stmtSeq(

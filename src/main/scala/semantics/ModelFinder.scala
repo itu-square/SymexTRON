@@ -238,7 +238,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Opt => f.join(l.join(LocsRel.fields)).lone
           }) forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
             (t oneOf TypesRel.typerels(c)))
-          val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies
+          val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields `forSome` (ol oneOf LocsRel.self)) implies
             (ot in f.join(l.join(LocsRel.fields)).join(typeOfLoc).join(isSubType)) forAll
             ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
               (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc)))
@@ -259,17 +259,15 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     lazy val ownerDefinition = {
       val l = Variable.unary("l")
-      val s = Variable.unary("s")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
-      (ol.join(owner) eq l) iff
-        ((((l product f product s) in LocsRel.fields) and
-          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.childs) and (s oneOf SymbolsRel.self)))  forAll
+      ((ol product l) in owner) iff
+        ((l product f product ol) in LocsRel.fields `forSome` (f oneOf FieldsRel.childs)) forAll
                    ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     lazy val ownerAcyclic = {
       val l = Variable.unary("l")
-      (l in l.join(owner.closure)).not forAll (l oneOf LocsRel.self)
+      ((l product l) in owner.closure).not forAll (l oneOf LocsRel.self)
     }
     val referencedBy = Relation.binary("referencedBy")
     lazy val referencedByTyping = {
@@ -279,12 +277,10 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
     lazy val referencedByDefinition = {
       val l = Variable.unary("l")
-      val s = Variable.unary("s")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
       ((ol product l) in referencedBy) iff
-        ((((l product f product s) in LocsRel.fields) and
-          (s.join(SymbolsRel.loc) eq ol)) `forSome` ((f oneOf FieldsRel.refs) and (s oneOf SymbolsRel.self))) forAll
+        (((l product f product ol) in LocsRel.fields) `forSome` (f oneOf FieldsRel.refs)) forAll
               ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     val reachableBy = Relation.binary("reachableBy")
@@ -565,9 +561,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds, Map[String, Int]) = {
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
-      case Single => s.join(SymbolicSetRel.locs).count eq IntConstant.constant(1)
+      case Single => s.join(SymbolicSetRel.locs).one
       case Many => Formula.TRUE
-      case Opt =>  s.join(SymbolicSetRel.locs).count lte IntConstant.constant(1)
+      case Opt =>  s.join(SymbolicSetRel.locs).lone
     }
     val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
     val varIntMap = smem.initStack.keySet.zipWithIndex.toMap

@@ -84,7 +84,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         EitherT[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".left.point[TProcess])
       } else stmt match {
         case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[TProcess, String, SMem](pre.right.point[TProcess])) { (memr, s) =>
-          memr.flatMap { mem => executeHelper(Process(mem), s) }
+          memr.flatMap { mem =>
+            executeHelper(Process(mem), s)
+          }
         }
         case AssignVar(_,x, e) => for {
             ee <- evalExpr[TProcess](pre.currentStack, e)
@@ -121,7 +123,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           // TODO rewrite using liftA2?
           execTrue = executeHelper(Process(newtmem), ts).run
           execFalse = executeHelper(Process(newfmem), fs).run
-          res <-  EitherT[TProcess, String, SMem](execTrue.interleave(execFalse))
+          res <-  EitherT[TProcess, String, SMem](execTrue.tee(execFalse)(teePlus.interleaveAll))
         } yield res
         case For(_, x, m, sb) =>
           for {
