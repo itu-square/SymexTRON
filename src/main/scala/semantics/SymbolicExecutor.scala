@@ -30,18 +30,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield m
 
   def access(sym: Symbol, f: Fields, heap: SHeap):
-    EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)] =
+    EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
-      val res = for {
-        (loc, nheap) <- EitherT[List, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap).toList)
-        (sdesc, nnheap) <- EitherT[List, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap).toList)
-        res <- EitherT[List, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
-          (sdesc.children(f), nnheap).right.point[List]
+      for {
+        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
+        (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
+        res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
+          (sdesc.children(f), nnheap).right.point[TProcess]
         else if (defs.reffields.contains(f))
-          (sdesc.refs(f), nnheap).right.point[List]
-        else s"No value for field $f".left.point[List])
+          (sdesc.refs(f), nnheap).right.point[TProcess]
+        else s"No value for field $f".left.point[TProcess])
       } yield res
-      res
     }
 
   def disown(ee: SetExpr[IsSymbolic.type], loc: Loc, f: Fields, heap: SHeap) : SHeap =
@@ -89,7 +88,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           }
         }
         case AssignVar(_,x, e) => for {
-            ee <- evalExpr[TProcess](pre.currentStack, e)
+            ee <- evalSetExpr[TProcess](pre.currentStack, e)
           } yield _sm_currentStack.modify(_ + (x -> ee))(pre)
         case New(_, x, c) =>
           val post = for {
@@ -106,14 +105,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           } yield updated
           EitherT[TProcess, String, SMem](post.point[TProcess])
         case LoadField(_, x, e, f) => for {
-          eres <- evalExpr[TProcess](pre.currentStack, e)
+          eres <- evalSetExpr[TProcess](pre.currentStack, e)
           (sym, mem) <- findSym(pre, eres)
-          (e, nheap) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](Process.emitAll(access(sym, f, mem.heap).run))
+          (e, nheap) <- access(sym, f, mem.heap)
         } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(pre)
         case AssignField(_, e1, f, e2) => for {
-            e1res <- evalExpr[TProcess](pre.currentStack, e1)
+            e1res <- evalSetExpr[TProcess](pre.currentStack, e1)
             (sym, mem) <- findSym(pre, e1res)
-            ee2 <- evalExpr[TProcess](pre.currentStack, e2)
+            ee2 <- evalSetExpr[TProcess](pre.currentStack, e2)
             nheap <- update(sym, f, ee2, mem.heap)
           } yield _sm_heap.set(nheap)(pre)
         case If(_, cond, ts, fs) => for {
@@ -130,17 +129,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             (syms, imem) <- m match {
               case MSet(e) =>
                 for {
-                  ee <- evalExpr[TProcess](pre.currentStack, e)
+                  ee <- evalSetExpr[TProcess](pre.currentStack, e)
                   set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
                 } yield set
               case Match(e, c) =>
                 for {
-                  ee <- evalExpr[TProcess](pre.currentStack, e)
+                  ee <- evalSetExpr[TProcess](pre.currentStack, e)
                   set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta, targetClass = c.some))
                 } yield set
               case MatchStar(e, c) =>
                 for {
-                  ee <- evalExpr[TProcess](pre.currentStack, e)
+                  ee <- evalSetExpr[TProcess](pre.currentStack, e)
                   set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
                 } yield set
             }
@@ -152,14 +151,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case Fix(_, e, sb) => {
           def fixEqCase(bmem: SMem): EitherT[TProcess, String, SMem] = for {
               amem <- executeHelper(Process(bmem), sb)
-              eeb <- evalExpr[TProcess](bmem.currentStack, e)
-              eea <- evalExpr[TProcess](amem.currentStack, e)
+              eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
+              eea <- evalSetExpr[TProcess](amem.currentStack, e)
               updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
             } yield updatedMem
           def fixNeqCase(bmem: SMem, k: Int): EitherT[TProcess, String, SMem] = for {
               imem <- executeHelper(Process(bmem), sb)
-              eeb <- evalExpr[TProcess](bmem.currentStack, e)
-              eei <- evalExpr[TProcess](imem.currentStack, e)
+              eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
+              eei <- evalSetExpr[TProcess](imem.currentStack, e)
               updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem)
               fixmore <- if (k <= 0) fixEqCase(imem) else EitherT[TProcess,String,SMem](fixEqCase(imem).run ++ fixNeqCase(imem, k - 1).run)
             } yield fixmore
@@ -193,7 +192,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         }, EitherT(s"Error while evaluating expression $e".left.point[M]))
   }
 
-  def evalExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
+  def evalSetExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
       e match {
         case SetLit(es) =>
           for {
@@ -202,16 +201,16 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case SetVar(name) =>
           EitherT(s.get(name).cata(_.right, s"Error whie evaluating expression $e".left).point[M])
         case Diff(e1, e2) => for {
-          ee1 <- evalExpr[M](s, e1)
-          ee2 <- evalExpr[M](s, e2)
+          ee1 <- evalSetExpr[M](s, e1)
+          ee2 <- evalSetExpr[M](s, e2)
         } yield Diff(ee1, ee2)
         case Union(e1, e2) => for {
-          ee1 <- evalExpr[M](s, e1)
-          ee2 <- evalExpr[M](s, e2)
+          ee1 <- evalSetExpr[M](s, e1)
+          ee2 <- evalSetExpr[M](s, e2)
         } yield Union(ee1, ee2)
         case ISect(e1, e2) => for {
-          ee1 <- evalExpr[M](s, e1)
-          ee2 <- evalExpr[M](s, e2)
+          ee1 <- evalSetExpr[M](s, e1)
+          ee2 <- evalSetExpr[M](s, e2)
         } yield ISect(ee1, ee2)
       }
     }
@@ -219,8 +218,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def evalBoolExpr[M[_] : Monad](st : SStack, sp : BoolExpr[IsProgram.type]) : EitherT[M, String, BoolExpr[IsSymbolic.type]] = sp match {
     case Eq(e1, e2) =>
       for {
-        ee1 <- evalExpr[M](st, e1)
-        ee2 <- evalExpr[M](st, e2)
+        ee1 <- evalSetExpr[M](st, e1)
+        ee2 <- evalSetExpr[M](st, e2)
       } yield Eq(ee1, ee2)
     case Not(p) =>
       for {
@@ -235,12 +234,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     case SetMem(e1, e2) =>
       for {
         ee1 <- evalBasicExpr[M](st, e1)
-        ee2 <- evalExpr[M](st, e2)
+        ee2 <- evalSetExpr[M](st, e2)
       } yield SetMem(ee1, ee2)
     case SetSubEq(e1, e2) =>
       for {
-        ee1 <- evalExpr[M](st, e1)
-        ee2 <- evalExpr[M](st, e2)
+        ee1 <- evalSetExpr[M](st, e1)
+        ee2 <- evalSetExpr[M](st, e2)
       } yield SetSubEq(ee1, ee2)
   }
 

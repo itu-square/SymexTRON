@@ -280,7 +280,8 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
       ((ol product l) in referencedBy) iff
-        (((l product f product ol) in LocsRel.fields) `forSome` (f oneOf FieldsRel.refs)) forAll
+        ((ol product l) in owner.closure) forAll
+        //(((l product f product ol) in LocsRel.fields) `forSome` (f oneOf FieldsRel.refs)) forAll
               ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     val reachableBy = Relation.binary("reachableBy")
@@ -510,7 +511,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Symbol(ident) =>
               sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
           }.toList
-          (anyFormulae(ees) comprehension (sym oneOf SymbolsRel.self)).join(SymbolsRel.loc)
+          (allFormulae(List(anyFormulae(ees), loc in sym.join(SymbolsRel.loc))) `forSome` (sym oneOf SymbolsRel.self)) comprehension (loc oneOf LocsRel.self)
         }
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
@@ -541,7 +542,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         }
       val l = Variable.unary("l")
       val ss = Variable.unary("ss")
-      (EvalState(newrels, Set(), newformula, newth), (l in ss.join(SymbolicSetRel.locs)) forAll (ss oneOf rel) comprehension (l oneOf LocsRel.self)).right[String]
+      (EvalState(newrels, Set(), newformula, newth), (l in ss.join(SymbolicSetRel.locs)) `forSome` (ss oneOf rel) comprehension (l oneOf LocsRel.self)).right[String]
   }
 
   def evalBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
@@ -555,7 +556,9 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
   }
 
   def concretise(smem: SMem): String \/ CMem = {
-    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>  findSolution(cs, bs) }.map(inst =>
+    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>
+      println(s"SMEM: ${PrettyPrinter.pretty(smem.initStack)}; ${PrettyPrinter.pretty(smem.heap.svltion)};  ${PrettyPrinter.pretty(smem.heap.ssvltion)}; ${PrettyPrinter.pretty(smem.heap.initSpatial)}; ${PrettyPrinter.pretty(smem.heap.pure)}")
+      findSolution(cs, bs) }.map(inst =>
       extractConcreteMemory(inst, smem.initStack.keySet))
   }
 
@@ -673,7 +676,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     solver.options.setLogTranslation(2)
     val solution = solver.solve(constraints, bounds)
     solution.outcome match {
-      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
+      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.relationTuples.foreach(println); solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new CRRStrategy()); proof.highLevelCore.toString } else "No core!"

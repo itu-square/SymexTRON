@@ -27,9 +27,12 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
   def coverage = {
-    val coveredBranches = branchCoverageMap.filter(_._2).keySet
-    val allBranches     = progBranches.values.flatMap(_.toSet)
+    val coveredBranches = branchCoverageMap.filter(_._2).keySet.toSet
+    val allBranches     = progBranches.values.flatMap(_.toSet).toSet
+  //  println(PrettyPrinter.pretty(prog))
+  //  println(s"uncoveredBranches: ${allBranches diff coveredBranches}")
     val coveredStatements = stmtCoverageMap.filterKeys(stmtCoverageMap).keySet
+  //  println(s"coveredStatements: ${coveredStatements}")
     if (allBranches.nonEmpty) coveredBranches.size * 100 / allBranches.size else
       if (coveredStatements.nonEmpty) 100 else 0
   }
@@ -77,6 +80,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       case If(_, cond, ts, fs) =>
         for {
           econd <- evalBoolExpr(cond, mem.stack)
+          _ = println(PrettyPrinter.pretty(cond))
+          _ = println(econd)
           res <- if (econd) {
             _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
             executeStmt(mem, ts)
@@ -88,7 +93,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       case For(_, x, m, sb) => for {
         os <- evalMatchExpr(m, mem.stack, mem.heap)
         res <- {
-          if (os.size == 0)
+          if (os.isEmpty)
             _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
           else
             _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
