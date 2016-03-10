@@ -35,16 +35,18 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
     case ssym@SetSymbol(id) => heap.ssvltion(ssym).cl.some
   }
 
+  private
   def inferSetLitType(sym: Symbol, es: Seq[BasicExpr[IsSymbolic.type]], heap: SHeap): Class = {
     val t = inferSymbolType(sym, heap)
     es match {
       case Seq() => t
-      case (sym2: Symbol) +: es =>
-        val t2 = inferSetLitType(sym2, es, heap)
+      case (sym2: Symbol) +: oes =>
+        val t2 = inferSetLitType(sym2, oes, heap)
         defs.lub(t, t2)
     }
   }
 
+  private
   def inferSymbolType(s: Symbol, heap: SHeap): Class = {
     heap.svltion(s) match {
       case Loced(l) => heap.currentSpatial(l).cl

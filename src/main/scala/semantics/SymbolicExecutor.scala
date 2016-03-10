@@ -33,8 +33,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
       for {
-        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
-        (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
+        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](lazyInitializer.findLoc(sym, heap))
+        (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
         res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
           (sdesc.children(f), nnheap).right.point[TProcess]
         else if (defs.reffields.contains(f))
@@ -60,8 +60,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     })(heap)
 
   def update(sym: Symbol, f: Fields, ee: SetExpr[IsSymbolic.type], heap: SHeap): EitherT[TProcess, String, SHeap] = for {
-      (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](modelFinder.findLoc(sym, heap))
-      (sdesc, nheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](modelFinder.unfold(loc, f, nheap))
+      (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](lazyInitializer.findLoc(sym, heap))
+      (sdesc, nheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
       res <- EitherT[TProcess, String, SHeap](if (defs.childfields.contains(f)) {
           val nnheap = disown(ee, loc, f, nheap)
           _sh_currentSpatial.modify(_.updated(loc, _sd_children.modify(_.updated(f, ee))(sdesc)))(nnheap).right.point[Process0]
@@ -130,17 +130,17 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               case MSet(e) =>
                 for {
                   ee <- evalSetExpr[TProcess](pre.currentStack, e)
-                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](???)
                 } yield set
               case Match(e, c) =>
                 for {
                   ee <- evalSetExpr[TProcess](pre.currentStack, e)
-                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta, targetClass = c.some))
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](???)
                 } yield set
               case MatchStar(e, c) =>
                 for {
                   ee <- evalSetExpr[TProcess](pre.currentStack, e)
-                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](modelFinder.findSet(ee, pre, beta))
+                  set <- EitherT[TProcess, String, (Set[Symbol], SMem)](???)
                 } yield set
             }
             // TODO: Fix ordering so it coincides with concrete executor ordering
@@ -187,9 +187,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def evalBasicExpr[M[_] : Monad](s: SStack, e: BasicExpr[IsProgram.type]): EitherT[M, String, BasicExpr[IsSymbolic.type]] = e match {
     case Var(name) =>
       s.get(name).cata({
-            case SetLit(Seq(evalue)) => EitherT(evalue.right.point[M])
-            case ee => EitherT(s"Not a basic expression: $ee".left.point[M])
-        }, EitherT(s"Error while evaluating expression $e".left.point[M]))
+            case SetLit(Seq(evalue)) => EitherT(evalue.right[String].point[M])
+            case ee => EitherT(s"Not a basic expression: $ee".left[BasicExpr[IsSymbolic.type]].point[M])
+        }, EitherT(s"Error while evaluating expression $e".left[BasicExpr[IsSymbolic.type]].point[M]))
   }
 
   def evalSetExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
@@ -225,7 +225,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       for {
         ep <- evalBoolExpr[M](st, p)
       } yield Not(ep)
-    case True() => EitherT((True() : BoolExpr[IsSymbolic.type]).right.point[M])
+    case True() => EitherT((True() : BoolExpr[IsSymbolic.type]).right[String].point[M])
     case And(p1, p2) =>
       for {
         ep1 <- evalBoolExpr[M](st, p1)
@@ -252,7 +252,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private def freshSym: Symbols = symCounter.++
 
-  val modelFinder = new ModelFinder(symCounter, locCounter, defs, beta, delta, optimistic = false)
+  val lazyInitializer = new LazyInitializer(symCounter, locCounter, defs, optimistic = false)
+
+  val modelFinder = new ModelFinder(defs, delta)
 
   val typeInference = modelFinder.typeInference
 }

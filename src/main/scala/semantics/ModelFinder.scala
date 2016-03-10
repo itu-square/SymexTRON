@@ -5,42 +5,30 @@ import helper._
 import kodkod.ast._
 import kodkod.engine.Solution.Outcome
 import kodkod.engine.Solver
-import kodkod.engine.fol2sat.{TranslationLogger, TranslationLog}
-import kodkod.engine.satlab.{ReductionStrategy, SATFactory}
-import kodkod.engine.ucore.{SCEStrategy, DynamicRCEStrategy}
-import kodkod.instance.{TupleSet, Bounds, Instance, Universe}
-import monocle.Monocle
-import semantics.Subst._
-import semantics.domains.SHeap._
-import semantics.domains.SMem._
-import semantics.domains.SpatialDesc._
+import kodkod.engine.satlab.SATFactory
+import kodkod.engine.ucore.SCEStrategy
+import kodkod.instance.{Bounds, Instance, TupleSet, Universe}
 import semantics.domains._
 import syntax.ast._
 
-import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
-import scala.collection.immutable.Nil
+import scala.collection.JavaConverters._
 import scala.language.higherKinds
-import scalaz.Scalaz.{none, unfold => generate}
-import scalaz.concurrent.Task
-import scalaz.stream._
 import scalaz.syntax.either._
-import scalaz.syntax.monad._
 import scalaz.syntax.std.option._
-import scalaz.{Lens, Monoid, EitherT, \/}
+import scalaz.{Monoid, \/}
 
-class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition],
-                  beta: Int, delta: Int, optimistic: Boolean)
+class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
   extends LazyLogging {
 
   private type StringE[T] = String \/ T
-  case class EvalState(ssymrels: Set[Relation], symnames: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
-  private type EvalRes[T] = (EvalState, T)
+  case class TranslationState(ssymrels: Set[Relation], symnames: Set[Integer], constraints: Formula, ssymmap: Map[Symbols,Relation])
+  private type TranslationRes[T] = (TranslationState, T)
 
 
   private
-  def mergeEvalState(inState: EvalState, outState: EvalState): EvalState =
-    EvalState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, allFormulae(List(inState.constraints, outState.constraints)), inState.ssymmap ++ outState.ssymmap)
+  def mergeTranslationState(inState: TranslationState, outState: TranslationState): TranslationState =
+    TranslationState(inState.ssymrels ++ outState.ssymrels, inState.symnames ++ outState.symnames, allFormulae(List(inState.constraints, outState.constraints)), inState.ssymmap ++ outState.ssymmap)
 
   var counter = 0
 
@@ -306,6 +294,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
   }
 
+  private
   def freshSymbolicSetRel(id: Symbols): (Relation, Formula) = {
     counter = counter + 1
     val ss = Relation.unary(s"ConcreteSymbolicSet$counter")
@@ -316,6 +305,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     (ss, nameConstraint and subsetConstraint)
   }
 
+  private
   def staticConstraints : Formula = {
    SymbolsRel.nameTyping and SymbolsRel.nameUniqueness and SymbolsRel.locTyping and
    SymbolicSetRel.locsTyping and  SymbolicSetRel.nameTyping and SymbolicSetRel.nameUniqueness and
@@ -329,6 +319,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
    ReachabilityRel.referencedByTyping and ReachabilityRel.referencedByDefinition and ReachabilityRel.reachableByTyping and ReachabilityRel.reachableByDefinition
   }
 
+  private
   def classPresenceConstraint(clazz: Class): Formula = {
     val v = Variable.unary("v")
     val l = Variable.unary("l")
@@ -341,6 +332,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             (t oneOf TypesRel.typerels(clazz))
   }
 
+  private
   def fieldPresenceConstraint(field: (Class, Fields), fieldmap: Map[String, Int]): Formula = {
     val v = Variable.unary("v")
     val ol = Variable.unary("ol")
@@ -357,6 +349,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                 (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
   }
 
+  private
   def calculateBounds(setsymexprels : Set[Relation], setsymmap: Map[Symbols, Relation], symnames: Set[Integer], locs: Set[Loc], fieldmap: Map[String, Integer], varmap: Map[String, Integer]) : Bounds = {
     val additionallocs = {
       // See if .max works instead of maximum
@@ -466,12 +459,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     bounds
   }
 
-  def evalBoolExpr(b : BoolExpr[IsSymbolic.type], th : Map[Symbols, Relation], isNegated: Boolean = false)
-  : String \/ EvalRes[Formula] = b match {
-    case Eq(e1, e2) => evalBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
+  private
+  def translateBoolExpr(b : BoolExpr[IsSymbolic.type], th : Map[Symbols, Relation], isNegated: Boolean = false)
+  : String \/ TranslationRes[Formula] = b match {
+    case Eq(e1, e2) => translateBinaryBoolExpr(e1, _ eq _, e2, th, isNegated)
     case SetMem(e1, e2) => for {
-        ee2 <- evalSetExpr(e2, th)
-        (EvalState(rs2, is2, f2, th2), et2) = ee2
+        ee2 <- translateSetExpr(e2, th)
+        (TranslationState(rs2, is2, f2, th2), et2) = ee2
         formula = {
           val sym = Variable.unary("sym")
           val symInSyms = sym in et2
@@ -479,37 +473,38 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
             case Symbol(symident) => sym.join(SymbolsRel.name) eq IntConstant.constant(symident).toExpression
           }) implies (if (isNegated) symInSyms.not else symInSyms) forAll (sym oneOf SymbolsRel.self)
         }
-      } yield (EvalState(rs2, is2, allFormulae(List(formula, f2)), th2), formula)
-    case SetSubEq(e1, e2) =>  evalBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
-    case True() => (EvalState(Set[Relation](), Set[Integer](), Formula.TRUE, th), if (isNegated) Formula.FALSE else Formula.TRUE).right
+      } yield (TranslationState(rs2, is2, allFormulae(List(formula, f2)), th2), formula)
+    case SetSubEq(e1, e2) =>  translateBinaryBoolExpr(e1, _ in _, e2, th, isNegated)
+    case True() => (TranslationState(Set[Relation](), Set[Integer](), Formula.TRUE, th), if (isNegated) Formula.FALSE else Formula.TRUE).right
     case And(b1,b2) =>
       for {
-        eb1 <- evalBoolExpr(b1, th, isNegated)
-        (EvalState(rs1, is1, fs1, th1), r1) = eb1
-        eb2 <- evalBoolExpr(b2, th1, isNegated)
-        (EvalState(rs2, is2, fs2, th2), r2) = eb2
-      } yield (EvalState(rs1 union rs2, is1 union is2, allFormulae(List(fs1, fs2)), th2), if (isNegated) anyFormulae(List(r1, r2)) else allFormulae(List(r1,r2)))
+        eb1 <- translateBoolExpr(b1, th, isNegated)
+        (TranslationState(rs1, is1, fs1, th1), r1) = eb1
+        eb2 <- translateBoolExpr(b2, th1, isNegated)
+        (TranslationState(rs2, is2, fs2, th2), r2) = eb2
+      } yield (TranslationState(rs1 union rs2, is1 union is2, allFormulae(List(fs1, fs2)), th2), if (isNegated) anyFormulae(List(r1, r2)) else allFormulae(List(r1,r2)))
     case Not(b0) => for {
-        eb <- evalBoolExpr(b0, th, !isNegated)
+        eb <- translateBoolExpr(b0, th, !isNegated)
       } yield eb
   }
 
-  def evalBinaryBoolExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Formula, e2: SetExpr[IsSymbolic.type],
-                         th: Map[Symbols, Relation], isNegated: Boolean): String \/ EvalRes[Formula] = {
+  private
+  def translateBinaryBoolExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Formula, e2: SetExpr[IsSymbolic.type],
+                              th: Map[Symbols, Relation], isNegated: Boolean): String \/ TranslationRes[Formula] = {
     for {
-      ee1 <- evalSetExpr(e1, th)
+      ee1 <- translateSetExpr(e1, th)
       (est1, et1) = ee1
-      ee2 <- evalSetExpr(e2, est1.ssymmap)
+      ee2 <- translateSetExpr(e2, est1.ssymmap)
       (est2, et2) = ee2
       formula = {
         val res = op(et1, et2)
         if (isNegated) res.not else res
       }
-    } yield (mergeEvalState(est1, est2), formula)
+    } yield (mergeTranslationState(est1, est2), formula)
   }
 
-  // TODO Take into account symbol equivalence
-  def evalSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ EvalRes[Expression] = e match {
+  private
+  def translateSetExpr(e : SetExpr[IsSymbolic.type], th : Map[Symbols, Relation] = Map()): String \/ TranslationRes[Expression] = e match {
     case SetLit(es) =>
       val et = if (es.isEmpty) Expression.NONE
         else {
@@ -534,13 +529,13 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           }
       }
       val symbols = es.filter(_.isInstanceOf[Symbol]).map(b => Int.box(b.asInstanceOf[Symbol].id))
-      (EvalState(Set(), symbols.toSet, allFormulae(diffConstraints.toList), th), et).right[String]
+      (TranslationState(Set(), symbols.toSet, allFormulae(diffConstraints.toList), th), et).right[String]
     case Union(e1, e2) =>
-      evalBinarySetExpr(e1, _ union _, e2, th)
+      translateBinarySetExpr(e1, _ union _, e2, th)
     case Diff(e1, e2) =>
-      evalBinarySetExpr(e1, _ difference _, e2, th)
+      translateBinarySetExpr(e1, _ difference _, e2, th)
     case ISect(e1, e2) =>
-      evalBinarySetExpr(e1, _ intersection _, e2, th)
+      translateBinarySetExpr(e1, _ intersection _, e2, th)
     case SetSymbol(ident) =>
       val (newrels, newformula, newth, rel) =
         if (th.contains(ident)) (Set[Relation](), Formula.TRUE, th, th(ident))
@@ -551,46 +546,50 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val l = Variable.unary("l")
       val ss = Variable.unary("ss")
       val formula = rel.join(SymbolicSetRel.locs)
-      (EvalState(newrels, Set(), newformula, newth), formula).right[String]
+      (TranslationState(newrels, Set(), newformula, newth), formula).right[String]
   }
 
-  def evalBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
-                        th : Map[Symbols, Relation]): String \/ EvalRes[Expression] = {
+  private
+  def translateBinarySetExpr(e1: SetExpr[IsSymbolic.type], op: (Expression, Expression) => Expression, e2: SetExpr[IsSymbolic.type],
+                           th : Map[Symbols, Relation]): String \/ TranslationRes[Expression] = {
     for {
-      ee1 <- evalSetExpr(e1,th)
-      (EvalState(rs1, is1, f1, th1), et1) = ee1
-      ee2 <- evalSetExpr(e2,th1)
-      (EvalState(rs2, is2, f2, th2), et2) = ee2
-    } yield (EvalState(rs1 union rs2, is1 union is2, allFormulae(List(f1, f2)), th2), op(et1, et2))
+      ee1 <- translateSetExpr(e1,th)
+      (TranslationState(rs1, is1, f1, th1), et1) = ee1
+      ee2 <- translateSetExpr(e2,th1)
+      (TranslationState(rs2, is2, f2, th2), et2) = ee2
+    } yield (TranslationState(rs1 union rs2, is1 union is2, allFormulae(List(f1, f2)), th2), op(et1, et2))
   }
 
-  def concretise(smem: SMem): String \/ CMem = {
-    concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>
-      findSolution(cs, bs) }.map(inst =>
+  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set()): String \/ CMem = {
+    concretisationConstraints(smem).flatMap{ case (cs, bs, fieldmap) =>
+      val classesPresentConstraints = allFormulae(classesPresent.map(cl => classPresenceConstraint(cl)).toList)
+      val fieldsPresentConstraints = allFormulae(fieldsPresent.map(f => fieldPresenceConstraint(f, fieldmap)).toList)
+      findSolution(cs and classesPresentConstraints and fieldsPresentConstraints, bs) }.map(inst =>
       extractConcreteMemory(inst, smem.initStack.keySet))
   }
 
+  private
   def concretisationConstraints(smem: SMem): String \/ (Formula, Bounds, Map[String, Int]) = {
     def cardConstraint(s: Variable, crd: Cardinality): Formula = crd match {
       case Single => s.join(SymbolicSetRel.locs).one
       case Many => Formula.TRUE
       case Opt =>  s.join(SymbolicSetRel.locs).lone
     }
-    val initEvalState = EvalState(Set(), Set(), Formula.TRUE, Map())
+    val initEvalState = TranslationState(Set(), Set(), Formula.TRUE, Map())
     val varIntMap = smem.initStack.keySet.zipWithIndex.toMap
     val varevalres = smem.initStack.foldLeft((initEvalState, List[Formula]()).right[String]) { (str, vinfo) =>
       val (vr, exp) = vinfo
       for {
         st <- str
         (evalState, constraints) = st
-        eexp <- evalSetExpr(exp, evalState.ssymmap)
-        (EvalState(rs,is,f,th), et) = eexp
+        eexp <- translateSetExpr(exp, evalState.ssymmap)
+        (TranslationState(rs,is,f,th), et) = eexp
         varconstraint = {
           val v = Variable.unary("v")
           (v.join(VarsRel.name) eq IntConstant.constant(varIntMap(vr)).toExpression) implies
                        (v.join(VarsRel.vals) eq et) forAll (v oneOf VarsRel.self)
         }
-      } yield (EvalState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varconstraint :: constraints)
+      } yield (TranslationState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varconstraint :: constraints)
     }.map { case (est, constraints) => (est, allFormulae(constraints)) }
     val ssvconstraints = allFormulae(smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
       val s = Variable.unary("s")
@@ -615,7 +614,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       }
     })
     val fieldIntMap = FieldsRel.fieldsrels.keySet.zipWithIndex.toMap
-    def translateSpatial(initEvalState: EvalState) = smem.heap.initSpatial.foldLeft((initEvalState, List[Formula]()).right[String]) { (st, locinfo) =>
+    def translateSpatial(initEvalState: TranslationState) = smem.heap.initSpatial.foldLeft((initEvalState, List[Formula]()).right[String]) { (st, locinfo) =>
       val (loc, sdesc) = locinfo
       val l = Variable.unary("l")
       val t = Variable.unary("t")
@@ -637,7 +636,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           for {
             evalres <- st
             (evalstate, constraints) = evalres
-            fieldvalres <- evalSetExpr(fieldval, evalstate.ssymmap)
+            fieldvalres <- translateSetExpr(fieldval, evalstate.ssymmap)
             (fieldvalEvalState, fieldvalexp) = fieldvalres
             fieldconstraint = {
               val f = Variable.unary("f")
@@ -646,38 +645,41 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
                   (f.product(fieldvalexp) in l.join(LocsRel.fields)) forAll
                     ((l oneOf LocsRel.self) and (f oneOf FieldsRel.self))
             }
-          } yield (mergeEvalState(evalstate, fieldvalEvalState), fieldconstraint :: constraints)
+          } yield (mergeTranslationState(evalstate, fieldvalEvalState), fieldconstraint :: constraints)
         }
         (fieldEvalState, fieldConstraints) = fieldEvalRes
-      } yield (mergeEvalState(evalstate, fieldEvalState), typeConstraint :: (fieldConstraints ++ constraints))
+      } yield (mergeTranslationState(evalstate, fieldEvalState), typeConstraint :: (fieldConstraints ++ constraints))
     }.map { case (est, constraints) => (est, allFormulae(constraints)) }
 
     for {
       ver <- varevalres
       (varEvalState, varConstraints) = ver
-      epure <- evalBoolExpr(smem.heap.pure.foldLeft(True(): BoolExpr[IsSymbolic.type]) (And(_, _)), varEvalState.ssymmap, isNegated = false)
+      epure <- translateBoolExpr(smem.heap.pure.foldLeft(True(): BoolExpr[IsSymbolic.type]) (And(_, _)), varEvalState.ssymmap, isNegated = false)
       (pureEvalState, pureConstraints) = epure
       // Consider using RWS monad
-      iest = mergeEvalState(varEvalState, pureEvalState)
+      iest = mergeTranslationState(varEvalState, pureEvalState)
       spatialEvalRes <- translateSpatial(iest)
       (spatialEvalState, spatialConstraints) = spatialEvalRes
-      est  = mergeEvalState(iest, spatialEvalState)
+      est  = mergeTranslationState(iest, spatialEvalState)
       allConstraints = allFormulae(
         List(staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints, spatialConstraints, est.constraints))
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
     } yield (allConstraints, bounds, fieldIntMap)
   }
 
+  private
   def allFormulae(fs: List[Formula]): Formula = {
     implicit val allFormulaMonoid = Monoid.instance[Formula](_ and _, Formula.TRUE)
     fs.normalizeMonoidal
   }
 
+  private
   def anyFormulae(fs: List[Formula]): Formula = {
     implicit val anyFormulaMonoid = Monoid.instance[Formula](_ or _, Formula.FALSE)
     fs.normalizeMonoidal
   }
 
+  private
   def findSolution(constraints: Formula, bounds: Bounds): String \/ Instance = {
     val solver = new Solver
     solver.options.setSolver(SATFactory.DefaultSAT4J)
@@ -702,6 +704,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     }
   }
 
+  private
   def extractConcreteMemory(instance: Instance, vars: Set[Vars]): CMem = {
     def extractSet[K](ts: TupleSet): Set[K] = ts.foldLeft(Set[K]()) { (set, tuple) =>
       set + tuple.atom(0).asInstanceOf[K]
@@ -746,304 +749,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     GarbageCollection.gc(extracted, resetlocs = true)
   }
 
-  def partitionSet(ees: Set[Symbol], targetCl: Class, mem: SMem): Process[Task, (Set[Symbol], SMem)] = {
-    def unfoldMore(mem: SMem, l: Loc, sdesc: SpatialDesc, supers: Set[Class]): SMem = {
-      val (ssvltionc, newchildren) = unfoldFieldSet(l, defs.childrenOf(supers), owned = true)
-      val (ssvltionr, newrefs) = unfoldFieldSet(l, defs.refsOf(supers), owned = false)
-      val nmem =
-         _sm_heap.modify(_sh_currentSpatial.modify(
-           _.updated(l, (_sd_c.set(targetCl) andThen _sd_children.modify(_ ++ newchildren)
-             andThen _sd_desctype.set(AbstractDesc) andThen _sd_refs.modify(_ ++ newrefs)) (sdesc))) andThen
-           _sh_ssvltion.modify(_ ++ ssvltionc ++ ssvltionr))(mem)
-      nmem
-    }
-    ees.foldLeft(Process((Set[Symbol](), mem))) { (p, sym) =>
-      for {
-        ssnmem <- p
-        (ss, nmem) = ssnmem
-        res <- {
-          val symsvltion = nmem.heap.svltion(sym)
-          val symc = symsvltion match {
-            case Loced(l) => nmem.heap.currentSpatial(l).cl
-            case UnknownLoc(ncl, ownership, descendantpool) => ncl
-          }
-          if (defs.subtypesOrSelf(targetCl).contains(symc)) Process((ss + sym, nmem))
-          else if (defs.subtypes(symc).contains(targetCl)) {
-            symsvltion match {
-              case Loced(l) =>
-                val sdesc = nmem.heap.currentSpatial(l)
-                sdesc.desctype match {
-                  case ExactDesc => Process((ss, nmem))
-                  case AbstractDesc =>
-                    val supers = defs.supertypes(targetCl) diff defs.supertypes(symc)
-                    val nnmem: SMem = unfoldMore(nmem, l, sdesc, supers)
-                    Process((ss, nmem), (ss + sym, nnmem))
-                  case PartialDesc(hasExact, possible) =>
-                    val possibleSupers = possible.intersect(defs.supertypes(symc))
-                    Process((ss, nmem)) ++ (for {
-                      psuper <- Process.emitAll(possibleSupers.toSeq)
-                      unfolded = {
-                        val supers = defs.supertypes(targetCl) diff (defs.supertypes(psuper) + psuper)
-                        val nnheap = unfoldMore(nmem, l, sdesc, supers)
-                        (ss + sym, nnheap)
-                      }
-                    } yield unfolded)
-                }
-              case UnknownLoc(ncl, ownership, descendantpool) =>
-                Process((ss, nmem), (ss + sym, (_sm_heap ^|-> _sh_svltion).modify(_.updated(sym, UnknownLoc(targetCl, ownership, descendantpool)))(nmem)))
-            }
-          }
-          else Process((ss, nmem))
-        }
-      } yield res
-    }
-  }
 
-  // TODO actually implement optimization
-  def simplify(e : SetExpr[IsSymbolic.type], mem:SMem): (SetExpr[IsSymbolic.type], SMem) = e match {
-    case Union(e1, e2) =>
-      val (es1, nheap) = simplify(e1, mem)
-      val (es2, nnheap) = simplify(e2, nheap)
-      (Union(es1, es2), nnheap)
-    case Diff(e1, e2) =>
-      val (es1, nheap) = simplify(e1, mem)
-      val (es2, nnheap) = simplify(e2, nheap)
-      (Diff(es1, es2), nnheap)
-    case ISect(e1, e2) =>
-      val (es1, nheap) = simplify(e1, mem)
-      val (es2, nnheap) = simplify(e2,nheap)
-      (ISect(es1, es2), nnheap)
-    case _ => (e, mem)
-  }
-
-  def findSet(e : SetExpr[IsSymbolic.type], mem: SMem, setBound: Int, targetClass : Option[Class] = none):
-      Process[Task, String \/ (Set[Symbol], SMem)] =
-          if (targetClass.cata(cl =>
-                  typeInference.inferSetType(e, mem.heap).cata(ec => defs.subtypesOrSelf(cl).contains(ec), true), false)) {
-            findSet(e, mem, setBound, targetClass = none)
-          } else {
-            // TODO Implement correctly to account for symbol equality
-            def findBinary(e1: SetExpr[IsSymbolic.type], e2: SetExpr[IsSymbolic.type], op: (Set[Symbol], Set[Symbol]) => Set[Symbol], mem: SMem): TProcess[\/[String, (Set[Symbol], SMem)]] = {
-              (for {
-                e1r <- EitherT[TProcess, String, (Set[Symbol], SMem)](findSet(e1, mem, setBound, targetClass))
-                (syms1, nheap) = e1r
-                e2r <- EitherT[TProcess, String, (Set[Symbol], SMem)](findSet(e2, mem, setBound, targetClass))
-                (syms2, nnheap) = e2r
-              } yield (op(syms1, syms2), nnheap)).run
-            }
-            val (eSimp, memSimp) = simplify(e, mem)
-            eSimp match {
-              case SetLit(es) =>
-                val ees = es.map{ case s:Symbol => s }.toSet
-                targetClass.cata(cl => partitionSet(ees, cl, memSimp).map(_.right), Process((ees, memSimp).right))
-              case Union(e1, e2) =>
-                findBinary(e1, e2, _ union _, memSimp)
-              case ISect(e1, e2) =>
-                findBinary(e1, e2, _ intersect _, memSimp)
-              case Diff(e1, e2) =>
-                findBinary(e1, e2, _ diff _, memSimp)
-              case ssym:SetSymbol => findExplicitCardSet(ssym, setBound, memSimp)
-            }
-          }
-
-  def symSame(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): (Set[Symbol], SMem) = {
-    val obvsame = syms1.intersect(syms2)
-    val nsyms1 = syms1 diff obvsame
-    val nsyms2 = syms2 diff obvsame
-    val restsame = nsyms1 map { s1 =>
-      nsyms2 collectFirst {
-        // TODO: Represent a better way of getting these constraints
-       case s2 if mem.heap.pure.contains(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) || mem.heap.pure.contains(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))) =>
-         (s1, s2)
-      }
-    } filter (_.nonEmpty) map (_.get)
-    (obvsame ++ restsame.map(_._2), mem.subst_all(restsame.toMap))
-  }
-
-  def symDiff(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): Set[Symbol] = {
-    def diff(syms1:Set[Symbol], syms2:Set[Symbol]): Set[Symbol] =
-      syms1.filter(s1 => syms1.forall(s2 =>
-        mem.heap.pure.contains(Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2))))) || mem.heap.pure.contains(Not(Eq(SetLit(Seq(s2)), SetLit(Seq(s1)))))
-      ))
-    diff(syms1, syms2) ++ diff(syms2, syms1)
-  }
-
-  // This seems like a bad idea, maybe query the solver instead?
-  def symSkirmish(syms1: Set[Symbol], syms2: Set[Symbol], mem: SMem): Process[Task, (Set[Symbol], Set[Symbol], SMem)] = {
-    val (samesyms, uheap) = symSame(syms1, syms2, mem)
-    val (nsyms1, nsyms2) = (syms1 -- samesyms, syms2 -- samesyms)
-    val diffsyms = symDiff(nsyms1, nsyms2, uheap)
-    val (nnsyms1, nnsyms2) = (syms1 -- diffsyms, syms2 -- diffsyms)
-    if (nnsyms1.isEmpty || nnsyms2.isEmpty) Process((diffsyms, samesyms, uheap))
-    else {
-      Process.emitAll((nnsyms1 pairings nnsyms2 map { case (eqs, uneqs) =>
-        val diff = uneqs.flatMap { case (s1, s2) => Set(s1, s2) }
-        val same = eqs.map(_._1)
-        val nmem = (_sm_heap ^|-> _sh_pure).modify(_ ++ uneqs.map { case (s1, s2) => Not(Eq(SetLit(Seq(s1)), SetLit(Seq(s2)))) })(mem.subst_all(eqs.map(_.swap).toMap))
-        (same, diff, nmem)
-      }).toSeq)
-    }
-  }
-
-  def findExplicitCardSet(ssym: SetSymbol, setBound: Instances, mem: SMem): Process0[String \/ (Set[Symbol], SMem)] = {
-    def addSymbol(ssdesc: SSymbolDesc, st: Map[Symbol, SymbolDesc]): Map[Symbol, SymbolDesc] = {
-      val sym = Symbol(symcounter.++())
-      // TODO Fix descendantpool to be partitioned
-      val symdesc = UnknownLoc(ssdesc.cl, ssdesc.ownership, ssdesc.descendantPools)
-      val newst = st + (sym -> symdesc)
-      newst
-    }
-    val ssdesc = mem.heap.ssvltion(ssym)
-    val (lb, ub) = ssdesc.crd match {
-      case Single => (1, 1)
-      case Many => (0, setBound)
-      case Opt => (0, 1)
-    }
-    val posVals = Process.emitAll(generate((0, Map[Symbol, SymbolDesc]())) { case (i, st) =>
-      if (i < lb) {
-        val newst = addSymbol(ssdesc, st)
-        (none[SymbolValuation], (i + 1, newst)).some
-      } else if (i == lb) (st.some, (i + 1, st)).some
-      else if (i > ub) none
-      else {
-        val newst = addSymbol(ssdesc, st)
-        (newst.some, (i + 1, newst)).some
-      }
-    } filter (_.nonEmpty) map (_.get))
-    for {
-      posVal <- posVals
-      vl = SetLit(posVal.keys.toSeq)
-      nmem = (_sm_heap ^|-> _sh_svltion).modify(_ ++ posVal)(mem.subst(ssym, vl))
-    } yield (posVal.keySet, nmem).right
-  }
-
-  def mkAbstractSpatialDesc(loc : Loc, cl : Class, heap: SHeap): (SpatialDesc, SHeap) = {
-    val clSupers = defs.supertypes(cl)
-    val (newssvltionc, children) = unfoldFieldSet(loc, defs.childrenOf(clSupers), owned = true)
-    val (newssvltionr, refs) = unfoldFieldSet(loc, defs.refsOf(clSupers), owned = false)
-    (SpatialDesc(cl, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
-  }
-
-  def findLoc(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
-    def relevantLocs(nheap: SHeap, cl: Class, isUnknown: Boolean): Set[Loc] = {
-      // TODO: Filter safely
-      nheap.locOwnership.filter { case (loc, ownership) => ownership match {
-        case UnknownOwner => true
-        case NewlyCreated => false
-        case _ => !isUnknown  }
-      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) }.keySet
-    }
-    def addNewLoc(newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
-      val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
-        _sh_locOwnership.modify(_ + (newLoc -> ownership)) andThen
-        _sh_initSpatial.modify(_ + (newLoc -> sdesc)) andThen
-        _sh_currentSpatial.modify(_ + (newLoc -> sdesc))) (nheap)
-      nnheap
-    }
-    heap.svltion.get(sym).cata({
-      case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership, descendantpool) =>
-        // TODO check consistency via SAT
-        val newLoc = Loc(loccounter.++())
-        val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
-        val res = ownership match {
-          case SUnowned =>
-            // Can either alias existing locs with unknown owners or create new unowned locs
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right
-              })
-          case SRef =>
-            // Can alias all existing locs or create new locs with unknown owners
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right)
-          case SOwned(l, f) =>
-            // Can alias existing locs with unknown owners or create new owned locs
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Owned(l,f), nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, (_sh_svltion.modify(_ + (sym -> Loced(loc))) andThen
-                  _sh_locOwnership.modify(_ + (loc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
-        }
-        res
-        /*
-        TODO: Possible optimization
-        val mentioningConstraints = heap.pure.filter(_.symbols.collect({ case \/-(s) => s }).contains(sym))
-        if (mentioningConstraints.isEmpty) {
-         ???
-        } else ??? */
-    }, Process(s"No such symbol: $sym".left))
-  }
-
-  def antialias(sym: Symbol, nheap: SHeap, loc: Loc): SHeap = {
-    nheap.svltion.filter(_._2 == loc).keySet.foldLeft(nheap) { (stheap, sym2) => stheap.subst(sym2, sym) }
-  }
-
-  def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, (Class, Cardinality)], owned: Boolean): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
-    fieldSet.foldLeft((Map(): SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]())) { (st, fieldkv) =>
-      val (svltion, fields) = st
-      fieldkv match {
-        case (f, (cl, crd)) =>
-          val sym = SetSymbol(symcounter.++())
-          // TODO Partition descendant pools
-          (svltion + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), fields + (f -> sym))
-      }
-    }
-  }
-
-  def unfold(loc: Loc, targetField : Fields, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
-    def containsTargetField(psdesc: SpatialDesc): Boolean = {
-      psdesc.children.contains(targetField) || psdesc.refs.contains(targetField)
-    }
-    def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
-                      refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPools, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
-      val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
-      if (!optimistic) err
-      else {
-        (if(dt.hasExact) err else Process()) ++ (for {
-           nc <- EitherT[Process0,String,Class](Process.emitAll(dt.possible.toSeq).map(_.right))
-           cd <- EitherT[Process0, String, ClassDefinition](defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left).point[Process0])
-           (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
-           res <- EitherT[Process0, String, (SpatialDesc, SHeap)](
-                  if (containsTargetField(psdesc)) (psdesc, nheap).right.point[Process0]
-                  else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
-        } yield res).run
-      }
-    }
-    def unfoldAbstract(sdesc: SpatialDesc, cd: ClassDefinition, heap: SHeap): (SpatialDesc, SHeap) = {
-      val (newsslvtionc, newchildren) = unfoldFieldSet(loc, cd.children, owned = true)
-      val (newsslvtionr, newrefs) = unfoldFieldSet(loc, cd.refs, owned = false)
-      val psdesctype = PartialDesc(hasExact = true, defs.directSubtypes(sdesc.cl))
-      val pschildren = sdesc.children ++ newchildren
-      val psrefs = sdesc.refs ++ newrefs
-      val psdesc = (_sd_desctype.set(psdesctype) andThen
-        _sd_children.set(pschildren) andThen
-        _sd_refs.set(psrefs)) (sdesc)
-      val nheap = (_sh_currentSpatial.modify(_ + (loc -> psdesc)) andThen
-                  _sh_initSpatial.modify(_ + (loc -> psdesc)) andThen
-                  _sh_ssvltion.modify(_ ++ newsslvtionc ++ newsslvtionr))(heap)
-      (psdesc, nheap)
-    }
-    heap.currentSpatial.get(loc).cata({ sdesc =>
-      if (containsTargetField(sdesc)) Process((sdesc, heap).right)
-      else sdesc.desctype match {
-        case ExactDesc => Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${sdesc.cl.name} has no field $targetField".left)
-        case AbstractDesc =>
-          defs.get(sdesc.cl).cata({ cd =>
-            val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
-            if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-            else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
-          }, Process(s"No such class: ${sdesc.cl.name}".left))
-        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.cl, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
-      }
-    }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
-  }
-
+  private[semantics]
   val typeInference = new TypeInference(defs)
 }

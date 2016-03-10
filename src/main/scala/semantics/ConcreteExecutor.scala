@@ -27,7 +27,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
   def coverage = {
-    val coveredBranches = branchCoverageMap.filter(_._2).keySet.toSet
+    val coveredBranches = branchCoverageMap.filter(_._2).keySet
     val allBranches     = progBranches.values.flatMap(_.toSet).toSet
     val coveredStatements = stmtCoverageMap.filterKeys(stmtCoverageMap).keySet
     if (allBranches.nonEmpty) coveredBranches.size * 100 / allBranches.size else
@@ -43,16 +43,14 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       _stmtCoverageMap.put(uid, true)
     }
     s match {
-      case StmtSeq(_, ss) => {
+      case StmtSeq(_, ss) =>
         ss.toList.foldLeft[String \/ CMem](mem.right) {
           (memr, s) => memr flatMap { mem => executeStmt(mem, s) }
         }
-      }
-      case AssignVar(_, x, e) => {
+      case AssignVar(_, x, e) =>
         for {
           os <- evalExpr(e, mem.stack)
         } yield _cm_stack.modify(_.updated(x, os))(mem)
-      }
       case LoadField(_, x, e, f) => for {
         os <- evalExpr(e, mem.stack)
         o <- os.single.cata(_.right, s"Not a single object $os".left)
