@@ -62,9 +62,9 @@ object PrettyPrinter {
       case SetSymbol(ident) => s"${prettySymb(ident).toUpperCase}"
       case SetVar(name) => name
       case SetLit(es) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
-      case Union(e1, e2) => s"(${pretty(e1)} ∪ ${pretty(e2)})"
-      case Diff(e1, e2) => s"(${pretty(e1)} ∖ ${pretty(e2)})"
-      case ISect(e1, e2) => s"(${pretty(e1)} ∩ ${pretty(e2)})"
+      case Union(e1, e2) => s"(${pretty[T](e1)} ∪ ${pretty[T](e2)})"
+      case Diff(e1, e2) => s"(${pretty[T](e1)} ∖ ${pretty[T](e2)})"
+      case ISect(e1, e2) => s"(${pretty[T](e1)} ∩ ${pretty[T](e2)})"
     }
   }
 
@@ -79,16 +79,16 @@ object PrettyPrinter {
     case SetMem(e1, e2) => s"(${pretty(e1)} ∈ ${pretty(e2)})"
     case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊆ ${pretty(e2)})"
     case True() => "true"
-    case And(e1, e2) => s"(${pretty(e1)} ∧ ${pretty(e2)})"
+    case And(e1, e2) => s"(${pretty[T](e1)} ∧ ${pretty[T](e2)})"
     case Not(p) => p match {
       case Eq(e1, e2) => s"(${pretty(e1)} ≠ ${pretty(e2)})"
       case SetMem(e1, e2) => s"(${pretty(e1)} ∉ ${pretty(e2)})"
       case SetSubEq(e1, e2) => s"(${pretty(e1)} ⊈ ${pretty(e2)})"
       case True() => "false"
       case And(e1@Not(_), e2@Not(_))
-         => s"(${pretty(e1)} ∨ ${pretty(e2)})"
-      case And(e1, e2) => s"¬(${pretty(e1)} ∧ ${pretty(e2)})"
-      case Not(be) => s"${pretty(be)}"
+         => s"(${pretty[T](e1)} ∨ ${pretty[T](e2)})"
+      case And(e1, e2) => s"¬(${pretty[T](e1)} ∧ ${pretty[T](e2)})"
+      case Not(be) => s"${pretty[T](be)}"
     }
   }
 
