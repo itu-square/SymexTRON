@@ -692,15 +692,15 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
         val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"
         s""" |Unsatisfiable!
              |core:
-             |${core}
+             |$core
              |
              |constraints:
              |$constraints
              |
              |bounds (relation):
-             |${bounds.upperBounds.map(_.toString).mkString("\n")}
+             |${bounds.upperBounds.map{ case (rel, ts) => s"$rel: $ts" }.mkString("\n")}
              |bounds (ints):
-             |${bounds.intBounds}""".stripMargin.left
+             |${bounds.intBounds.values}""".stripMargin.left
     }
   }
 
