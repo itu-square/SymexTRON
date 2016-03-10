@@ -33,7 +33,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
                symbExec.execute(pres, concExec.prog)
               .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm) })
               .takeWhile(_ => concExec.coverage <= coverage)
-              .map { mem => mem.fold(_ => (), m => { concExec.execute(m);  println(s"Test coverage: ${concExec.coverage}"); () }); mem }
+              .map { mem => mem.fold(_ => (), m => { concExec.execute(m); }); mem }
               .onComplete { println(s"Test coverage: ${concExec.coverage}"); Process() }
               )(wye.interrupt)
   }

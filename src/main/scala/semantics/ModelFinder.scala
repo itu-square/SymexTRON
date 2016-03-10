@@ -265,6 +265,15 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
         ((l product f product ol) in LocsRel.fields `forSome` (f oneOf FieldsRel.childs)) forAll
                    ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
+    lazy val owningFieldUniqueness = {
+      val l = Variable.unary("l")
+      val ol = Variable.unary("ol")
+      val f = Variable.unary("f")
+      val f2 = Variable.unary("f2")
+      ((l product f product ol) in LocsRel.fields) and
+        ((l product f2 product ol) in LocsRel.fields) implies (f eq f2) forAll
+          ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self) and (f oneOf FieldsRel.childs) and (f2 oneOf FieldsRel.childs))
+    }
     lazy val ownerAcyclic = {
       val l = Variable.unary("l")
       ((l product l) in owner.closure).not forAll (l oneOf LocsRel.self)
@@ -280,8 +289,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
       ((ol product l) in referencedBy) iff
-        ((ol product l) in owner.closure) forAll
-        //(((l product f product ol) in LocsRel.fields) `forSome` (f oneOf FieldsRel.refs)) forAll
+        (((l product f product ol) in LocsRel.fields) `forSome` (f oneOf FieldsRel.refs)) forAll
               ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     val reachableBy = Relation.binary("reachableBy")
@@ -317,7 +325,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
    VarsRel.nameTyping and VarsRel.nameUniqueness and VarsRel.valsTyping and
    TypesRel.typeOfLocTyping and TypesRel.typeOfSymTyping and TypesRel.typeOfSetTyping and
    TypesRel.isSubTypeTyping and TypesRel.typeOfLocTypeOfSetSubtyping and TypesRel.typeOfLocTypeOfSymEquality and
-   TypesRel.typeOfFieldCorrectness and ReachabilityRel.ownerTyping and ReachabilityRel.ownerDefinition and ReachabilityRel.ownerAcyclic and
+   TypesRel.typeOfFieldCorrectness and ReachabilityRel.ownerTyping and ReachabilityRel.ownerDefinition and ReachabilityRel.ownerAcyclic and ReachabilityRel.owningFieldUniqueness and
    ReachabilityRel.referencedByTyping and ReachabilityRel.referencedByDefinition and ReachabilityRel.reachableByTyping and ReachabilityRel.reachableByDefinition
   }
 
@@ -423,7 +431,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     val symnameUpper = f noneOf 2
     for ((sname, sid) <- symids)
       symnameUpper.add((f tuple sid) product (f tuple sname))
-    bounds.bound(SymbolsRel.name, symnameUpper)
+    bounds.boundExactly(SymbolsRel.name, symnameUpper)
 
     for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf types(c))
     bounds.boundExactly(TypesRel.self, f setOf (types.values.toSeq :_*))
@@ -558,7 +566,6 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
 
   def concretise(smem: SMem): String \/ CMem = {
     concretisationConstraints(smem).flatMap{ case (cs, bs, _) =>
-      println(s"SMEM: ${PrettyPrinter.pretty(smem.initStack)}; ${PrettyPrinter.pretty(smem.heap.svltion)};  ${PrettyPrinter.pretty(smem.heap.ssvltion)}; ${PrettyPrinter.pretty(smem.heap.initSpatial)}; ${PrettyPrinter.pretty(smem.heap.pure)}")
       findSolution(cs, bs) }.map(inst =>
       extractConcreteMemory(inst, smem.initStack.keySet))
   }
@@ -618,7 +625,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
           case ExactDesc => t eq t2
           case AbstractDesc => t2 in t.join(TypesRel.isSubType)
           case PartialDesc(hasExact, possible) =>
-            val exactConstraint = if (!hasExact) (t eq t2).not else Formula.TRUE
+            val exactConstraint = if (hasExact) t eq t2 else Formula.TRUE
             val possibleConstraints = anyFormulae(possible.toList.map(c => TypesRel.typerels(c) in t.join(TypesRel.isSubType)))
             allFormulae(List(t2 in t.join(TypesRel.isSubType), anyFormulae(List(exactConstraint, possibleConstraints))))
       }) `forSome` ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.self)) forAll (l oneOf LocsRel.self)
@@ -677,7 +684,7 @@ class ModelFinder(symcounter: Counter, loccounter: Counter, defs: Map[Class, Cla
     solver.options.setLogTranslation(2)
     val solution = solver.solve(constraints, bounds)
     solution.outcome match {
-      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.relationTuples.foreach(println); solution.instance.right
+      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"
