@@ -25,7 +25,7 @@ trait Example {
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 5, 4)
+    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 3, 2)
     println("""------------ Whitebox test generation -----------------""")
     wwtestgenerator.generateTests(pres, prog).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")

@@ -153,6 +153,6 @@ object Subst {
       SMem(mem.initStack.subst(x,y), mem.currentStack.subst(x,y), mem.heap.subst(x, y))
 
     override def subst(x: SetSymbol, e: SetExpr[IsSymbolic.type]): SMem =
-      SMem(mem.initStack.subst(x,e), mem.currentStack.subst(x, e), mem.heap.subst(x, e))
+      SMem(mem.initStack.subst(x, e), mem.currentStack.subst(x, e), mem.heap.subst(x, e))
   }
 }
