@@ -32,6 +32,10 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
 
   var counter = 0
 
+  object SanityRel {
+    val self = Relation.unary("SanityRel")
+  }
+
   object SymbolicSetRel {
     val self = Relation.unary("SymbolicSet")
     val locs = Relation.binary("SymbolicSet/locs")
@@ -49,7 +53,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     lazy val nameUniqueness = {
       val s1 = Variable.unary("s1")
       val s2 = Variable.unary("s2")
-      ((s1.join(name) eq s2.join(name)) and (s1.join(name) eq Expression.NONE).not) implies (s1 eq s2) forAll ((s1 oneOf self) and (s2 oneOf self))
+      (s1.join(name) eq s2.join(name)) implies (s1 eq s2) forAll ((s1 oneOf self) and (s2 oneOf self))
     }
   }
 
@@ -113,12 +117,12 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val f2 = Variable.unary("f2")
       ((f1 eq f2) iff (f1.join(name) eq f2.join(name))) forAll ((f1 oneOf self) and (f2 oneOf self))
     }
-    val childs = Relation.unary("Fields$child")
+    val childs = Relation.unary("Fields@child")
     lazy val childsTyping = {
       val f = Variable.unary("f")
       f in self forAll (f oneOf childs)
     }
-    val refs = Relation.unary("Fields$ref")
+    val refs = Relation.unary("Fields@ref")
     lazy val refsTyping = {
       val f = Variable.unary("f")
       f in self forAll (f oneOf refs)
@@ -191,7 +195,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     lazy val typeOfLocTypeOfSymEquality = {
       val s = Variable.unary("s")
       val l = Variable.unary("l")
-      (s.join(SymbolsRel.loc) eq l) implies (s.join(typeOfSym) eq l.join(typeOfLoc)) forAll
+      ((s product l) in SymbolsRel.loc) implies (s.join(typeOfSym) eq l.join(typeOfLoc)) forAll
         ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
     }
     lazy val typeOfLocTypeOfSetSubtyping = {
@@ -209,6 +213,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val ol = Variable.unary("ol")
       val t = Variable.unary("t")
       val ot = Variable.unary("ot")
+      val ote = Variable.unary("ote")
       allFormulae(defs.toList.map { case (c, cd) =>
         val supersOfC = defs.supertypes(c) + c
         val fieldsOfC = (defs.refsOf(supersOfC) ++ defs.childrenOf(supersOfC)).keySet
@@ -226,10 +231,10 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
             case Opt => f.join(l.join(LocsRel.fields)).lone
           }) forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
             (t oneOf TypesRel.typerels(c)))
-          val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields `forSome` (ol oneOf LocsRel.self)) implies
-            (ot in f.join(l.join(LocsRel.fields)).join(typeOfLoc).join(isSubType)) forAll
-            ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
-              (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.typerels(oc)))
+          val typingConstraint = (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields) and (ot eq ol.join(typeOfLoc)) implies
+            ((ot product ote) in TypesRel.isSubType)  forAll
+            ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and (ol oneOf LocsRel.self) and
+              (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.self) and (ote oneOf TypesRel.typerels(oc)))
           allFormulae(List(cardConstraint,typingConstraint))
         })
         allFormulae(List(fieldTyping, fieldAbsence))
@@ -249,8 +254,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val l = Variable.unary("l")
       val ol = Variable.unary("ol")
       val f = Variable.unary("f")
-      ((ol product l) in owner) iff
-        ((l product f product ol) in LocsRel.fields `forSome` (f oneOf FieldsRel.childs)) forAll
+      (((ol product l) in owner) iff
+        ((l product f product ol) in LocsRel.fields `forSome` (f oneOf FieldsRel.childs))) forAll
                    ((l oneOf LocsRel.self) and (ol oneOf LocsRel.self))
     }
     lazy val owningFieldUniqueness = {
@@ -265,6 +270,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     lazy val ownerAcyclic = {
       val l = Variable.unary("l")
       ((l product l) in owner.closure).not forAll (l oneOf LocsRel.self)
+      Formula.TRUE
     }
     val referencedBy = Relation.binary("referencedBy")
     lazy val referencedByTyping = {
@@ -371,6 +377,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     val universe = new Universe(atoms.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
+
+    bounds.bound(SanityRel.self, f allOf 1)
 
     for (intval <- allLocobjs.keySet ++ symids.keySet ++ fieldobjs.values.map(_._1) ++ varobjs.keySet)
       bounds.boundExactly(intval.intValue, f range (f tuple intval, f tuple intval))
@@ -564,8 +572,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     concretisationConstraints(smem).flatMap{ case (cs, bs, fieldmap) =>
       val classesPresentConstraints = allFormulae(classesPresent.map(cl => classPresenceConstraint(cl)).toList)
       val fieldsPresentConstraints = allFormulae(fieldsPresent.map(f => fieldPresenceConstraint(f, fieldmap)).toList)
-      findSolution(cs and classesPresentConstraints and fieldsPresentConstraints, bs) }.map(inst =>
-      extractConcreteMemory(inst, smem.initStack.keySet))
+      findSolution(cs and classesPresentConstraints and fieldsPresentConstraints, bs) }.map{inst =>
+      inst.relationTuples.foreach(println)
+      extractConcreteMemory(inst, smem.initStack.keySet)}
   }
 
   private
@@ -589,7 +598,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
           (v.join(VarsRel.name) eq IntConstant.constant(varIntMap(vr)).toExpression) implies
                        (v.join(VarsRel.vals) eq et) forAll (v oneOf VarsRel.self)
         }
-      } yield (TranslationState(evalState.ssymrels ++ rs, evalState.symnames ++ is, evalState.constraints and f, th), varconstraint :: constraints)
+      } yield (TranslationState(evalState.ssymrels ++ rs, evalState.symnames ++ is, allFormulae(List(evalState.constraints, f)), th), varconstraint :: constraints)
     }.map { case (est, constraints) => (est, allFormulae(constraints)) }
     val ssvconstraints = allFormulae(smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
       val s = Variable.unary("s")
@@ -619,15 +628,15 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val l = Variable.unary("l")
       val t = Variable.unary("t")
       val t2 = Variable.unary("t2")
-      val typeConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) implies
-        (l.join(TypesRel.typeOfLoc) eq t) and (t2 in TypesRel.typerels(sdesc.cl)) and (sdesc.desctype match {
+      val typeConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) and (l.join(TypesRel.typeOfLoc) eq t) implies
+        (sdesc.desctype match {
           case ExactDesc => t eq t2
           case AbstractDesc => t2 in t.join(TypesRel.isSubType)
           case PartialDesc(hasExact, possible) =>
             val exactConstraint = if (hasExact) t eq t2 else Formula.TRUE
             val possibleConstraints = anyFormulae(possible.toList.map(c => TypesRel.typerels(c) in t.join(TypesRel.isSubType)))
             allFormulae(List(t2 in t.join(TypesRel.isSubType), anyFormulae(List(exactConstraint, possibleConstraints))))
-      }) `forSome` ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.self)) forAll (l oneOf LocsRel.self)
+        }) forAll ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.typerels(sdesc.cl)) and (l oneOf LocsRel.self))
       for {
         evalres <- st
         (evalstate, constraints) = evalres
@@ -686,7 +695,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     solver.options.setLogTranslation(2)
     val solution = solver.solve(constraints, bounds)
     solution.outcome match {
-      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
+      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => println(constraints); solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"

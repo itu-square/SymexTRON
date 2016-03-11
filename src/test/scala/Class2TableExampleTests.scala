@@ -11,8 +11,8 @@ import CHeap._
   */
 class Class2TableExampleTests extends FlatSpec
                               with Matchers {
-  def execFixture = new ConcreteExecutor(Class2TableExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
-                                         Class2TableExample.prog)
+  def execFixture = new ConcreteExecutor(Class2TableDeepMatchingExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
+                                                Class2TableDeepMatchingExample.prog)
 
   def retainedVars(mem: CMem) = GarbageCollection.gc(mem, retainvars = Some(Set("class", "table")))
 

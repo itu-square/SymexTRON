@@ -4,7 +4,7 @@ import semantics.domains._
 import syntax.ast.Statement._
 import syntax.ast._
 
-object Class2TableExample extends Example {
+trait Class2TableExample extends Example {
 
   val sourceClassDefs = Set(
     new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),
@@ -27,6 +27,26 @@ object Class2TableExample extends Example {
     )
   }
 
+}
+
+object Class2TableSimpleExample extends Class2TableExample {
+  override val prog = stmtSeq(
+    `new`("table", Class("Table")),
+    `new`("idcol", Class("IdColumn")),
+    assignField(SetLit(Seq(Var("table"))), "id", SetLit(Seq(Var("idcol")))),
+    assignField(SetLit(Seq(Var("table"))), "columns", SetLit(Seq(Var("idcol")))),
+    loadField("class_attributes", SetLit(Seq(Var("class"))), "attributes"),
+    `for`("attr", MSet(SetVar("class_attributes")), stmtSeq(
+      `new`("col", Class("DataColumn")),
+      loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
+      assignField(SetLit(Seq(Var("col"))), "type", SetLit(Seq(Var("attrtype")))),
+      loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
+      assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
+    ))
+  )
+}
+
+object Class2TableDeepMatchingExample extends Class2TableExample {
   override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),
@@ -40,5 +60,4 @@ object Class2TableExample extends Example {
       assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
     ))
   )
-
 }

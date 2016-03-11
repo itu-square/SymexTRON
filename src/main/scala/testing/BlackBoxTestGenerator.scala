@@ -21,6 +21,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
   private
   def generateCoveringTests(consideredTypes: Set[Class], pre: SMem, mems: Set[CMem]): Set[CMem] = {
     def gctHelper(mems: Set[CMem], classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Set[CMem] = {
+      println(s"gctHelper($mems, $classesUncoverable, $fieldsUncoverable)")
       val coverage = metamodelcoverage.relevantPartialCoverage(consideredTypes, mems)
       val additionalClassesToCover = coverage.classesRelevant diff (coverage.classesCovered ++ classesUncoverable)
       val additionalFieldsToCover = coverage.fieldsRelevant diff (coverage.fieldsCovered ++ fieldsUncoverable)
@@ -37,8 +38,9 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
         }
       else {
         val classToCover = additionalClassesToCover.head
-        modelFinder.concretise(pre, classesPresent = Set(classToCover)).fold(_ =>
-          gctHelper(mems, classesUncoverable + classToCover, fieldsUncoverable),
+        modelFinder.concretise(pre, classesPresent = Set(classToCover)).fold({err =>
+          println(err)
+          gctHelper(mems, classesUncoverable + classToCover, fieldsUncoverable)},
           nmem => {
             gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
           }
