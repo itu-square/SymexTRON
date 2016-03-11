@@ -38,11 +38,11 @@ object SpatialDesc {
   val _sd_descendantpools = GenLens[SpatialDesc](_.descendantpools)
 }
 
-case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership, descendantPools: DescendantPools)
+case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership)
 
 sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
-case class UnknownLoc(cl : Class, ownership : SOwnership, descendantPools: DescendantPools) extends SymbolDesc
+case class UnknownLoc(cl : Class, ownership : SOwnership) extends SymbolDesc
 
 case class SHeap(ssvltion : SetSymbolValuation, svltion : SymbolValuation, locOwnership: LocOwnership, initSpatial: Spatial, currentSpatial: Spatial, pure : Prop)
 

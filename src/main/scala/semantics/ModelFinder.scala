@@ -606,7 +606,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
           (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression) and
             (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) implies
               (s.join(SymbolsRel.loc) eq l) forAll ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
-        case UnknownLoc(cl, ownership, descendantPools) =>
+        case UnknownLoc(cl, ownership) =>
           val s = Variable.unary("s")
           val t = Variable.unary("t")
           (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies

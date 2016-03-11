@@ -6,7 +6,7 @@ import syntax.ast._
 
 object PrettyPrinter {
 
-  def pretty(stack: SStack): String = s"[${stack.map {case (vr, e) => s"${vr} ↦ ${pretty(e)}"}.mkString(", ")}]"
+  def pretty(stack: SStack): String = s"[${stack.map {case (vr, e) => s"$vr ↦ ${pretty(e)}"}.mkString(", ")}]"
 
   private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
 
@@ -95,7 +95,7 @@ object PrettyPrinter {
   def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic.type]).mkString(" ∧ ")
 
   def pretty(loc : Loc, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case SpatialDesc(c, typ, children, refs, descendantspool) => {
+    case SpatialDesc(c, typ, children, refs, descendantspool) =>
       // TODO Pretty descendant pool
       val prettytyp = typ match {
         case ExactDesc => s"${pretty(loc)} : ${c.name}"
@@ -105,7 +105,6 @@ object PrettyPrinter {
       sep(prettytyp, "★",
         sep(s"${children.map{ case (f, e) => pretty(loc, f, "◆↣", e) }.mkString(" ★ ")}", "★",
           s"${refs.map{ case (f, e) => pretty(loc, f, "↝", e) }.mkString(" ★ ")}"))
-    }
   }
 
   def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =
@@ -145,8 +144,7 @@ object PrettyPrinter {
 
   def pretty(symdesc: SymbolDesc): String = symdesc match {
     case Loced(l) => pretty(l)
-      // TODO pretty descendant pool
-    case UnknownLoc(cl, ownership, descendantpool) => s"(${cl.name}, ${pretty(ownership)}})"
+    case UnknownLoc(cl, ownership) => s"(${cl.name}, ${pretty(ownership)}})"
   }
 
   def pretty(ssvltion: SymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit): String =

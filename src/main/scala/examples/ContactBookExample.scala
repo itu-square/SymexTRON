@@ -21,7 +21,7 @@ object ContactBookExample extends Example {
     val stack = Map("contactbook" -> SetLit(Seq(Symbol(-1))))
     Set(
       SMem(stack, stack,
-        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned, Map())), Map(), Map(), Set()))
+        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), SUnowned)), Map(), Map(), Set()))
     )
   }
 

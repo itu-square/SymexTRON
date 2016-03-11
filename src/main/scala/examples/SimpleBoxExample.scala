@@ -16,8 +16,8 @@ trait SimpleBoxExample extends Example {
     val stack = Map("x" -> SetLit(Seq(Symbol(-1))), "y" -> SetLit(Seq(Symbol(-2))))
     Set(
       SMem(stack, stack,
-        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("IntBox"), SUnowned, Map()),
-          Symbol(-2) -> UnknownLoc(Class("IntBox"), SUnowned, Map())), Map(), Map(), Set()) )
+        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("IntBox"), SUnowned),
+          Symbol(-2) -> UnknownLoc(Class("IntBox"), SUnowned)), Map(), Map(), Set()) )
     )
   }
 

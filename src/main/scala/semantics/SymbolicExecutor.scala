@@ -169,14 +169,14 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         val ssdesc = mem.heap.ssvltion(ssym)
         if (cardMatches(ssdesc.crd, count)) {
           val nsyms = Seq.fill(count)(Symbol(freshSym))
-          (nsyms, (_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(ssdesc.cl, ssdesc.ownership, Map())))(mem.subst(ssym, SetLit(nsyms)))).right
+          (nsyms, (_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(ssdesc.cl, ssdesc.ownership)))(mem.subst(ssym, SetLit(nsyms)))).right
         } else s"Mismatch between cardinality of ${PrettyPrinter.pretty(ssym)} and needed count $count".left
       case ee =>
         val nsyms = Seq.fill(count)(Symbol(freshSym))
         val nsymownership = SUnowned // TODO: Pick proper ownership
         for {
           nsymtype <- typeInference.inferSetType(ee, mem.heap).cata(_.right, s"Empty set $eres".left)
-          nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(nsymtype, nsymownership, Map()))) andThen
+          nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(nsymtype, nsymownership))) andThen
                       (_sm_heap ^|-> _sh_pure).modify(_ + Eq(SetLit(nsyms), ee)))(mem)
           concretise <- modelFinder.concretise(nmem)
         } yield (nsyms, nmem)

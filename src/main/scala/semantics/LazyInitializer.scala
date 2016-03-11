@@ -41,8 +41,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     }
     heap.svltion.get(sym).cata({
       case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership, descendantpool) =>
-        // TODO check consistency via SAT
+      case UnknownLoc(cl, ownership) =>
         val newLoc = Loc(loccounter.++())
         val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
         val res = ownership match {
@@ -90,8 +89,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
       fieldkv match {
         case (f, (cl, crd)) =>
           val sym = SetSymbol(symcounter.++())
-          // TODO Partition descendant pools
-          (svltion + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef, Map())), fields + (f -> sym))
+          (svltion + (sym -> SSymbolDesc(cl, crd, if (owned) SOwned(loc, f) else SRef)), fields + (f -> sym))
       }
     }
   }
