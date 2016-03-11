@@ -270,7 +270,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     lazy val ownerAcyclic = {
       val l = Variable.unary("l")
       ((l product l) in owner.closure).not forAll (l oneOf LocsRel.self)
-      Formula.TRUE
     }
     val referencedBy = Relation.binary("referencedBy")
     lazy val referencedByTyping = {
@@ -332,7 +331,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     val ol = Variable.unary("ol")
     val t = Variable.unary("t")
     (ol in v.join(VarsRel.vals)) and
-      ((ol product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+      ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (l.join(TypesRel.typeOfLoc) eq t) `forSome`
           ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (l oneOf LocsRel.self)) forAll
             (t oneOf TypesRel.typerels(clazz))
@@ -347,7 +346,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     val f = Variable.unary("f")
     val t = Variable.unary("t")
     (ol in v.join(VarsRel.vals)) and
-      ((ol product l) in ReachabilityRel.reachableBy.reflexiveClosure) and
+      ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
           (f.join(FieldsRel.name) eq IntConstant.constant(fieldmap(field._2)).toExpression) and
             ((l product f product ool) in LocsRel.fields) `forSome`
@@ -573,7 +572,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val classesPresentConstraints = allFormulae(classesPresent.map(cl => classPresenceConstraint(cl)).toList)
       val fieldsPresentConstraints = allFormulae(fieldsPresent.map(f => fieldPresenceConstraint(f, fieldmap)).toList)
       findSolution(cs and classesPresentConstraints and fieldsPresentConstraints, bs) }.map{inst =>
-      inst.relationTuples.foreach(println)
       extractConcreteMemory(inst, smem.initStack.keySet)}
   }
 
@@ -695,7 +693,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     solver.options.setLogTranslation(2)
     val solution = solver.solve(constraints, bounds)
     solution.outcome match {
-      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => println(constraints); solution.instance.right
+      case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"

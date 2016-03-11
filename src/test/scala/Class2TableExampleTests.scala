@@ -3,7 +3,7 @@ import syntax.ast._
 import semantics.domains._
 import semantics._
 import examples._
-import scalaz._, Scalaz._, scalaz.stream._
+import scalaz._
 import CMem._
 import CHeap._
 /**
