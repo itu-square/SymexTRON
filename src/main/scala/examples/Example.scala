@@ -21,11 +21,11 @@ trait Example {
 
   def main(args: Array[String]): Unit = {
     val defsWithKeys = classDefs.map(cd => Class(cd.name) -> cd).toMap
-    val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = 5)
+    val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = 6)
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 3, 2)
+    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, 2, 6, 2)
     println("""------------ Whitebox test generation -----------------""")
     wwtestgenerator.generateTests(pres, prog).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")

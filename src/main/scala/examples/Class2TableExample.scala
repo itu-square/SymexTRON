@@ -39,7 +39,7 @@ object Class2TableSimpleExample extends Class2TableExample {
     `for`("attr", MSet(SetVar("class_attributes")), stmtSeq(
       `new`("col", Class("DataColumn")),
       loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
-      assignField(SetLit(Seq(Var("col"))), "type", SetLit(Seq(Var("attrtype")))),
+      assignField(SetLit(Seq(Var("col"))), "type", SetVar("attrtype")),
       loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
       assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
     ))
@@ -55,7 +55,7 @@ object Class2TableDeepMatchingExample extends Class2TableExample {
     `for`("attr", MatchStar(SetLit(Seq(Var("class"))), Class("Attribute")), stmtSeq(
       `new`("col", Class("DataColumn")),
       loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
-      assignField(SetLit(Seq(Var("col"))), "type", SetLit(Seq(Var("attrtype")))),
+      assignField(SetLit(Seq(Var("col"))), "type", SetVar("attrtype")),
       loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
       assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
     ))

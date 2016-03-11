@@ -36,7 +36,7 @@ object GarbageCollection {
 
   private def reset(mem: CMem): CMem = {
     val allLocs = mem.heap.typeenv.keys.toList.sorted
-    val locReplacement = allLocs.zipWithIndex.toMap
+    val locReplacement = allLocs.zipWithIndex.toMap.mapValues(_ - (allLocs.length + 1))
     val nstack = mem.stack.mapValues(_.map(locReplacement))
     val ntypeenv = mem.heap.typeenv.map { case (l, c) => (locReplacement(l), c) }
     val nchildenv = mem.heap.childenv.map { case (l, fs) => (locReplacement(l), fs.map { case (f, ols) => (f, ols.map(locReplacement)) } ) }
