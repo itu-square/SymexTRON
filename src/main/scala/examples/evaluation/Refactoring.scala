@@ -28,9 +28,9 @@ object Refactoring {
                )
           , Map(Symbol(packageId)  -> Loced(Loc(packageId)),
               Symbol(classId)    -> Loced(Loc(classId)),
-              Symbol(oldFieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields")),
-              Symbol(newFieldId) -> UnknownLoc(Class("Field"), SUnowned),
-              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned))
+              Symbol(oldFieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields"), Set()),
+              Symbol(newFieldId) -> UnknownLoc(Class("Field"), SUnowned, Set()),
+              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned, Set()))
           , Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes"))
           , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
                 Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))),
@@ -84,9 +84,9 @@ object Refactoring {
           ),
           Map(Symbol(packageId)  -> Loced(Loc(packageId)),
             Symbol(classId)    -> Loced(Loc(classId)),
-            Symbol(oldMethodId) -> UnknownLoc(Class("Method"), SOwned(Loc(classId), "methods")),
-            Symbol(newMethodId) -> UnknownLoc(Class("Method"), SUnowned),
-            Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
+            Symbol(oldMethodId) -> UnknownLoc(Class("Method"), SOwned(Loc(classId), "methods"), Set()),
+            Symbol(newMethodId) -> UnknownLoc(Class("Method"), SUnowned, Set()),
+            Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned, Set())),
           Map(Loc(packageId) -> Unowned, Loc(classId) -> Owned(Loc(packageId), "classes")),
           Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
             Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
@@ -151,9 +151,9 @@ object Refactoring {
            Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))),
            Map(
              Symbol(packageId) -> Loced(Loc(packageId)),
-             Symbol(scnameId) -> UnknownLoc(Class("String"), SUnowned),
-             Symbol(class1Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes")),
-             Symbol(class2Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes"))  ),
+             Symbol(scnameId) -> UnknownLoc(Class("String"), SUnowned, Set()),
+             Symbol(class1Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes"), Set()),
+             Symbol(class2Id) -> UnknownLoc(Class("Class"), SOwned(Loc(packageId), "classes"), Set())  ),
            Map(Loc(packageId) -> Unowned),
            Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map(), Map())),
            Set()
@@ -214,8 +214,8 @@ object Refactoring {
               SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Many, SOwned(Loc(classId), "methods")),
               SetSymbol(classSuperId) -> SSymbolDesc(Class("String"), Opt, SUnowned)),
           Map(Symbol(classId) -> Loced(Loc(classId)),
-              Symbol(fieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields")),
-              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned)),
+              Symbol(fieldId) -> UnknownLoc(Class("Field"), SOwned(Loc(classId), "fields"), Set()),
+              Symbol(classNameId) -> UnknownLoc(Class("String"), SUnowned, Set())),
           Map(Loc(classId) -> Unowned),
           Map(Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
             , Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))

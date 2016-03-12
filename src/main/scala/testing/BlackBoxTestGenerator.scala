@@ -50,7 +50,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
 
   def generateTests(pres: Set[SMem]): Process[Task, CMem] = Process.emitAll(pres.toSeq).flatMap[Task, CMem] { pre =>
     val consideredTypes = {
-      pre.heap.svltion.values.collect { case UnknownLoc(cl, _) => cl } ++
+      pre.heap.svltion.values.collect { case UnknownLoc(cl, _, _) => cl } ++
         pre.heap.ssvltion.values.map(_.cl) ++
           pre.heap.currentSpatial.values.map(_.cl) ++
             pre.heap.initSpatial.values.map(_.cl)

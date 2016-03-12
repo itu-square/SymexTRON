@@ -144,7 +144,7 @@ object PrettyPrinter {
 
   def pretty(symdesc: SymbolDesc): String = symdesc match {
     case Loced(l) => pretty(l)
-    case UnknownLoc(cl, ownership) => s"(${cl.name}, ${pretty(ownership)}})"
+    case UnknownLoc(cl, ownership, notinstof) => s"(${cl.name}, ${pretty(ownership)}, ${notinstof.map(_.name).mkString("{", ",", "}")})"
   }
 
   def pretty(ssvltion: SymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit): String =

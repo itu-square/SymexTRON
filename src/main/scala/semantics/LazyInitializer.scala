@@ -23,14 +23,15 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     (SpatialDesc(cl, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
   }
 
-  def findLoc(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
-    def relevantLocs(nheap: SHeap, cl: Class, isUnknown: Boolean): Set[Loc] = {
+  def findLocs(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
+    def relevantLocs(nheap: SHeap, cl: Class, notinstof: Set[Class], isUnknown: Boolean): Set[Loc] = {
       // TODO: Filter safely
       nheap.locOwnership.filter { case (loc, ownership) => ownership match {
         case UnknownOwner => true
         case NewlyCreated => false
         case _ => !isUnknown  }
-      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) }.keySet
+      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) &&
+         !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(heap.currentSpatial(loc).cl)) }.keySet
     }
     def addNewLoc(newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
       val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
@@ -41,13 +42,13 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     }
     heap.svltion.get(sym).cata({
       case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership) =>
+      case UnknownLoc(cl, ownership, notinstof) =>
         val newLoc = Loc(loccounter.++())
         val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
         val res = ownership match {
           case SUnowned =>
             // Can either alias existing locs with unknown owners or create new unowned locs
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
+            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
@@ -55,14 +56,14 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
               })
           case SRef =>
             // Can alias all existing locs or create new locs with unknown owners
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = false)
+            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
                 (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right)
           case SOwned(l, f) =>
             // Can alias existing locs with unknown owners or create new owned locs
-            val aliasLocs = relevantLocs(nheap, cl, isUnknown = true)
+            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = true)
             val nnheap: SHeap = addNewLoc(newLoc, sdesc, Owned(l,f), nheap)
             Process((newLoc, nnheap).right) ++
               (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield

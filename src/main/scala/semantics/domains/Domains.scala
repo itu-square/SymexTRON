@@ -42,7 +42,7 @@ case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership)
 
 sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
-case class UnknownLoc(cl : Class, ownership : SOwnership) extends SymbolDesc
+case class UnknownLoc(cl : Class, ownership : SOwnership, notinstof: Set[Class]) extends SymbolDesc
 
 case class SHeap(ssvltion : SetSymbolValuation, svltion : SymbolValuation, locOwnership: LocOwnership, initSpatial: Spatial, currentSpatial: Spatial, pure : Prop)
 

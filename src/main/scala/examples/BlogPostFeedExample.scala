@@ -11,7 +11,7 @@ trait BlogPostFeedExample extends Example {
   override val pres: Set[SMem] = {
     val stack = Map("post" -> SetLit(Seq(Symbol(-1))))
     Set(
-      SMem(stack, stack, SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned)), Map(), Map(), Set()))
+      SMem(stack, stack, SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Post"), SUnowned, Set())), Map(), Map(), Set()))
     )
   }
 

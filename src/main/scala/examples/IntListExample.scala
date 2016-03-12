@@ -20,7 +20,7 @@ object IntListContainsElementExample extends IntListExample {
     val stack = Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2))))
     Set(
       SMem(stack, stack,
-        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned)), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned)), Map(), Map(), Set()))
+        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned)), Map(Symbol(-2) -> UnknownLoc(Class("Int"), SUnowned, Set())), Map(), Map(), Set()))
     )
   }
   override val prog: Statement = stmtSeq(

@@ -86,10 +86,11 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       case For(_, x, m, sb) => for {
         os <- evalMatchExpr(m, mem.stack, mem.heap)
         res <- {
-          if (os.isEmpty)
-            _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
-          else
-            _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+          os.size match {
+            case 0 => _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+            case 1 => _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+            case _ => _branchCoverageMap.updateValue(BranchPoint(uid, 2), _ => true)
+          }
           os.foldLeft[String \/ CMem](mem.right) { (memr, o) =>
             memr flatMap { mem =>
               val newmem = mem |> _cm_stack.modify(_.updated(x, Set(o)))
@@ -98,21 +99,22 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
           }
         }
       } yield res
-      case Fix(_, e, sb) => {
-        def fix(prev: Option[Set[Instances]], mem: CMem): String \/ CMem = for {
+      case Fix(_, e, sb) =>
+        def fix(prev: Option[Set[Instances]], mem: CMem, iteration: Int = 0): String \/ CMem = for {
           nmem <- executeStmt(mem, sb)
           ee <- evalExpr(e, nmem.stack)
           ees = ee.some
           res <- if (prev == ees) {
-            _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+            iteration match {
+              case 0 => _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+              case _ => _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+            }
             nmem.right
           } else {
-            _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
-            fix(ees, nmem)
+            fix(ees, nmem, iteration = iteration + 1)
           }
         } yield res
         fix(none, mem)
-      }
     }
   }
 

@@ -13,7 +13,7 @@ import helper._
 
 class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
                             beta: Int, delta: Int, kappa: Int) {
-  val symbExec = new SymbolicExecutor(defs, beta, delta, kappa)
+  val symbExec = new SymbolicExecutor(defs, kappa = kappa, delta = delta, beta = beta)
 
   implicit val S: ScheduledExecutorService = DefaultScheduler
 

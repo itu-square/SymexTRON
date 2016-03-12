@@ -613,11 +613,16 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
           (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression) and
             (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) implies
               (s.join(SymbolsRel.loc) eq l) forAll ((s oneOf SymbolsRel.self) and (l oneOf LocsRel.self))
-        case UnknownLoc(cl, ownership) =>
+        case UnknownLoc(cl, ownership, notinstof) =>
           val s = Variable.unary("s")
           val t = Variable.unary("t")
-          (s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies
-            (t in s.join(TypesRel.typeOfSym).join(TypesRel.isSubType))) forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl)))
+          val notinstofconstraints = allFormulae(notinstof.map(ncl =>
+            s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies
+              (t in s.join(TypesRel.typeOfSym).join(TypesRel.isSubType)).not forAll ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.self))
+          ).toList)
+          s.join(SymbolsRel.name) eq IntConstant.constant(sym.id).toExpression implies
+            (t in s.join(TypesRel.typeOfSym).join(TypesRel.isSubType)) forAll
+              ((s oneOf SymbolsRel.self) and (t oneOf TypesRel.typerels(cl))) and notinstofconstraints
       }
     })
     val fieldIntMap = FieldsRel.fieldsrels.keySet.zipWithIndex.toMap

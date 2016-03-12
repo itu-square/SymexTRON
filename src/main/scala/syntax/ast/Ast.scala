@@ -139,7 +139,7 @@ object Statement {
     val uid = _stmt_uid.getOption(s).get
     s match {
       case If(_, cond, ts, fs) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++ branches(ts) ++ branches(fs)
-      case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
+      case For(_, _, _, sb) => Map(uid -> (for (i <- 0 to 2) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)
       case Fix(_, _, sb) => Map(uid -> (for (i <- 0 to 1) yield BranchPoint(uid, i)).toList) ++
                                   branches(sb)
