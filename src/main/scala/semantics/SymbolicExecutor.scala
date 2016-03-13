@@ -20,22 +20,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   //TODO Implement clean up function of heap, that removes unneeded constraints
 
-  //TODO Convert use of SetLit to use of Process0[Symbols] and results to Process0[String \/ Symbols]
-  def match_it(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = ???
-
-  def descendants_or_self(set : Set[Symbols], c : Class, heap: SHeap): String \/ Set[Symbols] = ???
-
-  def match_star(set : Set[Symbols], c : Class, heap : SHeap): String \/ Set[Symbols] =
-    for {
-      dcs <- descendants_or_self(set, c, heap)
-      m <- match_it(dcs, c, heap)
-    } yield m
-
   def access(sym: Symbol, f: Fields, heap: SHeap):
     EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
       for {
-        (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](lazyInitializer.findLocs(sym, heap))
+        (Seq(loc), nheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), heap))
         (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
         res <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
           (sdesc.children(f), nnheap).right.point[TProcess]
@@ -62,7 +51,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     })(heap)
 
   def update(sym: Symbol, f: Fields, ee: SetExpr[IsSymbolic.type], heap: SHeap): EitherT[TProcess, String, SHeap] = for {
-      (loc, nheap) <- EitherT[TProcess, String, (Loc, SHeap)](lazyInitializer.findLocs(sym, heap))
+      (Seq(loc), nheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), heap))
       (sdesc, nheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
       res <- EitherT[TProcess, String, SHeap](if (defs.childfields.contains(f)) {
           val nnheap = disown(ee, loc, f, nheap)
@@ -77,15 +66,40 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
      executeHelper(Process.emitAll(pres.toSeq), c).run
   }
 
-  def paritionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
-    (incl, excl) <- Process.emitAll(List.range(0, syms.length)).map(syms.splitAt)
-    nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
-      if (excl.contains(s)) sdesc match {
-        case Loced(l) => sdesc
-        case sdesc:UnknownLoc => sdesc.copy(notinstof = sdesc.notinstof + c)
-      } else sdesc
-    ))(mem)
-  } yield (incl, excl, nmem)
+
+  def matchLocs(locs: Seq[Loc], c: Class, mem: SMem): String \/ (SetExpr[IsSymbolic.type], SMem) = {
+    def addDescendantPool(descendantpools: DescendantPools, c: Class) = {
+      if (descendantpools.contains(c)) (descendantpools(c), descendantpools, Map[SetSymbol, SSymbolDesc](), Set[BoolExpr[IsSymbolic.type]]())
+      else {
+        val ssym = SetSymbol(freshSym)
+        val superdps = defs.supertypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
+        val subdps = defs.subtypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
+        val constraints = superdps.map(superssym => SetSubEq(ssym, superssym)).toSet[BoolExpr[IsSymbolic.type]] ++
+                             subdps.map(subssym => SetSubEq(subssym, ssym)).toSet[BoolExpr[IsSymbolic.type]]
+        // TODO Fix ownership
+        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Many, SUnowned)), constraints)
+      }
+    }
+    locs.foldLeft((Seq[SetSymbol](), mem).right[String]) { (st, loc) =>
+      for {
+        (presyms, mem) <- st
+        sdesc = mem.heap.currentSpatial(loc)
+        (ssym, newdp, newsslvtion, newpure) = addDescendantPool(sdesc.descendantpools, c)
+      } yield (presyms :+ ssym,
+            ((_sm_heap ^|-> _sh_ssvltion).modify(_ ++ newsslvtion) andThen
+              (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
+                (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
+                  (_sm_heap ^|-> _sh_pure).modify(_ ++ newpure))(mem))
+    }.map { case (ssyms, mem) => if (ssyms.isEmpty) (SetLit(Seq()), mem) else {
+      val ssymdisjoint : Seq[BoolExpr[IsSymbolic.type]] =
+        for (ssym1 <- ssyms; ssym2 <- ssyms; if ssym1 != ssym2) yield Eq(Union(ssym1, ssym2), SetLit(Seq()))
+      (ssyms.tail.foldLeft(ssyms.head : SetExpr[IsSymbolic.type])(Union(_,_)),
+        (_sm_heap ^|-> _sh_pure).modify(_ ++ ssymdisjoint.toSet)(mem))
+      }
+    }
+  }
+
+
 
   private def executeHelper(pres : Process[Task, SMem], stmt : Statement) : EitherT[TProcess, String, SMem] = {
     // Todo parallelise using mergeN
@@ -145,18 +159,16 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             (nsyms, nimem) <- m match {
               case MSet(e) => EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
               case Match(e, c) =>
-                val ocr = typeInference.inferSetType(ee, imem.heap)
-                ocr.cata({oc =>
-                  if (defs.subtypesOrSelf(c).contains(oc))
-                    EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
-                  else if (defs.maxClass(c, oc).isDefined) {
-                    EitherT.right[TProcess, String, (Seq[Symbol], SMem)](paritionSyms(syms, imem, c).map { case (i, _, m) => (i,m)})
-                  } else {
-                    // TODO perhaps have this case on findSyms
-                    EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((Seq(), imem).point[TProcess])
-                  }
-                }, EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess]))
-              case MatchStar(e, c) => ???
+                matchSyms(ee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
+              case MatchStar(e, c) =>
+                for {
+                  (incsyms, excsyms, nimem) <- matchSyms(ee, syms, imem, c)
+                  (locs, nniheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
+                  (dpe, fmem) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[TProcess])
+                  (msyms, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
+                    count => findSyms(count, pre, dpe)
+                  })
+                } yield (incsyms ++ msyms, fmem)
             }
             // TODO: Fix ordering so it coincides with concrete executor ordering
             iterated <- syms.foldLeft(EitherT[TProcess, String, SMem](nimem.right.point[TProcess])) { (memr, sym) =>
@@ -182,6 +194,29 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
+
+  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): DisjunctionT[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)] = {
+    def paritionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
+      (incl, excl) <- Process.emitAll(List.range(0, syms.length)).map(syms.splitAt)
+      nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
+        if (excl.contains(s)) sdesc match {
+          case Loced(l) => sdesc
+          case sdesc:UnknownLoc => sdesc.copy(notinstof = sdesc.notinstof + c)
+        } else sdesc
+      ))(mem)
+    } yield (incl, excl, nmem)
+    val ocr = typeInference.inferSetType(ee, imem.heap)
+    ocr.cata({ oc =>
+      if (defs.subtypesOrSelf(c).contains(oc))
+        EitherT.right[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)]((syms, Seq(), imem).point[TProcess])
+      else if (defs.maxClass(c, oc).isDefined) {
+        EitherT.right[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)](paritionSyms(syms, imem, c))
+      } else {
+        // TODO perhaps have this case on findSyms
+        EitherT.right[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[TProcess])
+      }
+    }, EitherT.right[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[TProcess]))
+  }
 
   private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SMem) = {
     def cardMatches(crd: Cardinality, count: Symbols) = crd match {

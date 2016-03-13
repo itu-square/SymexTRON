@@ -7,6 +7,7 @@ import semantics.domains._
 import Subst._
 import syntax.ast._
 
+import scalaz.concurrent.Task
 import scalaz.stream._
 import scalaz._, Scalaz._
 
@@ -23,7 +24,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     (SpatialDesc(cl, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
   }
 
-  def findLocs(sym: Symbol, heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
+  def findLocs(syms: Seq[Symbol], heap: SHeap): Process0[String \/ (Seq[Loc], SHeap)] = {
     def relevantLocs(nheap: SHeap, cl: Class, notinstof: Set[Class], isUnknown: Boolean): Set[Loc] = {
       // TODO: Filter safely
       nheap.locOwnership.filter { case (loc, ownership) => ownership match {
@@ -33,51 +34,55 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
       }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) &&
          !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(heap.currentSpatial(loc).cl)) }.keySet
     }
-    def addNewLoc(newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
+    def addNewLoc(sym: Symbol, newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
       val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
         _sh_locOwnership.modify(_ + (newLoc -> ownership)) andThen
         _sh_initSpatial.modify(_ + (newLoc -> sdesc)) andThen
         _sh_currentSpatial.modify(_ + (newLoc -> sdesc))) (nheap)
       nnheap
     }
-    heap.svltion.get(sym).cata({
-      case Loced(l) => Process((l, heap).right)
-      case UnknownLoc(cl, ownership, notinstof) =>
-        val newLoc = Loc(loccounter.++())
-        val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
-        val res = ownership match {
-          case SUnowned =>
-            // Can either alias existing locs with unknown owners or create new unowned locs
-            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Unowned, nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right
-              })
-          case SRef =>
-            // Can alias all existing locs or create new locs with unknown owners
-            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, UnknownOwner, nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right)
-          case SOwned(l, f) =>
-            // Can alias existing locs with unknown owners or create new owned locs
-            val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = true)
-            val nnheap: SHeap = addNewLoc(newLoc, sdesc, Owned(l,f), nheap)
-            Process((newLoc, nnheap).right) ++
-              (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
-                (loc, (_sh_svltion.modify(_ + (sym -> Loced(loc))) andThen
-                  _sh_locOwnership.modify(_ + (loc -> Owned(l,f))))(antialias(sym, nheap, loc))).right)
-        }
-        res
-      /*
-      TODO: Possible optimization
-      val mentioningConstraints = heap.pure.filter(_.symbols.collect({ case \/-(s) => s }).contains(sym))
-      if (mentioningConstraints.isEmpty) {
-       ???
-      } else ??? */
-    }, Process(s"No such symbol: $sym".left))
+    def assignLoc(sym: Symbol, excluded: Seq[Loc], cl: Class, ownership: SOwnership, notinstof: Set[Class], heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
+      val newLoc = Loc(loccounter.++())
+      val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
+      ownership match {
+        case SUnowned =>
+          // Can either alias existing locs with unknown owners or create new unowned locs
+          val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false) diff excluded.toSet
+          val nnheap: SHeap = addNewLoc(sym, newLoc, sdesc, Unowned, nheap)
+          Process((newLoc, nnheap).right) ++
+            (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
+              (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right
+            })
+        case SRef =>
+          // Can alias all existing locs or create new locs with unknown owners
+          val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = false)
+          val nnheap: SHeap = addNewLoc(sym, newLoc, sdesc, UnknownOwner, nheap)
+          Process((newLoc, nnheap).right) ++
+            (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield
+              (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(antialias(sym, nheap, loc))).right)
+        case SOwned(l, f) =>
+          // Can alias existing locs with unknown owners or create new owned locs
+          val aliasLocs = relevantLocs(nheap, cl, notinstof, isUnknown = true)
+          val nnheap: SHeap = addNewLoc(sym, newLoc, sdesc, Owned(l, f), nheap)
+          Process((newLoc, nnheap).right) ++
+            (for (loc <- Process.emitAll(aliasLocs.toSeq.sortBy(_.id))) yield
+              (loc, (_sh_svltion.modify(_ + (sym -> Loced(loc))) andThen
+                _sh_locOwnership.modify(_ + (loc -> Owned(l, f)))) (antialias(sym, nheap, loc))).right)
+      }
+    }
+    syms.foldLeft(EitherT.right[Process0, String, (Seq[Loc], SHeap)](Process((Seq[Loc](), heap)))) { (st, sym) =>
+      heap.svltion.get(sym).cata({
+        case Loced(l) =>
+          for {
+            (locs, heap) <- st
+          } yield (locs :+ l, heap)
+        case UnknownLoc(cl, ownership, notinstof) =>
+          for {
+            (locs, heap) <- st
+            (loc, nheap) <- EitherT(assignLoc(sym, locs, cl, ownership, notinstof, heap))
+          } yield (locs :+ loc, nheap)
+      }, EitherT.left[Process0, String, (Seq[Loc], SHeap)](Process(s"No such symbol: $sym")))
+    }.run
   }
 
   def antialias(sym: Symbol, nheap: SHeap, loc: Loc): SHeap = {

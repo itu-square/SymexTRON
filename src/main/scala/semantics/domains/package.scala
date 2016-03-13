@@ -15,7 +15,7 @@ package object domains extends SymbolicOps {
   type Spatial = Map[Loc, SpatialDesc]
   type Prop = Set[BoolExpr[IsSymbolic.type]]
   type SStack = Map[Vars, SetExpr[IsSymbolic.type]]
-  type DescendantPools = Map[Class, SetExpr[IsSymbolic.type]]
+  type DescendantPools = Map[Class, SetSymbol]
   type Instances = Int
   type CStack = Map[Vars, Set[Instances]]
 }
