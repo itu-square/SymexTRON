@@ -17,7 +17,7 @@ class ModelFinderTests extends FlatSpec
   with Matchers
   with PrivateMethodTester {
 
-  val concretisationConstraints = PrivateMethod[String \/ (Formula, Bounds, Map[String, Int])]('concretisationConstraints)
+  val concretisationConstraints = PrivateMethod[String \/ (List[Formula], Bounds)]('concretisationConstraints)
   val classPresenceConstraint = PrivateMethod[Formula]('classPresenceConstraint)
   val findSolution = PrivateMethod[String \/ Instance]('findSolution)
 
@@ -26,9 +26,9 @@ class ModelFinderTests extends FlatSpec
     val ccr = modelFinder invokePrivate concretisationConstraints(Class2TableSimpleExample.pres.head)
     ccr should be a 'right
     ccr match {
-      case \/-((constraints, bounds, fieldmap)) =>
+      case \/-((constraints, bounds)) =>
         val attrPresent = modelFinder invokePrivate classPresenceConstraint(Class("Attribute"))
-        val solr = modelFinder invokePrivate findSolution(constraints and attrPresent, bounds)
+        val solr = modelFinder invokePrivate findSolution(attrPresent :: constraints, bounds)
         solr should be a 'right
       case _ =>
     }
@@ -59,7 +59,7 @@ class ModelFinderTests extends FlatSpec
     val ccr = modelFinder invokePrivate concretisationConstraints(pre)
     ccr should be a 'right
     ccr match {
-      case \/-((constraints, bounds, fieldmap)) =>
+      case \/-((constraints, bounds)) =>
         val fac = bounds.universe.factory
         val fieldBounds = fac noneOf 3
         fieldBounds.add((fac tuple "loc'1") product (fac tuple "field'next") product (fac tuple "loc'5"))
@@ -69,12 +69,8 @@ class ModelFinderTests extends FlatSpec
         fieldBounds.add((fac tuple "loc'10") product (fac tuple "field'data") product (fac tuple "loc'13"))
         bounds.boundExactly(modelFinder.LocsRel.fields, fieldBounds)
         val ss = Variable.unary("ss")
-        val sanityRel = modelFinder.SanityRel.self eq (ss.join(modelFinder.SymbolicSetRel.name).sum eq IntConstant.constant(3) comprehension (ss oneOf modelFinder.SymbolicSetRel.self)) // (bounds.relations.find(_.name == "ConcreteSymbolicSet1").get).join(modelFinder.SymbolicSetRel.name)
-        println(sanityRel)
-        val solr = modelFinder invokePrivate findSolution(constraints and sanityRel, bounds)
+        val solr = modelFinder invokePrivate findSolution(constraints, bounds)
         solr should be a 'right
-        solr.map(_.relationTuples.foreach(println))
-        solr.map(_.intTuples.foreach(println))
       case _ =>
     }
   }
