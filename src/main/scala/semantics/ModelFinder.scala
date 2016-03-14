@@ -652,7 +652,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
             (ssymEvalState, ssymexpr) = ssymevalres
             dpconstraint = {
               l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression implies
-                ((((ol product l) in ReachabilityRel.owner) and (TypesRel.typerels(cl) in ol.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) comprehension (ol oneOf LocsRel.self)) eq
+                ((((ol product l) in ReachabilityRel.owner.closure) and (TypesRel.typerels(cl) in ol.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) comprehension (ol oneOf LocsRel.self)) eq
                   ssymexpr) forAll (l oneOf LocsRel.self)
             }
           } yield (mergeTranslationState(evalstate, ssymEvalState), dpconstraint :: constraints)

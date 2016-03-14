@@ -21,7 +21,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
                     timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
                     coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, CMem] =
     generateTestsE(pres, s, timeout, coverage)
-                 .map(_.fold(_ => none, _.some))
+                 .map(_.toOption)
                  .filter(_.isDefined).map(_.get)
 
   def generateTestsE(pres : Set[SMem], s : Statement,

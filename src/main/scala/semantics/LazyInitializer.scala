@@ -107,7 +107,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
                       refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPools, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
       val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
-      if (!optimistic) err
+      if (!optimistic) { err }
       else {
         (if(dt.hasExact) err else Process()) ++ (for {
           nc <- EitherT[Process0,String,Class](Process.emitAll(dt.possible.toSeq).map(_.right))

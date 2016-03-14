@@ -52,13 +52,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def update(sym: Symbol, f: Fields, ee: SetExpr[IsSymbolic.type], heap: SHeap): EitherT[TProcess, String, SHeap] = for {
       (Seq(loc), nheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), heap))
-      (sdesc, nheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
+      (sdesc, nnheap) <- EitherT[TProcess, String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
       res <- EitherT[TProcess, String, SHeap](if (defs.childfields.contains(f)) {
-          val nnheap = disown(ee, loc, f, nheap)
-          _sh_currentSpatial.modify(_.updated(loc, _sd_children.modify(_.updated(f, ee))(sdesc)))(nnheap).right.point[Process0]
+          val nnnheap = disown(ee, loc, f, nnheap)
+          _sh_currentSpatial.modify(_.updated(loc, _sd_children.modify(_.updated(f, ee))(sdesc)))(nnnheap).right.point[Process0]
         }
         else if (defs.reffields.contains(f))
-          _sh_currentSpatial.modify(_.updated(loc, _sd_refs.modify(_.updated(f, ee))(sdesc)))(nheap).right.point[Process0]
+          _sh_currentSpatial.modify(_.updated(loc, _sd_refs.modify(_.updated(f, ee))(sdesc)))(nnheap).right.point[Process0]
         else s"No value for field $f".left.point[Process0])
     } yield res
 
@@ -123,7 +123,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             xsym = freshSym
             loc = freshLoc
             alloced =
-                loc -> SpatialDesc(c, ExactDesc, cdef.children.mapValues(_ => SetLit(Seq())), cdef.refs.mapValues(_ => SetLit(Seq())), Map())
+                loc -> SpatialDesc(c, ExactDesc, defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), defs.refsOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), Map())
             updated =
               (_sm_currentStack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
               (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
@@ -133,12 +133,12 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           EitherT[TProcess, String, SMem](post.point[TProcess])
         case LoadField(_, x, e, f) => for {
           eres <- evalSetExpr[TProcess](pre.currentStack, e)
-          (Seq(sym), mem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](findSyms(1, pre, eres).point[TProcess])
+          (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, eres).point[TProcess])
           (e, nheap) <- access(sym, f, mem.heap)
         } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(mem)
         case AssignField(_, e1, f, e2) => for {
             e1res <- evalSetExpr[TProcess](pre.currentStack, e1)
-            (Seq(sym), mem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](findSyms(1, pre, e1res).point[TProcess])
+            (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, e1res).point[TProcess])
             ee2 <- evalSetExpr[TProcess](mem.currentStack, e2)
             nheap <- update(sym, f, ee2, mem.heap)
           } yield _sm_heap.set(nheap)(mem)
@@ -154,19 +154,19 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         case For(_, x, m, sb) =>
           for {
             ee <- evalSetExpr[TProcess](pre.currentStack, _me_e.get(m))
-            (syms, imem) <-  EitherT[TProcess, String, (Seq[Symbol], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
+            (syms, oee, imem) <-  EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
               count => findSyms(count, pre, ee)
             })
             (nsyms, nimem) <- m match {
               case MSet(e) => EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
               case Match(e, c) =>
-                matchSyms(ee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
+                matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
               case MatchStar(e, c) =>
                 for {
-                  (incsyms, excsyms, nimem) <- matchSyms(ee, syms, imem, c)
+                  (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
                   (locs, nniheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
                   (dpe, fmem) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[TProcess])
-                  (msyms, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
+                  (msyms, _, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
                     count => findSyms(count, fmem, dpe)
                   })
                 } yield (incsyms ++ msyms, nfmem)
@@ -219,7 +219,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }, EitherT.right[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[TProcess]))
   }
 
-  private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SMem) = {
+  private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SetExpr[IsSymbolic.type], SMem) = {
     def cardMatches(crd: Cardinality, count: Symbols) = crd match {
       case Single => count == 1
       case Many => true
@@ -227,13 +227,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
     eres match {
       case SetLit(syms) =>
-        if (syms.length == count) (syms.map {case s:Symbol => s}, mem).right[String]
+        if (syms.length == count) (syms.map {case s:Symbol => s}, eres, mem).right[String]
         else s"Mismatch between count of ${PrettyPrinter.pretty(eres)} and needed count $count".left
       case ssym:SetSymbol =>
         val ssdesc = mem.heap.ssvltion(ssym)
         if (cardMatches(ssdesc.crd, count)) {
           val nsyms = Seq.fill(count)(Symbol(freshSym))
-          (nsyms, (_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(ssdesc.cl, ssdesc.ownership, Set())))(mem.subst(ssym, SetLit(nsyms)))).right
+          (nsyms, eres.subst(ssym, SetLit(nsyms)), (_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(ssdesc.cl, ssdesc.ownership, Set())))(mem.subst(ssym, SetLit(nsyms)))).right
         } else s"Mismatch between cardinality of ${PrettyPrinter.pretty(ssym)} and needed count $count".left
       case ee =>
         val nsyms = Seq.fill(count)(Symbol(freshSym))
@@ -243,7 +243,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(nsymtype, nsymownership, Set()))) andThen
                       (_sm_heap ^|-> _sh_pure).modify(_ + Eq(SetLit(nsyms), ee)))(mem)
           concretise <- modelFinder.concretise(nmem)
-        } yield (nsyms, nmem)
+        } yield (nsyms, eres, nmem)
     }
   }
 

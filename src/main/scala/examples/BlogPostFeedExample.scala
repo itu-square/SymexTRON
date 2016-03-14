@@ -37,10 +37,10 @@ object BlogPostFeedTimestampsExample extends BlogPostFeedExample {
 
 object BlogPostFeedCapitaliseTitlesExample extends BlogPostFeedExample {
   override val prog: Statement = `for`("sp", MatchStar(SetLit(Seq(Var("post"))), Class("SinglePost")), stmtSeq(
-      loadField("sp_title", SetLit(Seq(Var("sp"))), "title")
-    , loadField("sp_title_value", SetLit(Seq(Var("sp_title"))), "value")
+      loadField("sp_title", SetVar("sp"), "title")
+    , loadField("sp_title_value", SetVar("sp_title"), "value")
     , `new`("new_sp_title", Class("CapitalisedTitle"))
-    , assignField(SetLit(Seq(Var("new_sp_title"))), "value", SetLit(Seq(Var("sp_title_value"))))
-    , assignField(SetLit(Seq(Var("sp"))), "title", SetLit(Seq(Var("new_sp_title"))))
+    , assignField(SetVar("new_sp_title"), "value", SetVar("sp_title_value"))
+    , assignField(SetVar("sp"), "title", SetVar("new_sp_title"))
   ))
 }

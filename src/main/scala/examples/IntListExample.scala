@@ -26,8 +26,8 @@ object IntListContainsElementExample extends IntListExample {
   override val prog: Statement = stmtSeq(
     assignVar("containselem", SetLit(Seq()))
     , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
-      loadField("sublist_data", SetLit(Seq(Var("sublist"))), "data")
-      ,`if`(Eq(SetLit(Seq(Var("elem"))), SetLit(Seq(Var("sublist_data"))))
+      loadField("sublist_data", SetVar("sublist"), "data")
+      ,`if`(Eq(SetVar("elem"), SetVar("sublist_data"))
         , `new`("containselem", Class("Any"))
         , stmtSeq())
     ))
