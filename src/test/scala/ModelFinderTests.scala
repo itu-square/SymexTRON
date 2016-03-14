@@ -1,9 +1,12 @@
-import examples.Class2TableSimpleExample
-import kodkod.ast.{Variable, Formula}
+import examples.{IntListHeadTailEqExample, Class2TableSimpleExample}
+import kodkod.ast.{IntConstant, Relation, Variable, Formula}
 import kodkod.instance.{Bounds, Instance}
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 import semantics.ModelFinder
-import syntax.ast.Class
+import semantics.domains._
+import syntax.ast._
+
+import scala.collection.JavaConversions._
 
 import scalaz.{\/, \/-}
 
@@ -13,14 +16,13 @@ import scalaz.{\/, \/-}
 class ModelFinderTests extends FlatSpec
   with Matchers
   with PrivateMethodTester {
-  def execFixture = new ModelFinder(Class2TableSimpleExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 3)
 
   val concretisationConstraints = PrivateMethod[String \/ (Formula, Bounds, Map[String, Int])]('concretisationConstraints)
   val classPresenceConstraint = PrivateMethod[Formula]('classPresenceConstraint)
   val findSolution = PrivateMethod[String \/ Instance]('findSolution)
 
   "The model finder" should "find an instance with an attribute for the class-to-table transformation" in {
-    val modelFinder = execFixture
+    val modelFinder = new ModelFinder(Class2TableSimpleExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 3)
     val ccr = modelFinder invokePrivate concretisationConstraints(Class2TableSimpleExample.pres.head)
     ccr should be a 'right
     ccr match {
@@ -28,6 +30,51 @@ class ModelFinderTests extends FlatSpec
         val attrPresent = modelFinder invokePrivate classPresenceConstraint(Class("Attribute"))
         val solr = modelFinder invokePrivate findSolution(constraints and attrPresent, bounds)
         solr should be a 'right
+      case _ =>
+    }
+  }
+
+  it should "find an instance with three lists in the head-tail equal transformation program" in {
+    val stack: SStack = Map("list" -> SetLit(Seq(Symbol(1))))
+    val heap = SHeap(
+      Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Single,SRef),
+          SetSymbol(11) -> SSymbolDesc(Class("Int"),Single,SRef),
+          SetSymbol(19) -> SSymbolDesc(Class("IntList"),Opt,SOwned(Loc(10), "next")),
+          SetSymbol(20) -> SSymbolDesc(Class("Int"),Single,SRef)),
+      Map(Symbol(1) -> Loced(Loc(1)),
+          Symbol(9) -> Loced(Loc(5)),
+          Symbol(18) -> Loced(Loc(10))),
+      Map(Loc(1) -> Unowned,
+          Loc(5) -> Owned(Loc(1),"next"),
+          Loc(10) -> Owned(Loc(5),"next")),
+      Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
+          Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
+          Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)), Map("data" -> SetSymbol(20)),Map())),
+      Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()), Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
+          Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
+          Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)),Map("data" -> SetSymbol(20)),Map())),
+      Set(Not(Eq(SetLit(List(Symbol(1))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(9))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(18))),SetLit(List())))))
+    val pre = SMem(stack, stack, heap)
+    val modelFinder = new ModelFinder(IntListHeadTailEqExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 6)
+    val ccr = modelFinder invokePrivate concretisationConstraints(pre)
+    ccr should be a 'right
+    ccr match {
+      case \/-((constraints, bounds, fieldmap)) =>
+        val fac = bounds.universe.factory
+        val fieldBounds = fac noneOf 3
+        fieldBounds.add((fac tuple "loc'1") product (fac tuple "field'next") product (fac tuple "loc'5"))
+        fieldBounds.add((fac tuple "loc'5") product (fac tuple "field'next") product (fac tuple "loc'10"))
+        fieldBounds.add((fac tuple "loc'1") product (fac tuple "field'data") product (fac tuple "loc'11"))
+        fieldBounds.add((fac tuple "loc'5") product (fac tuple "field'data") product (fac tuple "loc'12"))
+        fieldBounds.add((fac tuple "loc'10") product (fac tuple "field'data") product (fac tuple "loc'13"))
+        bounds.boundExactly(modelFinder.LocsRel.fields, fieldBounds)
+        val ss = Variable.unary("ss")
+        val sanityRel = modelFinder.SanityRel.self eq (ss.join(modelFinder.SymbolicSetRel.name).sum eq IntConstant.constant(3) comprehension (ss oneOf modelFinder.SymbolicSetRel.self)) // (bounds.relations.find(_.name == "ConcreteSymbolicSet1").get).join(modelFinder.SymbolicSetRel.name)
+        println(sanityRel)
+        val solr = modelFinder invokePrivate findSolution(constraints and sanityRel, bounds)
+        solr should be a 'right
+        solr.map(_.relationTuples.foreach(println))
+        solr.map(_.intTuples.foreach(println))
       case _ =>
     }
   }

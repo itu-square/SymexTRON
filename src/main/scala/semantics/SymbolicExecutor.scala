@@ -105,6 +105,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   private def executeHelper(pres : Process[Task, SMem], stmt : Statement) : EitherT[TProcess, String, SMem] = {
     // Todo parallelise using mergeN
     EitherT[TProcess, String, SMem](pres.map(_.right)).flatMap { (pre: SMem) =>
+      println(pre)
+      println(s"Executing statement ${PrettyPrinter.pretty(stmt)}")
+      println(s"initial stack: ${pre.initStack}")
+      println(s"symbol valuation: ${pre.heap.svltion}")
+      println(s"set symbol valuation: ${pre.heap.ssvltion}")
+      println(s"initial heap: ${pre.heap.initSpatial}")
+      println(s"path cond: ${pre.heap.pure}")
       val concretised = modelFinder.concretise(pre)
       if (!concretised.isRight) {
         EitherT[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".left.point[TProcess])

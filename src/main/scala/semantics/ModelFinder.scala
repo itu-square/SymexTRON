@@ -303,10 +303,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
   def freshSymbolicSetRel(id: Symbols): (Relation, Formula) = {
     counter = counter + 1
     val ss = Relation.unary(s"ConcreteSymbolicSet$counter")
-    val s = Variable.unary("s")
     val nameExpr = IntConstant.constant(id).toExpression
-    val nameConstraint = (s.join(SymbolicSetRel.name) eq nameExpr) forAll (s oneOf ss)
-    val subsetConstraint = (s in SymbolicSetRel.self) forAll (s oneOf ss)
+    val nameConstraint = ss.join(SymbolicSetRel.name) eq nameExpr
+    val subsetConstraint = ss in SymbolicSetRel.self
     (ss, nameConstraint and subsetConstraint)
   }
 
@@ -688,8 +687,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       spatialEvalRes <- translateSpatial(iest)
       (spatialEvalState, spatialConstraints) = spatialEvalRes
       est  = mergeTranslationState(iest, spatialEvalState)
+      _ = println(est)
       allConstraints = allFormulae(
-        List(staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints, spatialConstraints, est.constraints))
+        List(/*staticConstraints, ssvconstraints, svconstraints, varConstraints, pureConstraints,  spatialConstraints, est.constraints*/))
       bounds = calculateBounds(est.ssymrels, est.ssymmap, est.symnames, smem.heap.initSpatial.keySet, fieldIntMap.mapValues(Int.box), varIntMap.mapValues(Int.box))
     } yield (allConstraints, bounds, fieldIntMap)
   }
