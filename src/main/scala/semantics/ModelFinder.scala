@@ -516,7 +516,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       val et = if (es.isEmpty) Expression.NONE
         else {
           val sym = Variable.unary("sym")
-          val loc = Variable.unary("loc")
           val ees = es.map {
             case Symbol(ident) =>
               sym.join(SymbolsRel.name) eq IntConstant.constant(ident).toExpression
@@ -629,6 +628,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     def translateSpatial(initEvalState: TranslationState) = smem.heap.initSpatial.foldLeft((initEvalState, List[Formula]()).right[String]) { (st, locinfo) =>
       val (loc, sdesc) = locinfo
       val l = Variable.unary("l")
+      val ol = Variable.unary("ol")
       val t = Variable.unary("t")
       val t2 = Variable.unary("t2")
       val typeConstraint = (l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression) and (l.join(TypesRel.typeOfLoc) eq t) implies
@@ -643,7 +643,22 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
       for {
         evalres <- st
         (evalstate, constraints) = evalres
-        fieldEvalRes <- (sdesc.children ++ sdesc.refs).foldLeft((evalstate, List[Formula]()).right[String]) { (st, fieldinfo) =>
+        dpEvalRes <- sdesc.descendantpools.foldLeft((evalstate, List[Formula]()).right[String]) { (st, dpinfo) =>
+          val (cl, ssym) = dpinfo
+          for {
+            evalres <- st
+            (evalstate, constraints) = evalres
+            ssymevalres <- translateSetExpr(ssym, evalstate.ssymmap)
+            (ssymEvalState, ssymexpr) = ssymevalres
+            dpconstraint = {
+              l.join(LocsRel.name) eq IntConstant.constant(loc.id).toExpression implies
+                ((((ol product l) in ReachabilityRel.owner) and (TypesRel.typerels(cl) in ol.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) comprehension (ol oneOf LocsRel.self)) eq
+                  ssymexpr) forAll (l oneOf LocsRel.self)
+            }
+          } yield (mergeTranslationState(evalstate, ssymEvalState), dpconstraint :: constraints)
+        }
+        (dpEvalState, dpConstraints) = dpEvalRes
+        fieldEvalRes <- (sdesc.children ++ sdesc.refs).foldLeft((dpEvalState, List[Formula]()).right[String]) { (st, fieldinfo) =>
           val (field, fieldval) = fieldinfo
           for {
             evalres <- st
@@ -660,7 +675,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
           } yield (mergeTranslationState(evalstate, fieldvalEvalState), fieldconstraint :: constraints)
         }
         (fieldEvalState, fieldConstraints) = fieldEvalRes
-      } yield (mergeTranslationState(evalstate, fieldEvalState), typeConstraint :: (fieldConstraints ++ constraints))
+      } yield (mergeTranslationState(evalstate, fieldEvalState), typeConstraint :: (fieldConstraints ++ dpConstraints ++ constraints))
     }.map { case (est, constraints) => (est, allFormulae(constraints)) }
 
     for {
@@ -731,8 +746,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
     val locName = extractMap[String, Int](instance.tuples(LocsRel.name)).mapValues(_.head.intValue)
     val typeOfLoc = extractMap[String, String](instance.tuples(TypesRel.typeOfLoc)).mapValues(_.head)
     val locFields = extractTernary[String, String, String](instance.tuples(LocsRel.fields))
-    val stack = vars.map(v => (v, Set[Instances]())).toMap ++ varVals.foldLeft(Map[String, Set[Instances]]()) { (stack, kv) =>
-      val (vr, set) = kv
+    val stack = vars.map(v => (v, Set[Instances]())).toMap ++ varVals.keySet.foldLeft(Map[String, Set[Instances]]()) { (stack, vr) =>
       val varname = vr.replaceFirst("var'", "")
       stack + (varname -> varVals.get(vr).cata(_.map(locName), Set()))
     }

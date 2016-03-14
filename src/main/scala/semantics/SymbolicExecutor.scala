@@ -80,7 +80,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Many, SUnowned)), constraints)
       }
     }
-    locs.foldLeft((Seq[SetSymbol](), mem).right[String]) { (st, loc) =>
+    locs.foldLeft((Seq[SetExpr[IsSymbolic.type]](), mem).right[String]) { (st, loc) =>
       for {
         (presyms, mem) <- st
         sdesc = mem.heap.currentSpatial(loc)
@@ -90,7 +90,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
                 (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
                   (_sm_heap ^|-> _sh_pure).modify(_ ++ newpure))(mem))
-    }.map { case (ssyms, mem) => if (ssyms.isEmpty) (SetLit(Seq()), mem) else {
+    }.map { case (ssyms, mem) =>
+      if (ssyms.isEmpty) (SetLit(Seq()), mem) else {
       val ssymdisjoint : Seq[BoolExpr[IsSymbolic.type]] =
         for (ssym1 <- ssyms; ssym2 <- ssyms; if ssym1 != ssym2) yield Eq(Union(ssym1, ssym2), SetLit(Seq()))
       (ssyms.tail.foldLeft(ssyms.head : SetExpr[IsSymbolic.type])(Union(_,_)),
@@ -165,13 +166,13 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                   (incsyms, excsyms, nimem) <- matchSyms(ee, syms, imem, c)
                   (locs, nniheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
                   (dpe, fmem) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[TProcess])
-                  (msyms, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
-                    count => findSyms(count, pre, dpe)
+                  (msyms, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
+                    count => findSyms(count, fmem, dpe)
                   })
-                } yield (incsyms ++ msyms, fmem)
+                } yield (incsyms ++ msyms, nfmem)
             }
             // TODO: Fix ordering so it coincides with concrete executor ordering
-            iterated <- syms.foldLeft(EitherT[TProcess, String, SMem](nimem.right.point[TProcess])) { (memr, sym) =>
+            iterated <- nsyms.foldLeft(EitherT[TProcess, String, SMem](nimem.right.point[TProcess])) { (memr, sym) =>
               memr.flatMap { mem => executeHelper(Process(_sm_currentStack.modify(_ + (x -> SetLit(Seq(sym))))(mem)), sb) }
             }
           } yield iterated
