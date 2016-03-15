@@ -41,7 +41,7 @@ object PrettyPrinter {
     case For(metaInf, x, m, sb) =>
       s"""
           |${"  " * indent}${pretty(metaInf)}
-          |${"  " * indent}for(x ∈ ${pretty(m)})
+          |${"  " * indent}for($x ∈ ${pretty(m)})
           |${pretty(sb, indent = indent + 1)}""".stripMargin
     case Fix(metaInf, e, sb) =>
       s"""

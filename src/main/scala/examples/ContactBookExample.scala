@@ -27,7 +27,7 @@ object ContactBookExample extends Example {
 
   override val prog: Statement = stmtSeq(
      assignVar("invitationlist", SetLit(Seq()))
-   , `for`("person'", MatchStar(Var("contactbook"), Class("Person")), stmtSeq(
+   , `for`("person", MatchStar(Var("contactbook"), Class("Person")), stmtSeq(
       assignVar("isadult", SetLit(Seq()))
     , loadField("person_age", Var("person"), "age")
     , loadField("person_name", Var("person"), "name")

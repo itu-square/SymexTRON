@@ -2,7 +2,7 @@ package examples
 
 
 import helper.Counter
-import semantics.{DotConverter, ModelFinder}
+import semantics.{PrettyPrinter, DotConverter, ModelFinder}
 import syntax.ast.{Class,ClassDefinition, Statement}
 import semantics.domains._
 import testing.{BlackBoxTestGenerator, WhiteBoxTestGenerator}
@@ -25,10 +25,10 @@ trait Example {
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wwtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, beta = 2, delta = 8, kappa = 2)
+    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, beta = 2, delta = 8, kappa = 2)
     println("""------------ Whitebox test generation -----------------""")
-    wwtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
-    println(s"Coverage: ${wwtestgenerator.coverage}")
+    wbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
+    println(s"Coverage: ${wbtestgenerator.coverage}")
     println("""-------------------------------------------------------""")
   }
 }

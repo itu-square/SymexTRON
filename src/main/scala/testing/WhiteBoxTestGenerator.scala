@@ -1,5 +1,6 @@
 package testing
 
+import _root_.syntax.ast.Statement.BranchPoint
 import semantics.{SymbolicExecutor, SetNormalizer, ConcreteExecutor, PrettyPrinter}
 import semantics.domains._
 
@@ -40,6 +41,8 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement,
   }
 
   def coverage: Int = concExec.coverage
+  def uncoveredBranches: Set[BranchPoint] = concExec.uncoveredBranches
+  def annotatedProg: Statement = concExec.prog
 }
 
 object WhiteBoxTestGenerator {

@@ -160,7 +160,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
             (nsyms, nimem) <- m match {
               case MSet(e) => EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
               case Match(e, c) =>
-                matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
+                  matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
               case MatchStar(e, c) =>
                 for {
                   (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
@@ -198,7 +198,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): DisjunctionT[TProcess, String, (Seq[Symbol], Seq[Symbol], SMem)] = {
     def paritionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
-      (incl, excl) <- Process.emitAll(List.range(0, syms.length)).map(syms.splitAt)
+      (incl, excl) <- Process.emitAll(List.range(0, syms.length + 1)).map(syms.splitAt)
       nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
         if (excl.contains(s)) sdesc match {
           case Loced(l) => sdesc
@@ -249,9 +249,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def evalSetExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
       e match {
-        case SetLit(es) => if (es.isEmpty) EitherT.right((SetLit(Seq()) : SetExpr[IsSymbolic.type]).point[M]) else impossible
+        case SetLit(es) => if (es.isEmpty) EitherT.right[M, String, SetExpr[IsSymbolic.type]]((SetLit(Seq()) : SetExpr[IsSymbolic.type]).point[M]) else impossible
         case Var(name) =>
-          EitherT(s.get(name).cata(_.right, s"Error whie evaluating expression $e".left).point[M])
+          EitherT(s.get(name).cata(_.right, s"Error while evaluating expression $e".left).point[M])
         case Diff(e1, e2) => for {
           ee1 <- evalSetExpr[M](s, e1)
           ee2 <- evalSetExpr[M](s, e2)

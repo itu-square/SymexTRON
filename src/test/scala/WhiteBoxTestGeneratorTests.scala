@@ -67,7 +67,9 @@ class WhiteBoxTestGeneratorTests
     run(BlogPostFeedCapitaliseTitlesExample, 100)
   }
 
-  it should "generate 100% covering tests for contact book transformation" in {
-    run(ContactBookExample, 100)
+  // TODO Add annotation to state which branches are impossible to reach
+  // Inner for-loop only can run 0 or 1 time (not more)
+  it should "generate 87% covering tests for contact book transformation" in {
+    run(ContactBookExample, 87)
   }
 }
