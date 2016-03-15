@@ -539,8 +539,10 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
           for {
             constraints <- st
             (fieldcs, fieldvalexp) <- translateSetExpr(fieldval, symmap, ssymmap)
-            fieldconstraint =
-                FieldsRel.fieldsrels(field).product(fieldvalexp) in locmap(loc).join(LocsRel.fields)
+            fieldconstraint = {
+              val ol = Variable.unary("ol")
+              ((locmap(loc) product FieldsRel.fieldsrels(field) product ol) in LocsRel.fields) iff (ol in fieldvalexp) forAll (ol oneOf LocsRel.self)
+            }
           } yield fieldconstraint :: fieldcs ++ constraints
         }
       } yield typeConstraint :: (fieldConstraints ++ dpConstraints ++ constraints)

@@ -34,6 +34,12 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       if (coveredStatements.nonEmpty) 100 else 0
   }
 
+  def uncoveredBranches = {
+    val coveredBranches = branchCoverageMap.filter(_._2).keySet
+    val allBranches     = progBranches.values.flatMap(_.toSet).toSet
+    allBranches diff coveredBranches
+  }
+
   def execute(mem: CMem): String \/ CMem = executeStmt(mem, prog)
 
   //TODO Check for type and ownership constraints
@@ -100,21 +106,23 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         }
       } yield res
       case Fix(_, e, sb) =>
-        def fix(prev: Option[Set[Instances]], mem: CMem, iteration: Int = 0): String \/ CMem = for {
+        def fix(prev: Set[Instances], mem: CMem, iteration: Int = 0): String \/ CMem = for {
           nmem <- executeStmt(mem, sb)
           ee <- evalExpr(e, nmem.stack)
-          ees = ee.some
-          res <- if (prev == ees) {
+          res <- if (prev == ee) {
             iteration match {
               case 0 => _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
               case _ => _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
             }
             nmem.right
           } else {
-            fix(ees, nmem, iteration = iteration + 1)
+            fix(ee, nmem, iteration = iteration + 1)
           }
         } yield res
-        fix(none, mem)
+        for {
+          ee <- evalExpr(e, mem.stack)
+          res <- fix(ee, mem)
+        } yield res
     }
   }
 
