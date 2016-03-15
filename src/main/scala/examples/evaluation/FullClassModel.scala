@@ -47,6 +47,4 @@ object FullClassModel {
   )
 
   val allDefs = Shared.stdClassDefs ++ classDefs
-
-  val allDefsWithKeys = allDefs.map(d => Class(d.name) -> d).toMap
 }
