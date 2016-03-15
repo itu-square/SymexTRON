@@ -157,17 +157,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
     else s"$f neither a child nor reference".left
   }
 
-  private def evalBasicExpr(e: BasicExpr[IsProgram.type], stack: CStack): String \/ Instances = e match {
-    case Var(name) => stack.get(name).cata(
-      res =>
-        if (res.size == 1) res.head.right
-        else s"$name contains a set of instances".left,
-      s"Unknown variable $name".left
-    )
-  }
-
   private def evalExpr(e: SetExpr[IsProgram.type], stack: CStack): String \/ Set[Instances] = e match {
-    case SetLit(es) => es.toSet.traverseU(e => evalBasicExpr(e, stack))
+    case SetLit(es) => if (es.isEmpty) Set[Instances]().right[String] else impossible
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
@@ -180,7 +171,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
     } yield (os1 intersect os2)
-    case SetVar(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
+    case Var(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 
   private def evalBoolExpr(b: BoolExpr[IsProgram.type], stack: CStack): String \/ Boolean = {
@@ -189,10 +180,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
         os1 <- evalExpr(e1, stack)
         os2 <- evalExpr(e2, stack)
       } yield os1 == os2
-      case SetMem(be1, e2) => for {
-        o <- evalBasicExpr(be1, stack)
-        os <- evalExpr(e2, stack)
-      } yield os.contains(o)
+      case SetMem(be1, e2) => impossible
       case SetSubEq(e1, e2) => for {
         os1 <- evalExpr(e1, stack)
         os2 <- evalExpr(e2, stack)

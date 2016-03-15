@@ -25,14 +25,13 @@ case object IsProgram extends ASTType
 
 sealed trait BasicExpr[T <: ASTType]
 case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic.type]
-case class Var(name: Vars) extends BasicExpr[IsProgram.type]
 
 sealed trait SetExpr[T <: ASTType]
 case class SetLit[T <: ASTType](es: Seq[BasicExpr[T]]) extends SetExpr[T]
 case class Union[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class Diff[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
 case class ISect[T <: ASTType](e1 : SetExpr[T], e2 : SetExpr[T]) extends SetExpr[T]
-case class SetVar(name: Vars) extends SetExpr[IsProgram.type]
+case class Var(name: Vars) extends SetExpr[IsProgram.type]
 case class SetSymbol(id: Symbols) extends SetExpr[IsSymbolic.type]
 
 sealed trait BoolExpr[T <: ASTType]
@@ -118,7 +117,7 @@ object Statement {
   def annotateUids(s : Statement) : Statement = {
     val counter = Counter(0)
     def annotateUidH(s : Statement) : Statement = {
-      val sMInf = MI(counter.++)
+      val sMInf = MI(counter.++())
       s match {
         case StmtSeq(_, ss) => StmtSeq(sMInf, ss.map(annotateUidH))
         case AssignVar(_, x, e) => AssignVar(sMInf, x, e)

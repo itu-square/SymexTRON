@@ -29,18 +29,18 @@ trait BlogPostFeedExample extends Example {
 object BlogPostFeedTimestampsExample extends BlogPostFeedExample {
   override val prog: Statement = stmtSeq(
      assignVar("timestamps", SetLit(Seq()))
-   , `for`("ts", MatchStar(SetLit(Seq(Var("post"))), Class("Timestamp")), stmtSeq(
-        assignVar("timestamps", Union(SetVar("timestamps"), SetLit(Seq(Var("ts")))))
+   , `for`("ts", MatchStar(Var("post"), Class("Timestamp")), stmtSeq(
+        assignVar("timestamps", Union(Var("timestamps"), Var("ts")))
     ))
   )
 }
 
 object BlogPostFeedCapitaliseTitlesExample extends BlogPostFeedExample {
-  override val prog: Statement = `for`("sp", MatchStar(SetLit(Seq(Var("post"))), Class("SinglePost")), stmtSeq(
-      loadField("sp_title", SetVar("sp"), "title")
-    , loadField("sp_title_value", SetVar("sp_title"), "value")
+  override val prog: Statement = `for`("sp", MatchStar(Var("post"), Class("SinglePost")), stmtSeq(
+      loadField("sp_title", Var("sp"), "title")
+    , loadField("sp_title_value", Var("sp_title"), "value")
     , `new`("new_sp_title", Class("CapitalisedTitle"))
-    , assignField(SetVar("new_sp_title"), "value", SetVar("sp_title_value"))
-    , assignField(SetVar("sp"), "title", SetVar("new_sp_title"))
+    , assignField(Var("new_sp_title"), "value", Var("sp_title_value"))
+    , assignField(Var("sp"), "title", Var("new_sp_title"))
   ))
 }

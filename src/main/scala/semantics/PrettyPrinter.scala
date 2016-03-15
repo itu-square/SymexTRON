@@ -53,14 +53,13 @@ object PrettyPrinter {
   def pretty[T <: ASTType](e : BasicExpr[T]): String = {
     e match {
       case Symbol(ident) => prettySymb(ident)
-      case Var(name) => name
     }
   }
 
   def pretty[T <: ASTType](e : SetExpr[T]): String = {
     e match {
       case SetSymbol(ident) => s"${prettySymb(ident).toUpperCase}"
-      case SetVar(name) => name
+      case Var(name) => name
       case SetLit(es) => if (es.length <= 0) "∅" else s"{${es.map(pretty[T]).mkString(", ")}}"
       case Union(e1, e2) => s"(${pretty[T](e1)} ∪ ${pretty[T](e2)})"
       case Diff(e1, e2) => s"(${pretty[T](e1)} ∖ ${pretty[T](e2)})"

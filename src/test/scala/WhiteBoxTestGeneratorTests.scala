@@ -66,4 +66,8 @@ class WhiteBoxTestGeneratorTests
   it should "generate 100% covering tests for blog post capitalize title transformation" in {
     run(BlogPostFeedCapitaliseTitlesExample, 100)
   }
+
+  it should "generate 100% covering tests for contact book transformation" in {
+    run(ContactBookExample, 100)
+  }
 }

@@ -33,15 +33,15 @@ object Class2TableSimpleExample extends Class2TableExample {
   override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),
-    assignField(SetLit(Seq(Var("table"))), "id", SetLit(Seq(Var("idcol")))),
-    assignField(SetLit(Seq(Var("table"))), "columns", SetLit(Seq(Var("idcol")))),
-    loadField("class_attributes", SetLit(Seq(Var("class"))), "attributes"),
-    `for`("attr", MSet(SetVar("class_attributes")), stmtSeq(
+    assignField(Var("table"), "id", Var("idcol")),
+    assignField(Var("table"), "columns", Var("idcol")),
+    loadField("class_attributes", Var("class"), "attributes"),
+    `for`("attr", MSet(Var("class_attributes")), stmtSeq(
       `new`("col", Class("DataColumn")),
-      loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
-      assignField(SetLit(Seq(Var("col"))), "type", SetVar("attrtype")),
-      loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
-      assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
+      loadField("attrtype", Var("attr"), "type"),
+      assignField(Var("col"), "type", Var("attrtype")),
+      loadField("tablecolumns", Var("table"), "columns"),
+      assignField(Var("table"), "columns", Union(Var("tablecolumns"), Var("col")))
     ))
   )
 }
@@ -50,14 +50,14 @@ object Class2TableDeepMatchingExample extends Class2TableExample {
   override val prog = stmtSeq(
     `new`("table", Class("Table")),
     `new`("idcol", Class("IdColumn")),
-    assignField(SetLit(Seq(Var("table"))), "id", SetLit(Seq(Var("idcol")))),
-    assignField(SetLit(Seq(Var("table"))), "columns", SetLit(Seq(Var("idcol")))),
-    `for`("attr", MatchStar(SetLit(Seq(Var("class"))), Class("Attribute")), stmtSeq(
+    assignField(Var("table"), "id", Var("idcol")),
+    assignField(Var("table"), "columns", Var("idcol")),
+    `for`("attr", MatchStar(Var("class"), Class("Attribute")), stmtSeq(
       `new`("col", Class("DataColumn")),
-      loadField("attrtype", SetLit(Seq(Var("attr"))), "type"),
-      assignField(SetLit(Seq(Var("col"))), "type", SetVar("attrtype")),
-      loadField("tablecolumns", SetLit(Seq(Var("table"))), "columns"),
-      assignField(SetLit(Seq(Var("table"))), "columns", Union(SetVar("tablecolumns"), SetLit(Seq(Var("col")))))
+      loadField("attrtype", Var("attr"), "type"),
+      assignField(Var("col"), "type", Var("attrtype")),
+      loadField("tablecolumns", Var("table"), "columns"),
+      assignField(Var("table"), "columns", Union(Var("tablecolumns"), Var("col")))
     ))
   )
 }

@@ -22,8 +22,8 @@ object IdIterExample extends Example {
 
   override val prog: Statement = stmtSeq(
      assignVar("Y", SetLit(Seq()))
-   , `for`("x", MSet(SetVar("X")), stmtSeq(
-        assignVar("Y", Union(SetLit(Seq(Var("x"))), SetVar("Y")))
+   , `for`("x", MSet(Var("X")), stmtSeq(
+        assignVar("Y", Union(Var("x"), Var("Y")))
     ))
   )
 }

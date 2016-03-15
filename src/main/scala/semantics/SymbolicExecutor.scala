@@ -247,21 +247,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
-  def evalBasicExpr[M[_] : Monad](s: SStack, e: BasicExpr[IsProgram.type]): EitherT[M, String, BasicExpr[IsSymbolic.type]] = e match {
-    case Var(name) =>
-      s.get(name).cata({
-            case SetLit(Seq(evalue)) => EitherT(evalue.right[String].point[M])
-            case ee => EitherT(s"Not a basic expression: $ee".left[BasicExpr[IsSymbolic.type]].point[M])
-        }, EitherT(s"Error while evaluating expression $e".left[BasicExpr[IsSymbolic.type]].point[M]))
-  }
-
   def evalSetExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
       e match {
-        case SetLit(es) =>
-          for {
-            ees <- es.toList.traverseU(e => evalBasicExpr[M](s, e))
-          } yield SetLit(ees)
-        case SetVar(name) =>
+        case SetLit(es) => if (es.isEmpty) EitherT.right((SetLit(Seq()) : SetExpr[IsSymbolic.type]).point[M]) else impossible
+        case Var(name) =>
           EitherT(s.get(name).cata(_.right, s"Error whie evaluating expression $e".left).point[M])
         case Diff(e1, e2) => for {
           ee1 <- evalSetExpr[M](s, e1)
@@ -294,11 +283,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         ep1 <- evalBoolExpr[M](st, p1)
         ep2 <- evalBoolExpr[M](st, p2)
       } yield And(ep1, ep2)
-    case SetMem(e1, e2) =>
-      for {
-        ee1 <- evalBasicExpr[M](st, e1)
-        ee2 <- evalSetExpr[M](st, e2)
-      } yield SetMem(ee1, ee2)
+    case SetMem(e1, e2) => impossible
     case SetSubEq(e1, e2) =>
       for {
         ee1 <- evalSetExpr[M](st, e1)

@@ -25,9 +25,9 @@ object IntListContainsElementExample extends IntListExample {
   }
   override val prog: Statement = stmtSeq(
     assignVar("containselem", SetLit(Seq()))
-    , `for`("sublist", MatchStar(SetVar("list"), Class("IntList")), stmtSeq(
-      loadField("sublist_data", SetVar("sublist"), "data")
-      ,`if`(Eq(SetVar("elem"), SetVar("sublist_data"))
+    , `for`("sublist", MatchStar(Var("list"), Class("IntList")), stmtSeq(
+      loadField("sublist_data", Var("sublist"), "data")
+      ,`if`(Eq(Var("elem"), Var("sublist_data"))
         , `new`("containselem", Class("Any"))
         , stmtSeq())
     ))
@@ -42,21 +42,21 @@ object IntListHeadTailEqExample extends IntListExample {
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt, SUnowned)), Map(), Map(), Map(), Set()))
     )
   }
-  override val prog: Statement = `if`(Eq(SetVar("list"), SetLit(Seq())),
+  override val prog: Statement = `if`(Eq(Var("list"), SetLit(Seq())),
       `new`("res", Class("Any"))
     , stmtSeq(
-        loadField("head", SetVar("list"), "data")
-      , loadField("list_next", SetVar("list"), "next")
-      , `if`(Eq(SetVar("list_next"), SetLit(Seq())),
+        loadField("head", Var("list"), "data")
+      , loadField("list_next", Var("list"), "next")
+      , `if`(Eq(Var("list_next"), SetLit(Seq())),
           `new`("res", Class("Any"))
-        , stmtSeq(fix(SetVar("list_next"), stmtSeq(
-             loadField("list_next_next", SetVar("list_next"), "next")
-          , `if`(Eq(SetVar("list_next_next"), SetLit(Seq())),
-                loadField("tail", SetVar("list_next"), "data")
-              , assignVar("list_next", SetVar("list_next_next"))
+        , stmtSeq(fix(Var("list_next"), stmtSeq(
+             loadField("list_next_next", Var("list_next"), "next")
+          , `if`(Eq(Var("list_next_next"), SetLit(Seq())),
+                loadField("tail", Var("list_next"), "data")
+              , assignVar("list_next", Var("list_next_next"))
             ))
           )
-        , `if`(Eq(SetVar("head"), SetVar("tail")),
+        , `if`(Eq(Var("head"), Var("tail")),
             `new`("res", Class("Any")),
              assignVar("res", SetLit(Seq()))
            ))

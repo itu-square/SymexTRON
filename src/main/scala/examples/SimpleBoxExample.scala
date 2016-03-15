@@ -28,17 +28,17 @@ object SimpleBoxSequentialLoadingExample extends SimpleBoxExample {
   import Statement._
 
   override val prog: Statement = stmtSeq(
-      loadField("z", SetLit(Seq(Var("x"))), "unbox"),
-      loadField("z", SetLit(Seq(Var("y"))), "unbox")
+      loadField("z", Var("x"), "unbox"),
+      loadField("z", Var("y"), "unbox")
   )
 }
 
 object SimpleBoxBranchingLoadingExample extends SimpleBoxExample {
   import Statement._
 
-  override val prog: Statement = `if`(Eq(SetLit(Seq(Var("x"))), SetLit(Seq(Var("y")))),
-    loadField("z", SetLit(Seq(Var("y"))), "unbox")
-    , loadField("z", SetLit(Seq(Var("x"))), "unbox")
+  override val prog: Statement = `if`(Eq(Var("x"), Var("y")),
+    loadField("z", Var("y"), "unbox")
+    , loadField("z", Var("x"), "unbox")
   )
 }
 
@@ -46,7 +46,7 @@ object SimpleBoxLoadingBranchingExample extends SimpleBoxExample {
   import Statement._
 
   override val prog: Statement = stmtSeq(
-    loadField("z", SetLit(Seq(Var("x"))), "unbox"),
-    `if`(Eq(SetLit(Seq(Var("x"))), SetLit(Seq(Var("y")))), stmtSeq(), stmtSeq())
+    loadField("z", Var("x"), "unbox"),
+    `if`(Eq(Var("x"), Var("y")), stmtSeq(), stmtSeq())
   )
 }

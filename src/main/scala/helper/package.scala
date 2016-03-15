@@ -17,6 +17,14 @@ package object helper {
   type StringE[B] = String \/ B
   type TProcess[A] = Process[Task, A]
 
+  implicit class RichProcess[F[_], A](p : Process[F, A]) {
+    def withFilter(f: A => Boolean) = p.filter(f)
+  }
+
+  implicit class RichDisjunction[A, B](d : A \/ B) {
+    def withFilter(f : B => Boolean)(implicit monoid: Monoid[A]) = d.filter(f)(monoid)
+  }
+
   implicit class RichMap[K, V](m : Map[K, V]) {
     def mapValuesWithKeys[V2](f : (K, V) => V2): Map[K, V2] =
       m map { case (k, v) => (k, f(k, v)) }
