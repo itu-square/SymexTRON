@@ -9,7 +9,7 @@ import _root_.syntax.ast.{Vars, Fields, ClassDefinition, Class}
 
 import scalaz._, Scalaz._
 import scalaz.concurrent.Task
-import scalaz.stream.Process
+import scalaz.stream.{Process0, Process}
 
 /**
   * Created by asal on 02/03/2016.
@@ -19,19 +19,19 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
   val metamodelcoverage = new MetaModelCoverageChecker(defs)
 
   private
-  def generateCoveringTests(consideredTypes: Set[Class], pre: SMem, mems: Set[CMem]): Set[CMem] = {
-    def gctHelper(mems: Set[CMem], classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Set[CMem] = {
+  def generateCoveringTests(consideredTypes: Set[Class], pre: SMem, mems: Set[CMem]): Process0[CMem] = {
+    def gctHelper(mems: Set[CMem], classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Process0[CMem] = {
       val coverage = metamodelcoverage.relevantPartialCoverage(consideredTypes, mems)
       val additionalClassesToCover = coverage.classesRelevant diff (coverage.classesCovered ++ classesUncoverable)
       val additionalFieldsToCover = coverage.fieldsRelevant diff (coverage.fieldsCovered ++ fieldsUncoverable)
       if (additionalClassesToCover.isEmpty)
-        if (additionalFieldsToCover.isEmpty) mems
+        if (additionalFieldsToCover.isEmpty) Process()
         else {
           val fieldToCover = additionalFieldsToCover.head
           modelFinder.concretise(pre, fieldsPresent = Set(fieldToCover)).fold(_ =>
             gctHelper(mems, classesUncoverable, fieldsUncoverable + fieldToCover),
             nmem => {
-              gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
+              Process(nmem) ++ gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
             }
           )
         }
@@ -40,12 +40,12 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
         modelFinder.concretise(pre, classesPresent = Set(classToCover)).fold(_ =>
           gctHelper(mems, classesUncoverable + classToCover, fieldsUncoverable),
           nmem => {
-            gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
+           Process(nmem) ++ gctHelper(mems + nmem, classesUncoverable, fieldsUncoverable)
           }
         )
       }
     }
-    gctHelper(mems, Set(), Set())
+    Process.emitAll(mems.toSeq) ++ gctHelper(mems, Set(), Set())
   }
 
   def generateTests(pres: Set[SMem]): Process[Task, CMem] = Process.emitAll(pres.toSeq).flatMap[Task, CMem] { pre =>
@@ -58,6 +58,6 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
     (for {
        startMem <- modelFinder.concretise(pre)
        mems = generateCoveringTests(consideredTypes, pre, Set(startMem))
-     } yield mems).fold(_ => Process.empty, mems => Process.emitAll(mems.toSeq))
+     } yield mems).fold(_ => Process.empty, identity)
   }
 }

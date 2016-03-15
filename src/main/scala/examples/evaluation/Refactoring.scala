@@ -7,11 +7,12 @@ import Statement._
 
 trait Refactoring extends Example {
   override val classDefs = FullClassModel.allDefs
+  override val delta = 12
 }
 
 object RenameFieldRefactoring extends Refactoring {
 
-  override val pres: Set[SMem] = Set {
+  override val pres: Set[SMem] = {
     val packageId = -1
     val classId = -2
     val oldFieldId = -3
@@ -27,6 +28,7 @@ object RenameFieldRefactoring extends Refactoring {
     val inputHeap = SHeap.initial(
       Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
         , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
+        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Many, SOwned(Loc(classId), "methods"))
         , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt, SOwned(Loc(packageId), "classes"))
       )
       , Map(Symbol(packageId) -> Loced(Loc(packageId)),
@@ -38,14 +40,15 @@ object RenameFieldRefactoring extends Refactoring {
       , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
         Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))),
           "methods" -> SetSymbol(classMethodsId))
-          , Map("name" -> SetSymbol(classNameId),
+          , Map("name" -> SetLit(Seq(Symbol(classNameId))),
             "super" -> SetSymbol(classSuperId)), Map()))
       , Set(
         Eq(SetLit(Seq()), ISect(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))),
-        Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))))
+        Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId))))),
+        Not(Eq(SetLit(Seq(Symbol(newFieldId))), SetLit(Seq(Symbol(oldFieldId)))))
       )
     )
-    SMem(inputStack, inputStack, inputHeap)
+    Set(SMem(inputStack, inputStack, inputHeap))
   }
 
   // Input:: package: Package, class: Class, old_field : Field, new_field : Field
@@ -70,7 +73,7 @@ object RenameFieldRefactoring extends Refactoring {
 
 object RenameMethodRefactoring extends Refactoring {
 
-  override val pres: Set[SMem] = Set {
+  override val pres: Set[SMem] = {
     val packageId = -1
     val classId = -2
     val oldMethodId = -3
@@ -102,10 +105,11 @@ object RenameMethodRefactoring extends Refactoring {
             "super" -> SetSymbol(classSuperId)), Map()))
       , Set(
         Eq(SetLit(Seq()), ISect(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))),
-        Eq(SetLit(Seq()), ISect(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
+        Eq(SetLit(Seq()), ISect(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId))))),
+        Not(Eq(SetLit(Seq(Symbol(newMethodId))), SetLit(Seq(Symbol(oldMethodId)))))
       )
     )
-    SMem(inputStack, inputStack, inputHeap)
+    Set(SMem(inputStack, inputStack, inputHeap))
   }
 
   // Input:: package: Package, class: Class, old_method : Method, new_method : Method
@@ -147,7 +151,7 @@ object RenameMethodRefactoring extends Refactoring {
 }
 
 object ExtractSuperclassRefactoring extends Refactoring {
-  override val pres: Set[SMem] = Set {
+  override val pres: Set[SMem] = {
     val packageId = -1
     val class1Id = -2
     val class2Id = -3
@@ -167,7 +171,7 @@ object ExtractSuperclassRefactoring extends Refactoring {
       Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map(), Map())),
       Set()
     )
-    SMem(inputStack, inputStack, inputHeap)
+    Set(SMem(inputStack, inputStack, inputHeap))
   }
 
   // Input:: class1 : Class, class2 : Class, sc_name : String
@@ -211,7 +215,7 @@ object ExtractSuperclassRefactoring extends Refactoring {
 
 object ReplaceDelegationWithInheritance extends Refactoring {
 
-  override val pres: Set[SMem] = Set {
+  override val pres: Set[SMem] = {
         val classId          = -1
         val fieldId          = -2
         val classFieldsId    = -3
@@ -234,7 +238,7 @@ object ReplaceDelegationWithInheritance extends Refactoring {
               ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Seq(Symbol(classNameId))), "super" -> SetSymbol(classSuperId)), Map())),
           Set(Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))))
         )
-        SMem(inputStack, inputStack, inputHeap)
+        Set(SMem(inputStack, inputStack, inputHeap))
   }
 
   // Assumes that methods that have the same name as the delegate are delegated methods and that field is private
