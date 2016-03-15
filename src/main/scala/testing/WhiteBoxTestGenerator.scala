@@ -11,32 +11,35 @@ import scalaz.concurrent.Task
 import java.util.concurrent.ScheduledExecutorService
 import helper._
 
-class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition],
+class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement,
                             beta: Int, delta: Int, kappa: Int) {
+  private
   val symbExec = new SymbolicExecutor(defs, kappa = kappa, delta = delta, beta = beta)
 
+  private
+  val concExec = new ConcreteExecutor(defs, prog)
+
+  private
   implicit val S: ScheduledExecutorService = DefaultScheduler
 
-  def generateTests(pres : Set[SMem], s : Statement,
-                    timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
+  def generateTests(pres : Set[SMem], timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
                     coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, CMem] =
-    generateTestsE(pres, s, timeout, coverage)
+    generateTestsE(pres, timeout, coverage)
                  .map(_.toOption)
                  .filter(_.isDefined).map(_.get)
 
-  def generateTestsE(pres : Set[SMem], s : Statement,
-                     timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
+  def generateTestsE(pres : Set[SMem], timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
                      coverage : Double = WhiteBoxTestGenerator.defaultCoverageTarget): Process[Task, String \/ CMem] = {
-      val concExec = new ConcreteExecutor(defs, s)
       // TODO Rewrite using writer monad to be pure
       sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
               .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm) })
               .takeWhile(_ => concExec.coverage <= coverage)
-              .map { mem => mem.fold(_ => (), m => { concExec.execute(m); }); mem }
-              .onComplete { println(s"Test coverage: ${concExec.coverage}"); Process() }
+              .map { mem => mem.fold(_ => (), m => { concExec.execute(m); }); mem  }
               )(wye.interrupt)
   }
+
+  def coverage: Int = concExec.coverage
 }
 
 object WhiteBoxTestGenerator {
