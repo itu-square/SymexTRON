@@ -56,7 +56,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int) {
             pre.heap.initSpatial.values.map(_.cl)
     }.toSet
     (for {
-       startMem <- modelFinder.concretise(pre)
+       startMem <- modelFinder.concretise(pre).|> {res => println(res);res}
        mems = generateCoveringTests(consideredTypes, pre, Set(startMem))
      } yield mems).fold(_ => Process.empty, identity)
   }
