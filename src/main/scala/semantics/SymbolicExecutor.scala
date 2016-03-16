@@ -63,9 +63,18 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield res
 
   def execute(pres : Set[SMem], c : Statement): Process[Task, String \/ SMem] = {
-     executeHelper(Process.emitAll(pres.toSeq), c).run
+    for {
+      pre <- Process.emitAll(pres.toSeq)
+      _ <- checkMemoryConsistency(pre).point[TProcess]
+      res <- executeHelper(pre, c).run
+    } yield res
   }
 
+
+  def checkMemoryConsistency(pre: SMem): Process[Task, String \/ CMem] = {
+    val concretised = modelFinder.concretise(pre)
+    concretised.point[TProcess].map(_.leftMap(_ => s"Inconsistent memory: ${PrettyPrinter.pretty(pre)}"))
+  }
 
   def matchLocs(locs: Seq[Loc], c: Class, mem: SMem): String \/ (SetExpr[IsSymbolic.type], SMem) = {
     def addDescendantPool(descendantpools: DescendantPools, c: Class) = {
@@ -102,96 +111,100 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
 
-  private def executeHelper(pres : Process[Task, SMem], stmt : Statement) : EitherT[TProcess, String, SMem] = {
+  private def executeHelper(pre : SMem, stmt : Statement) : EitherT[TProcess, String, SMem] = {
     // Todo parallelise using mergeN
-    EitherT[TProcess, String, SMem](pres.map(_.right)).flatMap { (pre: SMem) =>
-      val concretised = modelFinder.concretise(pre)
-      if (!concretised.isRight) {
-        EitherT[TProcess, String, SMem](s"Inconsistent memory ${PrettyPrinter.pretty(pre)}".left.point[TProcess])
-      } else stmt match {
-        case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[TProcess, String, SMem](pre.right.point[TProcess])) { (memr, s) =>
-          memr.flatMap { mem =>
-            executeHelper(Process(mem), s)
-          }
-        }
-        case AssignVar(_,x, e) => for {
-            ee <- evalSetExpr[TProcess](pre.currentStack, e)
-          } yield _sm_currentStack.modify(_ + (x -> ee))(pre)
-        case New(_, x, c) =>
-          val post = for {
-            cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
-            xsym = freshSym
-            loc = freshLoc
-            alloced =
-                loc -> SpatialDesc(c, ExactDesc, defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), defs.refsOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), Map())
-            updated =
-              (_sm_currentStack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
-              (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
-              (_sm_heap ^|-> _sh_locOwnership).modify(_ + (loc -> NewlyCreated)) andThen
-              (_sm_heap ^|-> _sh_currentSpatial).modify(_ + alloced))(pre)
-          } yield updated
-          EitherT[TProcess, String, SMem](post.point[TProcess])
-        case LoadField(_, x, e, f) => for {
-          eres <- evalSetExpr[TProcess](pre.currentStack, e)
-          (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, eres).point[TProcess])
-          (e, nheap) <- access(sym, f, mem.heap)
-        } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(mem)
-        case AssignField(_, e1, f, e2) => for {
-            e1res <- evalSetExpr[TProcess](pre.currentStack, e1)
-            (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, e1res).point[TProcess])
-            ee2 <- evalSetExpr[TProcess](mem.currentStack, e2)
-            nheap <- update(sym, f, ee2, mem.heap)
-          } yield _sm_heap.set(nheap)(mem)
-        case If(_, cond, ts, fs) => for {
-          econd <- evalBoolExpr[TProcess](pre.currentStack, cond)
-          newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
-          newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
-          // TODO rewrite using liftA2?
-          execTrue = executeHelper(Process(newtmem), ts).run
-          execFalse = executeHelper(Process(newfmem), fs).run
-          res <-  EitherT[TProcess, String, SMem](execTrue.tee(execFalse)(teePlus.interleaveAll))
-        } yield res
-        case For(_, x, m, sb) =>
-          for {
-            ee <- evalSetExpr[TProcess](pre.currentStack, _me_e.get(m))
-            (syms, oee, imem) <-  EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
-              count => findSyms(count, pre, ee)
-            })
-            (nsyms, nimem) <- m match {
-              case MSet(e) => EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
-              case Match(e, c) =>
-                  matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
-              case MatchStar(e, c) =>
-                for {
-                  (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
-                  (locs, nniheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
-                  (dpe, fmem) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[TProcess])
-                  (msyms, _, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
-                    count => findSyms(count, fmem, dpe)
-                  })
-                } yield (incsyms ++ msyms, nfmem)
-            }
-            // TODO: Fix ordering so it coincides with concrete executor ordering
-            iterated <- nsyms.foldLeft(EitherT[TProcess, String, SMem](nimem.right.point[TProcess])) { (memr, sym) =>
-              memr.flatMap { mem => executeHelper(Process(_sm_currentStack.modify(_ + (x -> SetLit(Seq(sym))))(mem)), sb) }
-            }
-          } yield iterated
-        case Fix(_, e, sb) =>
-          def fixEqCase(bmem: SMem): EitherT[TProcess, String, SMem] = for {
-              amem <- executeHelper(Process(bmem), sb)
-              eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
-              eea <- evalSetExpr[TProcess](amem.currentStack, e)
-              updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
-            } yield updatedMem
-          def fixNeqCase(bmem: SMem, k: Int): EitherT[TProcess, String, SMem] = for {
-              imem <- executeHelper(Process(bmem), sb)
-              eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
-              eei <- evalSetExpr[TProcess](imem.currentStack, e)
-              updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem)
-              fixmore <- if (k <= 0) fixEqCase(imem) else EitherT[TProcess,String,SMem](fixEqCase(imem).run ++ fixNeqCase(imem, k - 1).run)
-            } yield fixmore
-          EitherT[TProcess,String,SMem](fixEqCase(pre).run ++ fixNeqCase(pre, kappa).run)
+    stmt match {
+      case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[TProcess, String, SMem](pre.right.point[TProcess])) { (memr, s) =>
+        memr.flatMap { mem => executeHelper(mem, s) }
       }
+      case AssignVar(_,x, e) => for {
+          ee <- evalSetExpr[TProcess](pre.currentStack, e)
+        } yield _sm_currentStack.modify(_ + (x -> ee))(pre)
+      case New(_, x, c) =>
+        val post = for {
+          cdef <- defs.get(c).cata(_.right, s"Unknown class: $c".left)
+          xsym = freshSym
+          loc = freshLoc
+          alloced =
+              loc -> SpatialDesc(c, ExactDesc, defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), defs.refsOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), Map())
+          updated =
+            (_sm_currentStack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
+            (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
+            (_sm_heap ^|-> _sh_locOwnership).modify(_ + (loc -> NewlyCreated)) andThen
+            (_sm_heap ^|-> _sh_currentSpatial).modify(_ + alloced))(pre)
+        } yield updated
+        EitherT[TProcess, String, SMem](post.point[TProcess])
+      case LoadField(_, x, e, f) => for {
+        eres <- evalSetExpr[TProcess](pre.currentStack, e)
+        (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, eres).point[TProcess])
+        (e, nheap) <- access(sym, f, mem.heap)
+      } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(mem)
+      case AssignField(_, e1, f, e2) => for {
+          e1res <- evalSetExpr[TProcess](pre.currentStack, e1)
+          (Seq(sym), _, mem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, e1res).point[TProcess])
+          ee2 <- evalSetExpr[TProcess](mem.currentStack, e2)
+          nheap <- update(sym, f, ee2, mem.heap)
+        } yield _sm_heap.set(nheap)(mem)
+      case If(_, cond, ts, fs) => for {
+        econd <- evalBoolExpr[TProcess](pre.currentStack, cond)
+        newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
+        newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
+        // TODO rewrite using liftA2?
+        execTrue =
+          for {
+            _ <- EitherT[TProcess, String, CMem](checkMemoryConsistency(newtmem))
+            res <- executeHelper(newtmem, ts)
+          } yield res
+        execFalse =
+          for {
+            _ <- EitherT[TProcess, String, CMem](checkMemoryConsistency(newfmem))
+            res <- executeHelper(newfmem, fs)
+          } yield res
+        res <-  EitherT[TProcess, String, SMem](execTrue.run.tee(execFalse.run)(teePlus.interleaveAll))
+      } yield res
+      case For(_, x, m, sb) =>
+        for {
+          ee <- evalSetExpr[TProcess](pre.currentStack, _me_e.get(m))
+          (syms, oee, imem) <-  EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
+            count => findSyms(count, pre, ee)
+          })
+          (nsyms, nimem) <- m match {
+            case MSet(e) => EitherT.right[TProcess, String, (Seq[Symbol], SMem)]((syms, imem).point[TProcess])
+            case Match(e, c) =>
+                matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
+            case MatchStar(e, c) =>
+              for {
+                (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
+                (locs, nniheap) <- EitherT[TProcess, String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
+                (dpe, fmem) <- EitherT[TProcess, String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[TProcess])
+                (msyms, _, nfmem) <- EitherT[TProcess, String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
+                  count => findSyms(count, fmem, dpe)
+                })
+              } yield (incsyms ++ msyms, nfmem)
+          }
+          _ <- EitherT[TProcess, String, CMem](checkMemoryConsistency(nimem))
+          // TODO: Fix ordering so it coincides with concrete executor ordering
+          iterated <- nsyms.foldLeft(EitherT[TProcess, String, SMem](nimem.right.point[TProcess])) { (memr, sym) =>
+            memr.flatMap { mem => executeHelper(_sm_currentStack.modify(_ + (x -> SetLit(Seq(sym))))(mem), sb) }
+          }
+        } yield iterated
+      case Fix(_, e, sb) =>
+        def fixEqCase(bmem: SMem): EitherT[TProcess, String, SMem] = for {
+            _ <- EitherT[TProcess, String, CMem](checkMemoryConsistency(bmem))
+            amem <- executeHelper(bmem, sb)
+            eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
+            eea <- evalSetExpr[TProcess](amem.currentStack, e)
+            updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
+          } yield updatedMem
+        def fixNeqCase(bmem: SMem, k: Int): EitherT[TProcess, String, SMem] = for {
+            _ <- EitherT[TProcess, String, CMem](checkMemoryConsistency(bmem))
+            imem <- executeHelper(bmem, sb)
+            eeb <- evalSetExpr[TProcess](bmem.currentStack, e)
+            eei <- evalSetExpr[TProcess](imem.currentStack, e)
+            updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem)
+            fixmore <- if (k <= 0) fixEqCase(imem) else EitherT[TProcess,String,SMem](fixEqCase(imem).run ++ fixNeqCase(imem, k - 1).run)
+          } yield fixmore
+        EitherT[TProcess,String,SMem](fixEqCase(pre).run ++ fixNeqCase(pre, kappa).run)
     }
   }
 

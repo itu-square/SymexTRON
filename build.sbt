@@ -41,6 +41,8 @@ addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.7.1")
 
 fork in Test := true
 
+javaOptions += s"""-Djava.library.path="${(baseDirectory in ThisBuild).value / "lib"}/" """
+
 triggeredMessage := Watched.clearWhenTriggered
 
 maxErrors := 10

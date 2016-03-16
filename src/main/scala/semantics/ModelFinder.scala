@@ -578,7 +578,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
   private
   def findSolution(constraints: List[Formula], bounds: Bounds): String \/ Instance = {
     val solver = new Solver
-    solver.options.setSolver(SATFactory.plingeling())
+    solver.options.setSolver(SATFactory.plingeling(Runtime.getRuntime.availableProcessors, true))
     solver.options.setLogTranslation(2)
     val solution = solver.solve(allFormulae(constraints), bounds)
     solution.outcome match {
