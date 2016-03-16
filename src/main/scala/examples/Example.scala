@@ -35,6 +35,8 @@ trait Example {
     println("""------------ Whitebox test generation -----------------""")
     wbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println(s"Coverage: ${wbtestgenerator.coverage}")
+    println(s"Uncovered branches: ${wbtestgenerator.uncoveredBranches}")
+    println(s"Program: ${PrettyPrinter.pretty(wbtestgenerator.annotatedProg)}")
     println("""-------------------------------------------------------""")
   }
 }
