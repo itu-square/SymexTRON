@@ -7,7 +7,7 @@ import Statement._
 
 trait Refactoring extends Example {
   override val classDefs = FullClassModel.allDefs
-  override val delta = 12
+  override val delta = 9
 }
 
 object RenameFieldRefactoring extends Refactoring {
@@ -56,7 +56,7 @@ object RenameFieldRefactoring extends Refactoring {
     loadField("class_fields", Var("class"), "fields")
     , assignField(Var("class"), "fields", Union(Diff(Var("class_fields"), Var("old_field")), Var("new_field")))
     , `for`("faexpr", MatchStar(Var("package"), Class("FieldAccessExpr")), stmtSeq(
-      loadField("faexpr_field_name", Var("faexpr"), "field_name")
+        loadField("faexpr_field_name", Var("faexpr"), "field_name")
       , loadField("old_field_name", Var("old_field"), "name")
       , loadField("faexpr_target", Var("faexpr"), "target")
       , loadField("faexpr_target_type", Var("faexpr_target"), "type")
@@ -64,7 +64,7 @@ object RenameFieldRefactoring extends Refactoring {
         Eq(Var("class"), Var("faexpr_target_type")))
         , stmtSeq(
           loadField("new_field_name", Var("new_field"), "name")
-          , assignField(Var("faexpr"), "name", Var("new_field_name")))
+          , assignField(Var("faexpr"), "field_name", Var("new_field_name")))
         , stmtSeq()
       )
     ))
@@ -89,6 +89,7 @@ object RenameMethodRefactoring extends Refactoring {
     val inputHeap = SHeap.initial(
       Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Many, SOwned(Loc(packageId), "classes"))
         , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Many, SOwned(Loc(classId), "fields"))
+        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Many, SOwned(Loc(classId), "methods"))
         , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt, SOwned(Loc(packageId), "classes"))
       ),
       Map(Symbol(packageId) -> Loced(Loc(packageId)),
@@ -101,7 +102,7 @@ object RenameMethodRefactoring extends Refactoring {
         Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
           , Map("fields" -> SetSymbol(classFieldsId),
             "methods" -> Union(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
-          , Map("name" -> SetSymbol(classNameId),
+          , Map("name" -> SetLit(Seq(Symbol(classNameId))),
             "super" -> SetSymbol(classSuperId)), Map()))
       , Set(
         Eq(SetLit(Seq()), ISect(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))),
@@ -143,7 +144,7 @@ object RenameMethodRefactoring extends Refactoring {
         or(And(Eq(Var("old_method_params"), SetLit(Seq())), Eq(Var("mcexpr_args"), SetLit(Seq()))),
           Not(Eq(Var("paramsmatched"), SetLit(Seq())))))
         , stmtSeq(loadField("new_method_name", Var("new_method"), "name")
-          , assignField(Var("mcexpr"), "name", Var("new_method_name")))
+          , assignField(Var("mcexpr"), "method_name", Var("new_method_name")))
         , stmtSeq()
       )
     ))
