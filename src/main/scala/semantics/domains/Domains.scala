@@ -65,6 +65,13 @@ object SMem {
   val _sm_initStack = GenLens[SMem](_.initStack)
   val _sm_currentStack = GenLens[SMem](_.currentStack)
   val _sm_heap = GenLens[SMem](_.heap)
+
+  def allTypes(mem: SMem): Set[Class] = {
+    mem.heap.svltion.values.collect { case UnknownLoc(cl, _, _) => cl } ++
+      mem.heap.ssvltion.values.map(_.cl) ++
+      mem.heap.currentSpatial.values.map(_.cl) ++
+      mem.heap.initSpatial.values.map(_.cl)
+  }.toSet
 }
 
 

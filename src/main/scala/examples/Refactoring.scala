@@ -1,13 +1,11 @@
 package examples
-package evaluation
 
 import semantics.domains._
+import syntax.ast.Statement._
 import syntax.ast._
-import Statement._
 
 trait Refactoring extends Example {
   override val classDefs = FullClassModel.allDefs
-  override val delta = 9
 }
 
 object RenameFieldRefactoring extends Refactoring {

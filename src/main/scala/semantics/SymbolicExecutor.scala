@@ -242,12 +242,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       case SetLit(syms) =>
         if (syms.length == count) (syms.map {case s:Symbol => s}, eres, mem).right[String]
         else s"Mismatch between count of ${PrettyPrinter.pretty(eres)} and needed count $count".left
-      case ssym:SetSymbol =>
-        val ssdesc = mem.heap.ssvltion(ssym)
-        if (cardMatches(ssdesc.crd, count)) {
-          val nsyms = Seq.fill(count)(Symbol(freshSym))
-          (nsyms, eres.subst(ssym, SetLit(nsyms)), (_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(ssdesc.cl, ssdesc.ownership, Set())))(mem.subst(ssym, SetLit(nsyms)))).right
-        } else s"Mismatch between cardinality of ${PrettyPrinter.pretty(ssym)} and needed count $count".left
       case ee =>
         val nsyms = Seq.fill(count)(Symbol(freshSym))
         val nsymownership = SUnowned // TODO: Pick proper ownership

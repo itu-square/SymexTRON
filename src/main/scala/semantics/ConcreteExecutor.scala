@@ -15,7 +15,7 @@ import scalaz.stream._, scalaz.concurrent.Task
 import scala.concurrent.stm._
 import helper._
 
-class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
+class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excludedBranches: Set[BranchPoint] = Set()) {
   val prog = Statement.annotateUids(_prog)
 
   val progBranches = Statement.branches(prog)
@@ -26,12 +26,12 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement) {
   def stmtCoverageMap = Map(_stmtCoverageMap.single.toSeq: _*)
   def branchCoverageMap = Map(_branchCoverageMap.single.toSeq: _*)
 
-  def coverage = {
+  def coverage: Double = {
     val coveredBranches = branchCoverageMap.filter(_._2).keySet
-    val allBranches     = progBranches.values.flatMap(_.toSet).toSet
+    val allBranches     = progBranches.values.flatMap(_.toSet).toSet diff excludedBranches
     val coveredStatements = stmtCoverageMap.filterKeys(stmtCoverageMap).keySet
-    if (allBranches.nonEmpty) coveredBranches.size * 100 / allBranches.size else
-      if (coveredStatements.nonEmpty) 100 else 0
+    if (allBranches.nonEmpty) coveredBranches.size * 100.0 / allBranches.size else
+      if (coveredStatements.nonEmpty) 100.0 else 0.0
   }
 
   def uncoveredBranches = {

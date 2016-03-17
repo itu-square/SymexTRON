@@ -8,6 +8,8 @@ import syntax.ast._
   * Created by asal on 15/01/2016.
   */
 object ContactBookExample extends Example {
+  override val excludedBranches = Set(BranchPoint(7,2))
+
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
     new ClassDefinition("ContactBook", Map("persons" -> (Class("Person"), Many)), Map())
   , new ClassDefinition("Person", Map("age" -> (Class("Age"), Single),

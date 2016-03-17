@@ -1,5 +1,4 @@
 package examples
-package evaluation
 
 import syntax.ast._
 

@@ -1,1 +1,2 @@
-sbt -Djava.library.path=`pwd`/lib
+#!/usr/bin/env bash
+sbt -Djava.library.path=lib/
