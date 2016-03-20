@@ -641,8 +641,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
         )
       }
     }
-    val childMap = typeMap.mapValues(c => defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())) ++ convertFieldmap(childRels)
-    val refMap = typeMap.mapValues(c => defs.refsOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())) ++ convertFieldmap(refRels)
+    val childMap = typeMap.mapValues(c => defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())) |+| convertFieldmap(childRels)
+    val refMap = typeMap.mapValues(c => defs.refsOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())) |+| convertFieldmap(refRels)
     val extracted = CMem(stack, CHeap(typeMap, childMap, refMap))
     GarbageCollection.gc(extracted, resetlocs = true)
   }

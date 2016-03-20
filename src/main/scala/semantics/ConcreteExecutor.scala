@@ -152,7 +152,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     else if (defs.reffields.contains(f))
       for {
         rs <- h.refenv.get(o).cata(_.right, s"Unknown object $o".left)
-        _ <- rs.get(f).cata(_.right, s"Unknown reference $f of object o".left)
+        _ <- rs.get(f).cata(_.right, s"Unknown reference $f of object $o".left)
       } yield h |> _ch_refenv.modify(_.updated(o, rs.updated(f, os2)))
     else s"$f neither a child nor reference".left
   }
