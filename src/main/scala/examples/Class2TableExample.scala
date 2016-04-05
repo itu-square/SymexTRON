@@ -23,7 +23,7 @@ trait Class2TableExample extends Example {
     val stack = Map("class" -> SetLit(Seq(Symbol(-1))))
     Set(
       SMem(stack, stack,
-        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), SUnowned, Set())), Map(), Map(), Set()))
+        SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), Set())), Map(), Map(), Set()))
     )
   }
 

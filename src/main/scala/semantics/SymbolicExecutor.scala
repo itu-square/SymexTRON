@@ -74,7 +74,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def checkMemoryConsistency(pre: SMem): Process[Task, String \/ CMem] = {
     val concretised = modelFinder.concretise(pre)
-    concretised.point[TProcess].map(_.leftMap(_ => s"Inconsistent memory: ${PrettyPrinter.pretty(pre)}"))
+    concretised.point[TProcess].map(_.leftMap(_ => s"Inconsistent memory: ${PrettyPrinter.pretty(pre, initial = true)}"))
   }
 
   def matchLocs(locs: Seq[Loc], c: Class, mem: SMem): String \/ (SetExpr[IsSymbolic.type], SMem) = {
@@ -86,8 +86,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         val subdps = defs.subtypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
         val constraints = superdps.map(superssym => SetSubEq(ssym, superssym)).toSet[BoolExpr[IsSymbolic.type]] ++
                              subdps.map(subssym => SetSubEq(subssym, ssym)).toSet[BoolExpr[IsSymbolic.type]]
-        // TODO Fix ownership
-        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Many, SUnowned)), constraints)
+        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Many)), constraints)
       }
     }
     locs.foldLeft((Seq[SetExpr[IsSymbolic.type]](), mem).right[String]) { (st, loc) =>
@@ -245,10 +244,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         else s"Mismatch between count of ${PrettyPrinter.pretty(eres)} and needed count $count".left
       case ee =>
         val nsyms = Seq.fill(count)(Symbol(freshSym))
-        val nsymownership = SUnowned // TODO: Pick proper ownership
         for {
           nsymtype <- typeInference.inferSetType(ee, mem.heap).cata(_.right, s"Empty set $eres".left)
-          nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(nsymtype, nsymownership, Set()))) andThen
+          nmem = ((_sm_heap ^|-> _sh_svltion).modify(_ ++ nsyms.map(_ -> UnknownLoc(nsymtype, Set()))) andThen
                       (_sm_heap ^|-> _sh_pure).modify(_ + Eq(SetLit(nsyms), ee)))(mem)
           concretise <- modelFinder.concretise(nmem)
         } yield (nsyms, eres, nmem)

@@ -44,7 +44,7 @@ class ModelFinderTests extends FlatSpec
       Map(Symbol(1) -> Loced(Loc(1)),
           Symbol(9) -> Loced(Loc(5)),
           Symbol(18) -> Loced(Loc(10))),
-      Map(Loc(1) -> Unowned,
+      Map(Loc(1) -> Unfolded,
           Loc(5) -> Owned(Loc(1),"next"),
           Loc(10) -> Owned(Loc(5),"next")),
       Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),

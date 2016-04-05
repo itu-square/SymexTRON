@@ -26,9 +26,9 @@ object PrettyPrinter {
   }
 
 
-  def pretty(s : Statement, short: Boolean = true): String = {
+  def pretty(s : Statement, short: Boolean): String = {
     def prettyHelper(s : Statement, indent: Int): String = {
-      def indented(str: String): String = if(short) str else " " * indent + s
+      def indented(str: String): String = if(short) str else " " * indent + str
       s match {
         case StmtSeq(metaInf, ss) =>
           if (ss.isEmpty) indented("skip")
@@ -142,27 +142,19 @@ object PrettyPrinter {
     case Opt => "?"
   }
 
-  def pretty(ownership: SOwnership): String = ownership match {
-    case SUnowned => "-"
-    case SRef => "↝"
-    case SOwned(l, f) => s"◆${pretty(l)}.$f"
-  }
-
-  def pretty(ssymdesc: SSymbolDesc): String = s"(${ssymdesc.cl.name}${pretty(ssymdesc.crd)}, ${pretty(ssymdesc.ownership)})"
+  def pretty(ssymdesc: SSymbolDesc): String = s"${ssymdesc.cl.name}${pretty(ssymdesc.crd)}"
 
   def pretty(ssvltion: SetSymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit): String =
     s"[${ssvltion.map {case (ssym, ssymdesc) => s"${pretty(ssym)} ↦ ${pretty(ssymdesc)}"}.mkString(", ")}]"
 
   def pretty(ownership: Ownership): String = ownership match {
     case NewlyCreated => "new"
-    case Unowned => "-"
-    case UnknownOwner => "¿"
-    case Owned(l, f) => s"◆${pretty(l)}.$f"
+    case Unfolded => "-"
   }
 
   def pretty(symdesc: SymbolDesc): String = symdesc match {
     case Loced(l) => pretty(l)
-    case UnknownLoc(cl, ownership, notinstof) => s"(${cl.name}, ${pretty(ownership)}, ${notinstof.map(_.name).mkString("{", ",", "}")})"
+    case UnknownLoc(cl, notinstof) => s"(${cl.name}, ${notinstof.map(_.name).mkString("{", ",", "}")})"
   }
 
   def pretty(ssvltion: SymbolValuation)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit): String =
@@ -171,11 +163,11 @@ object PrettyPrinter {
   def pretty(locOwnership: LocOwnership)(implicit d: DummyImplicit, d2: DummyImplicit, d3: DummyImplicit, d4:DummyImplicit): String =
     s"[${locOwnership.map {case (loc, ownership) => s"${pretty(loc)} ↦ ${pretty(ownership)}"}.mkString(", ")}]"
 
-  def pretty(heap : SHeap): String =
-    sep(sep(sep(sep(pretty(heap.ssvltion) , ";", pretty(heap.svltion)), ";", pretty(heap.locOwnership)), ";", s"${pretty(heap.currentSpatial)}"), "∧", s"(${pretty(heap.pure)})")
+  def pretty(heap : SHeap, initial: Boolean): String =
+    sep(sep(sep(sep(pretty(heap.ssvltion) , ";", pretty(heap.svltion)), ";", pretty(heap.locOwnership)), ";", s"${pretty(if (initial) heap.initSpatial else heap.currentSpatial)}"), "∧", s"(${pretty(heap.pure)})")
 
-  def pretty(mem : SMem): String =
-    sep(s"${pretty(mem.currentStack)}", ";", s"${pretty(mem.heap)}")
+  def pretty(mem : SMem, initial: Boolean): String =
+    sep(s"${pretty(if (initial) mem.initStack else mem.currentStack)}", ";", s"${pretty(mem.heap, initial)}")
 
   def sep(s1 : String, ss : String, s2 : String) =
     if (s2.trim.isEmpty) s1

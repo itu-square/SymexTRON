@@ -499,7 +499,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
             case _ => false
           }) List()
           else List(symmap(sym).join(SymbolsRel.loc) eq locmap(loc))
-        case UnknownLoc(cl, ownership, notinstof) =>
+        case UnknownLoc(cl, notinstof) =>
           val notinstofconstraints = notinstof.map(ncl =>
               (TypesRel.typerels(ncl) in symmap(sym).join(TypesRel.typeOfSym).join(TypesRel.isSubType)).not
           ).toList

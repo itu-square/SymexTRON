@@ -15,14 +15,7 @@ case class PartialDesc(hasExact: Boolean, possible: Set[Class]) extends DescType
 
 sealed trait Ownership
 case object NewlyCreated extends Ownership
-case object Unowned extends Ownership
-case object UnknownOwner extends Ownership
-case class  Owned(l : Loc, f : Fields) extends Ownership
-
-sealed trait SOwnership
-case object SUnowned        extends SOwnership
-case object SRef            extends SOwnership
-case class  SOwned(l : Loc, f : Fields) extends SOwnership
+case object Unfolded extends Ownership
 
 object DescType {
   val _dt_partial = GenPrism[DescType, PartialDesc]
@@ -38,11 +31,11 @@ object SpatialDesc {
   val _sd_descendantpools = GenLens[SpatialDesc](_.descendantpools)
 }
 
-case class SSymbolDesc(cl : Class, crd : Cardinality, ownership : SOwnership)
+case class SSymbolDesc(cl : Class, crd : Cardinality)
 
 sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
-case class UnknownLoc(cl : Class, ownership : SOwnership, notinstof: Set[Class]) extends SymbolDesc
+case class UnknownLoc(cl : Class, notinstof: Set[Class]) extends SymbolDesc
 
 case class SHeap(ssvltion : SetSymbolValuation, svltion : SymbolValuation, locOwnership: LocOwnership, initSpatial: Spatial, currentSpatial: Spatial, pure : Prop)
 
@@ -67,7 +60,7 @@ object SMem {
   val _sm_heap = GenLens[SMem](_.heap)
 
   def allTypes(mem: SMem): Set[Class] = {
-    mem.heap.svltion.values.collect { case UnknownLoc(cl, _, _) => cl } ++
+    mem.heap.svltion.values.collect { case UnknownLoc(cl, _) => cl } ++
       mem.heap.ssvltion.values.map(_.cl) ++
       mem.heap.currentSpatial.values.map(_.cl) ++
       mem.heap.initSpatial.values.map(_.cl)

@@ -11,6 +11,7 @@ import scalaz.syntax.std.option._
 class TypeInference(defs: Map[Class, ClassDefinition]) {
 
 
+  // TODO Calculate set of types instead
   def inferSetType(ee : SetExpr[IsSymbolic.type], heap: SHeap): Option[Class] = ee match {
     case SetLit(es) => es match {
       case Seq() => none
@@ -50,7 +51,7 @@ class TypeInference(defs: Map[Class, ClassDefinition]) {
   def inferSymbolType(s: Symbol, heap: SHeap): Class = {
     heap.svltion(s) match {
       case Loced(l) => heap.currentSpatial(l).cl
-      case UnknownLoc(cl, ownership, _) => cl //TODO Check whether this is safe to ignore notinstof
+      case UnknownLoc(cl, _) => cl //TODO Check whether this is safe to ignore notinstof
     }
   }
 }
