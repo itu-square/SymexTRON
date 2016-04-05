@@ -25,29 +25,48 @@ object PrettyPrinter {
     case NoMI => ""
   }
 
-  def pretty(s : Statement, indent: Int = 0): String = s match {
-    case StmtSeq(metaInf, ss) => if (ss.isEmpty) ("  " * indent) + "skip" else ss.map(s => pretty(s, indent)).mkString(";")
-    case AssignVar(metaInf, x, e) => ("  " * indent) + s"${pretty(metaInf)}$x := ${pretty(e)}"
-    case LoadField(metaInf, x, e, f) => ("  " * indent) + s"${pretty(metaInf)}$x := ${pretty(e)}.$f"
-    case New(metaInf, x, c) => ("  " * indent) + s"${pretty(metaInf)}$x := new ${c.name}"
-    case AssignField(metaInf, e1, f, e2) => ("  " * indent) + s"${pretty(metaInf)}${pretty(e1)}.$f := ${pretty(e2)}"
-    case If(metaInf, cond, ts, fs) =>
-      s"""
-          |${"  " * indent}${pretty(metaInf)}
-          |${"  " * indent}if (${pretty(cond)})
-          |${pretty(ts, indent = indent + 1)}
-          |${"  " * indent}else
-          |${pretty(fs, indent = indent + 1)}""".stripMargin
-    case For(metaInf, x, m, sb) =>
-      s"""
-          |${"  " * indent}${pretty(metaInf)}
-          |${"  " * indent}for($x ∈ ${pretty(m)})
-          |${pretty(sb, indent = indent + 1)}""".stripMargin
-    case Fix(metaInf, e, sb) =>
-      s"""
-          |${"  " * indent}${pretty(metaInf)}
-          |${"  " * indent}fix(${pretty(e)})
-          |${pretty(sb, indent = indent + 1)}""".stripMargin
+
+  def pretty(s : Statement, short: Boolean = true): String = {
+    def prettyHelper(s : Statement, indent: Int): String = {
+      def indented(str: String): String = if(short) str else " " * indent + s
+      s match {
+        case StmtSeq(metaInf, ss) =>
+          if (ss.isEmpty) indented("skip")
+          else if (short) s"${prettyHelper(ss.head, indent)}; ..."
+          else ss.map(s => prettyHelper(s, indent)).mkString(";")
+        case AssignVar(metaInf, x, e) => indented(s"${pretty(metaInf)}$x := ${pretty(e)}")
+        case LoadField(metaInf, x, e, f) => indented(s"${pretty(metaInf)}$x := ${pretty(e)}.$f")
+        case New(metaInf, x, c) => indented(s"${pretty(metaInf)}$x := new ${c.name}")
+        case AssignField(metaInf, e1, f, e2) => indented(s"${pretty(metaInf)}${pretty(e1)}.$f := ${pretty(e2)}")
+        case If(metaInf, cond, ts, fs) =>
+          val ifHead = indented(s"if ${pretty(cond)} then")
+          if (short) s"${pretty(metaInf)}$ifHead ..."
+          else
+            s"""
+               |${"  " * indent}${pretty(metaInf)}
+               |${ifHead}
+               |${prettyHelper(ts, indent = indent + 1)}
+               |${"  " * indent}else
+               |${prettyHelper(fs, indent = indent + 1)}""".stripMargin
+        case For(metaInf, x, m, sb) =>
+          val forHead = indented(s"foreach $x ∈ ${pretty(m)} do")
+          if (short) s"${pretty(metaInf)}$forHead ..."
+          else
+            s"""
+               |${"  " * indent}${pretty(metaInf)}
+               |$forHead
+               |${prettyHelper(sb, indent = indent + 1)}""".stripMargin
+        case Fix(metaInf, e, sb) =>
+          val fixHead = indented(s"fix ${pretty(e)} do")
+          if (short) s"${pretty(metaInf)}$fixHead ..."
+          else
+            s"""
+               |${"  " * indent}${pretty(metaInf)}
+               |$fixHead
+               |${prettyHelper(sb, indent = indent + 1)}""".stripMargin
+      }
+    }
+    prettyHelper(s, 0)
   }
 
   def pretty[T <: ASTType](e : BasicExpr[T]): String = {
