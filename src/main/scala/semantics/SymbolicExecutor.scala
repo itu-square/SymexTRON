@@ -34,6 +34,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       } yield res
     }
 
+  // TODO Handle descendant constraints as well
   def disown(ee: SetExpr[IsSymbolic.type], loc: Loc, f: Fields, heap: SHeap) : SHeap =
     _sh_currentSpatial.modify(_ mapValuesWithKeys { case (loc2, sdesc) =>
         _sd_children.modify(_ mapValuesWithKeys { case (f2, ee2) =>

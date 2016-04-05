@@ -136,7 +136,6 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     else s"$f neither a child nor reference".left
   }
 
-  // TODO implement more efficiently
   private def disown(h: CHeap, os2: Set[Instances]): CHeap = {
     h |> _ch_childenv.modify(_.mapValues(_.mapValues(os => os diff os2)))
   }
