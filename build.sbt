@@ -39,10 +39,6 @@ libraryDependencies += "me.lessis" %% "lapse" % "0.1.0"
 
 addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.7.1")
 
-fork in Test := true
-
-javaOptions in (Test,run) += s"""-Djava.library.path="${(baseDirectory in ThisBuild).value / "lib"}/" """
-
 triggeredMessage := Watched.clearWhenTriggered
 
 maxErrors := 10
