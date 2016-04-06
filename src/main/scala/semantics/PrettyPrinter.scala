@@ -3,12 +3,13 @@ package semantics
 import domains._
 import syntax.ast.Statement.{NoMI, MI}
 import syntax.ast._
+import scalaz._, Scalaz._
 
 object PrettyPrinter {
 
-  def pretty(stack: SStack): String = s"[${stack.map {case (vr, e) => s"$vr ↦ ${pretty(e)}"}.mkString(", ")}]"
+  def pretty(stack: SStack): String = s"σ# = [${stack.map {case (vr, e) => s"$vr ↦ ${pretty(e)}"}.mkString(", ")}]"
 
-  private val symbs = "αβγδεζηθικλμνξοxπρςστυφχψω"
+  private val symbs = "abcdefghijklmnopqrstuvwxyz"
 
   private def prettySymb(ident : Int) : String = {
     val l = symbs.length
@@ -17,7 +18,7 @@ object PrettyPrinter {
       if (j < 0) j + l else j
     }
     val i = ident / l
-    s"${symbs(j)}${if (ident >= 0) if (i == 0) "" else s"`$i" else "´"}"
+    s"${symbs(j)}${if (ident >= 0) if (i == 0) "" else s"_$i?" else "_in?"}"
   }
 
   def pretty(minf: Statement.MetaInf): String = minf match {
@@ -110,26 +111,26 @@ object PrettyPrinter {
 
   def pretty(pure: Prop): String = pure.map(pretty[IsSymbolic.type]).mkString(" ∧ ")
 
-  def pretty(loc : Loc, spatialDesc: SpatialDesc): String = spatialDesc match {
-    case SpatialDesc(c, typ, children, refs, descendantspool) =>
-      // TODO Pretty descendant pool
-      val prettytyp = typ match {
-        case ExactDesc => s"${pretty(loc)} : ${c.name}"
-        case AbstractDesc => s"inst${c.name}〉${pretty(loc)}"
-        case PartialDesc(hasExact, possible) => s"inst〈${sep(if (hasExact) s"☐${c.name}" else "", ",", possible.map(_.name).mkString(", "))}〉 ${pretty(loc)}"
-      }
-      sep(prettytyp, "★",
-        sep(s"${children.map{ case (f, e) => pretty(loc, f, "◆↣", e) }.mkString(" ★ ")}", "★",
-          s"${refs.map{ case (f, e) => pretty(loc, f, "↝", e) }.mkString(" ★ ")}"))
-  }
-
-  def pretty[T <: ASTType](sym : Symbols, f : Fields, sep : String, e : SetExpr[T]): String =
-    s"${pretty(Symbol(sym))}.$f $sep ${pretty(e)}"
-
   def pretty(loc: Loc): String = s"⟪${loc.id}⟫"
 
-  def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String =
-    spatial.map(p => pretty(p._1, p._2)).mkString(" ★ ")
+  def pretty(spatial : Spatial)(implicit d : DummyImplicit) : String = {
+    val (types, links, descendantpools) = spatial.map { case (loc, sdesc) =>
+        val typeinfo = sdesc.desctype match {
+          case ExactDesc => s"${pretty(loc)} : ${sdesc.cl.name}"
+          case AbstractDesc => s"${pretty(loc)} <: ${sdesc.cl.name}"
+          case PartialDesc(hasExact, possible) =>
+            val all = possible ++ (if (hasExact) Set(sdesc.cl) else Set())
+            s"${pretty(loc)} <: ${all.map(_.name).mkString("{", ",", "}")}"
+        }
+        val refs = sdesc.refs.map { case (f, e) => s"${pretty(loc)}.$f ↝ ${pretty(e)}" }
+        val children = sdesc.refs.map { case (f, e) => s"${pretty(loc)}.$f ⤞ ${pretty(e)}" }
+        val dps = sdesc.descendantpools.map { case (c, e) => s"${pretty(loc)}∇${c.name} = ${pretty(e)}" }
+        (typeinfo, refs ++ children, dps)
+    }.unzip3
+    s"Γ# = ${types.mkString("[", ",", "]")}; " +
+      s"ℓ# = ${links.flatten.mkString("[", ",", "]")}; " +
+        s"∂# = ${descendantpools.flatten.mkString("[", ",", "]")}"
+  }
 
   def pretty[T <: ASTType](loc : Loc, f : Fields, sep : String, e : SetExpr[T]): String =
     s"${pretty(loc)}.$f $sep ${pretty(e)}"
