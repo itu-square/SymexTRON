@@ -179,7 +179,6 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         os1 <- evalExpr(e1, stack)
         os2 <- evalExpr(e2, stack)
       } yield os1 == os2
-      case SetMem(be1, e2) => impossible
       case SetSubEq(e1, e2) => for {
         os1 <- evalExpr(e1, stack)
         os2 <- evalExpr(e2, stack)

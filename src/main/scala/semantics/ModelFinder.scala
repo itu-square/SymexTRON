@@ -376,16 +376,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
   def translateBoolExpr(b : BoolExpr[IsSymbolic.type], symmap: Map[Symbol, Relation], ssymmap : Map[SetSymbol, Relation], isNegated: Boolean = false)
   : String \/ (List[Formula], Formula) = b match {
     case Eq(e1, e2) => translateBinaryBoolExpr(e1, _ eq _, e2, symmap, ssymmap, isNegated)
-    case SetMem(e1, e2) => for {
-        (cs2, ee2) <- translateSetExpr(e2, symmap, ssymmap)
-        symrel <- e1 match {
-          case Symbol(ident) => symmap.get(Symbol(ident)).cata(_.right, s"Unknown symbol ${Symbol(ident)}".left)
-        }
-        formula = {
-          val symInSyms = symrel in ee2
-          if (isNegated) symInSyms.not else symInSyms
-        }
-      } yield (cs2, formula)
     case SetSubEq(e1, e2) =>  translateBinaryBoolExpr(e1, _ in _, e2, symmap, ssymmap, isNegated)
     case True() => (List(), if (isNegated) Formula.FALSE else Formula.TRUE).right
     case And(b1,b2) =>

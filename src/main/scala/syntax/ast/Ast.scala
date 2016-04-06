@@ -36,7 +36,6 @@ case class SetSymbol(id: Symbols) extends SetExpr[IsSymbolic.type]
 
 sealed trait BoolExpr[T <: ASTType]
 case class Eq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
-case class SetMem[T <: ASTType](e1: BasicExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
 case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
 case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T]
 case class True[T <: ASTType]() extends BoolExpr[T]

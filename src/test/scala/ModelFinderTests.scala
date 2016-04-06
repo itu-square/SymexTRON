@@ -37,16 +37,16 @@ class ModelFinderTests extends FlatSpec
   it should "find an instance with three lists in the head-tail equal transformation program" in {
     val stack: SStack = Map("list" -> SetLit(Seq(Symbol(1))))
     val heap = SHeap(
-      Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Single,SRef),
-          SetSymbol(11) -> SSymbolDesc(Class("Int"),Single,SRef),
-          SetSymbol(19) -> SSymbolDesc(Class("IntList"),Opt,SOwned(Loc(10), "next")),
-          SetSymbol(20) -> SSymbolDesc(Class("Int"),Single,SRef)),
+      Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Single),
+          SetSymbol(11) -> SSymbolDesc(Class("Int"),Single),
+          SetSymbol(19) -> SSymbolDesc(Class("IntList"),Opt),
+          SetSymbol(20) -> SSymbolDesc(Class("Int"),Single)),
       Map(Symbol(1) -> Loced(Loc(1)),
           Symbol(9) -> Loced(Loc(5)),
           Symbol(18) -> Loced(Loc(10))),
       Map(Loc(1) -> Unfolded,
-          Loc(5) -> Owned(Loc(1),"next"),
-          Loc(10) -> Owned(Loc(5),"next")),
+          Loc(5) -> Unfolded,
+          Loc(10) -> Unfolded),
       Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
           Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
           Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)), Map("data" -> SetSymbol(20)),Map())),
