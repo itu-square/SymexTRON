@@ -1,11 +1,33 @@
+import com.typesafe.sbt.license.{LicenseInfo, DepModuleInfo}
 import sbt._
-import util.matching.Regex._
+
+// Project Metadata
+
+name := "SymexTRON"
+description := "A tool for automatically generating tests for TRON programs using symbolic execution"
+version := "0.5"
+startYear := Some(2015)
+licenses += "GPLv3" -> url("https://www.gnu.org/licenses/gpl-3.0.en.html")
+
+organization := "dk.itu"
+organizationName := "IT University of Copenhagen"
+organizationHomepage := Some(url("https://itu.dk"))
+
+
+// License things
+licenseOverrides := {
+  case DepModuleInfo("com.google.guava",_,_) => LicenseInfo.APACHE2
+  case DepModuleInfo("org.slf4j",_,_) => LicenseInfo.MIT
+}
+
+// Configuration
 
 resolvers += Resolver.sonatypeRepo("public")
 resolvers += Resolver.sonatypeRepo("releases")
 resolvers += "softprops-maven" at "http://dl.bintray.com/content/softprops/maven"
 
-name := "VeriTRAN"
+
+mainClass in Compile := Some("examples.evaluation.Evaluation")
 
 version := "0.3"
 
