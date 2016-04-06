@@ -70,23 +70,6 @@ package object ast {
     val subtypesOrSelf: Map[Class, Set[Class]] =
       subtypes.map(((c : Class, sts : Set[Class]) => (c, sts + c)).tupled)
 
-
-    val containing: Map[Class, Set[Class]] = defs.values.foldLeft[Map[Class, Set[Class]]](Map()) {(m, cd) =>
-      val c = Class(cd.name)
-      val sts = subtypesOrSelf
-      val childfieldtypes = (Set(c) ++ supertypes(c))
-                                .map(defs)
-                                .flatMap(_.children.values.map(_._1).toSet)
-                                .flatMap(sts)
-      m + (c -> childfieldtypes)
-    }.trans ++ Map[Class, Set[Class]](Class("Any") -> Set())
-
-    def canContain(c1 : Class, c2 : Class): Boolean = {
-      val cts = containing
-      val supertypesOrSelf = Set(c2) ++ defs.supertypes(c2)
-      supertypesOrSelf.exists(ct => cts(c1).contains(ct))
-    }
-
     {
       val commoncr = childfields intersect reffields
       assert(commoncr.isEmpty, s"There are overlapping names used for fields and references: ${commoncr.mkString(", ")}")

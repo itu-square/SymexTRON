@@ -29,11 +29,6 @@ package object helper {
 
   implicit class MultiMap[K, V](m : Map[K, Set[V]]) {
     def adjust[B1 >: Set[V]](key: K)(f : B1 => B1) = m updated (key, f (m getOrElse(key, Set())))
-    def merge: Option[Map[K, V]] = m.foldLeft(Option(Map[K,V]())){
-      (res, kv) =>
-        for (r <- res
-             if kv._2.size == 1) yield r + (kv._1 -> kv._2.head)
-    }
   }
 
   implicit class TransitiveClosure[S](m: Map[S, Set[S]]) {
@@ -71,16 +66,7 @@ package object helper {
       sa.foldLeft(G.TC.pure(Set[G.A]()))((ss : G.M[Set[G.A]], el : A) =>
          G.TC.lift2[Set[G.A], G.A, Set[G.A]](_ + _)(ss, G.apply(f(el))))
     }
-
-    def pairings[B](sb: Set[B]): Set[(Set[(A, B)], Set[(A,B)])] = sa.foldLeft(Set[(Set[(A,B)], Set[A], Set[B])]((Set(), Set(), sb))) { (st, a) =>
-        st.flatMap { case (assignments, unassigned, rsb) =>
-          rsb.map { b => (assignments + ((a, b)), unassigned, rsb - b) } + ((assignments, unassigned + a, rsb))
-        }
-    } map { case (assignments, unassigneda, unassignedb) => (assignments, for (ua <- unassigneda; ub <- unassignedb) yield (ua, ub)) }
   }
-
-  implicit val pmn = scalaz.stream.Process.processMonadPlus[Nothing]
-  implicit val pmt = scalaz.stream.Process.processMonadPlus[Task]
 
   implicit class TMapExtensions[A,B](m : TMap[A,B]) {
     def updateValue(k : A, f : B => B) = atomic { implicit txn =>
@@ -88,10 +74,7 @@ package object helper {
       oldVr.foreach(oldV => m.update(k, f(oldV)))
     }
   }
-  implicit class LiftMatch[A](a : A) {
-    def liftMatch[B,M[_]](f : PartialFunction[A,B])(implicit monadPlus: MonadPlus[M]): M[B] =
-      if (f.isDefinedAt(a)) monadPlus.point(f(a)) else monadPlus.empty
-  }
+
   implicit class ListNormalizeOps[A](l : List[A]) {
     def normalizeMonoidal(implicit monoid: Monoid[A]): A = l match {
       case Nil => monoid.zero
@@ -103,21 +86,8 @@ package object helper {
     }
   }
 
-  implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
-    val interleaved: Interleaved[F, O] = Interleaved(p)
-  }
-
+  implicit val pmn = scalaz.stream.Process.processMonadPlus[Nothing]
+  implicit val pmt = scalaz.stream.Process.processMonadPlus[Task]
 }
 
-
-case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
-  def map[O2](f : O => O2) = Interleaved(toProcess.map(f))
-
-  def flatMap[F2[x] >: F[x], O2](f: O => Interleaved[F2, O2])
-  : Interleaved[F2, O2] = Interleaved {
-    toProcess.fold(Process.halt : Process[F2, O2])((ps, o) =>
-      ps.tee((f(o).toProcess))(helper.teePlus.interleaveAll)
-    ).flatMap(identity)
-  }
-}
 

@@ -1,8 +1,5 @@
 package helper
 
-/**
- * Created by asal on 06/10/2015.
- */
 class Counter(value : Int) extends Ref[Int](value) {
   def +=(diff : Int) = {
     val oldValue = !this
