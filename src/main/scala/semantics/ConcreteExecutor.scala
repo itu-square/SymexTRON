@@ -146,7 +146,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         cs <- h.childenv.get(o).cata(_.right, s"Unknown object $o".left)
         _ <- cs.get(f).cata(_.right, s"Unknown child $f of object o".left)
       } yield h |>
-        (disown _).un(os2) |>
+        (nh => disown(nh, os2)) |>
         _ch_childenv.modify(_.updated(o, cs.updated(f, os2)))
     else if (defs.reffields.contains(f))
       for {
@@ -157,7 +157,9 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
   }
 
   private def evalExpr(e: SetExpr[IsProgram.type], stack: CStack): String \/ Set[Instances] = e match {
-    case SetLit(es) => if (es.isEmpty) Set[Instances]().right[String] else impossible
+    case SetLit(es) =>
+      assert(es.isEmpty)
+      Set[Instances]().right[String]
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)

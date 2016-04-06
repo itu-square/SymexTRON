@@ -2,11 +2,12 @@ package examples
 
 
 import syntax.ast.Statement.BranchPoint
+import util.DotConverter
 
 import scala.collection.JavaConversions._
 
 import helper.Counter
-import semantics.{PrettyPrinter, DotConverter, ModelFinder}
+import semantics.{PrettyPrinter, ModelFinder}
 import syntax.ast.{Class,ClassDefinition, Statement}
 import semantics.domains._
 import testing.{BlackBoxTestGenerator, WhiteBoxTestGenerator}

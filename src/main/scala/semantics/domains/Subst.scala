@@ -1,7 +1,6 @@
-package semantics
+package semantics.domains
 
 import syntax.ast._
-import semantics.domains._
 
 trait Subst[T] {
   def toT : T

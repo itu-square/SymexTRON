@@ -14,9 +14,6 @@ import scalaz.stream.Process
 
 
 package object helper {
-  type StringE[B] = String \/ B
-  type TProcess[A] = Process[Task, A]
-
   implicit class RichProcess[F[_], A](p : Process[F, A]) {
     def withFilter(f: A => Boolean) = p.filter(f)
   }
@@ -53,10 +50,6 @@ package object helper {
     }
   }
 
-  implicit class TransitiveGetter[S,M[_]](g: Getter[S, M[S]]) {
-    def get_*(s : S)(implicit m: Monad[M]): M[S] = m.bind(g.get(s))(g.get_*)
-  }
-
   implicit class RichIterable[A](it : Iterable[A]) {
     def single: Option[A] = {
       val iter = it.iterator
@@ -69,19 +62,7 @@ package object helper {
     }
   }
 
-  /**
-   * An expression that fails if ever reached
- *
-   * @return no value, since it will always fail if called
-   */
-  @elidable(ASSERTION)
-  def impossible: Nothing = throw new AssertionError("Impossible case reached")
-
-
-  def hole[T]: T = throw new HoleError()
-  def blackHole(hole : BlackHole) : Nothing = throw new HoleError()
-
-  implicit class SetExtensions[A](sa : Set[A]) {
+  implicit class RichSet[A](sa : Set[A]) {
     def sequenceU(implicit G: Unapply[Applicative, A]): G.M[Set[G.A]] = {
       sa.traverseU(identity)
     }
@@ -98,26 +79,8 @@ package object helper {
     } map { case (assignments, unassigneda, unassignedb) => (assignments, for (ua <- unassigneda; ub <- unassignedb) yield (ua, ub)) }
   }
 
-  def processMonad[F[_]]: Monad[({ type l[a] = Process[F, a] })#l] = new Monad[({ type l[a] = Process[F, a] })#l] {
-    def point[A](a: => A): Process[F, A] = Process.emit(a)
-    def bind[A, B](fa : Process[F, A])(f : A => Process[F, B]): Process[F, B] = fa.flatMap(f)
-  }
-
-  implicit val pmn = helper.processMonad[Nothing]
-  implicit val pmt = helper.processMonad[Task]
-
-
-  implicit class UnFunction1[A,B,C](f : (A, B) => C) {
-    def un(b : B)(a : A): C = f (a, b)
-  }
-
-  implicit class UnFunction2[A,B,C,D](f : (A, B, C) => D) {
-    def un(b : B, c : C)(a : A): D = f (a, b, c)
-  }
-
-  implicit class UnFunction3[A,B,C,D,E](f : (A, B, C, D) => E) {
-    def un(b : B, c : C, d : D)(a : A): E = f(a, b, c, d)
-  }
+  implicit val pmn = scalaz.stream.Process.processMonadPlus[Nothing]
+  implicit val pmt = scalaz.stream.Process.processMonadPlus[Task]
 
   implicit class TMapExtensions[A,B](m : TMap[A,B]) {
     def updateValue(k : A, f : B => B) = atomic { implicit txn =>
@@ -125,11 +88,6 @@ package object helper {
       oldVr.foreach(oldV => m.update(k, f(oldV)))
     }
   }
-
-  implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
-    val interleaved: Interleaved[F, O] = Interleaved(p)
-  }
-
   implicit class LiftMatch[A](a : A) {
     def liftMatch[B,M[_]](f : PartialFunction[A,B])(implicit monadPlus: MonadPlus[M]): M[B] =
       if (f.isDefinedAt(a)) monadPlus.point(f(a)) else monadPlus.empty
@@ -144,10 +102,13 @@ package object helper {
       }
     }
   }
+
+  implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
+    val interleaved: Interleaved[F, O] = Interleaved(p)
+  }
+
 }
 
-sealed trait BlackHole
-case class HoleError() extends Error
 
 case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
   def map[O2](f : O => O2) = Interleaved(toProcess.map(f))

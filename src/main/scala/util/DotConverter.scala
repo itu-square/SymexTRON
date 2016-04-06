@@ -1,6 +1,6 @@
-package semantics
+package util
 
-import semantics.domains.{Instances, CMem}
+import semantics.domains.{CMem, Instances}
 import syntax.ast._
 
 /**

@@ -38,7 +38,7 @@ package object ast {
       maxClass(c, c2).cata(identity,
         (supertypes(c) intersect supertypes(c2)).foldLeft(none[Class])({ (st, c) =>
           st.cata(c2 => minClass(c, c2), c.some)
-        }).cata(identity, impossible)
+        }).get
       )
     }
 
