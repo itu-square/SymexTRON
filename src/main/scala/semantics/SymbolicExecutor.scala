@@ -111,7 +111,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
   private def executeHelper(pre : SMem, stmt : Statement) : EitherT[Process[Task, ?], String, SMem] = {
-    // Todo parallelise using mergeN
+    // TODO parallelise using mergeN
     stmt match {
       case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[Process[Task, ?], String, SMem](pre.right.point[Process[Task, ?]])) { (memr, s) =>
         memr.flatMap { mem => executeHelper(mem, s) }
@@ -224,7 +224,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       else if (defs.maxClass(c, oc).isDefined) {
         EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](paritionSyms(syms, imem, c))
       } else {
-        // TODO perhaps have this case on findSyms
         EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[Process[Task, ?]])
       }
     }, EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[Process[Task, ?]]))
@@ -299,11 +298,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private val locCounter = Counter(0)
 
-  private def freshLoc = Loc(locCounter.++())
+  private def freshLoc = Loc(locCounter.++)
 
   private val symCounter = Counter(0)
 
-  private def freshSym: Symbols = symCounter.++()
+  private def freshSym: Symbols = symCounter.++
 
   val lazyInitializer = new LazyInitializer(symCounter, locCounter, defs, optimistic = false)
 

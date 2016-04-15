@@ -3,7 +3,6 @@ package examples
 import syntax.ast._
 
 object FullClassModel {
-  // TODO Also update diagram with types for method, field and parameter
   val classDefs = Set(
      new ClassDefinition("Package", Map("classes" -> ((Class("Class"), Many))), Map())
     , new ClassDefinition("Class",

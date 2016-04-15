@@ -230,5 +230,5 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
 
   private val symCounter = Counter(0)
 
-  private def freshInstance: Instances = symCounter++
+  private def freshInstance: Instances = symCounter.++
 }

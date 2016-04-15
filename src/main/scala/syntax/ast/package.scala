@@ -65,7 +65,7 @@ package object ast {
       )
     } + (Class("Any") -> defs.values.toSet.filter(c => c.name != "Any" && c.superclass.isEmpty).map(c => Class(c.name)))
 
-    val subtypes: Map[Class, Set[Class]] = directSubtypes.trans
+    val subtypes: Map[Class, Set[Class]] = directSubtypes.trans()
 
     val subtypesOrSelf: Map[Class, Set[Class]] =
       subtypes.map(((c : Class, sts : Set[Class]) => (c, sts + c)).tupled)

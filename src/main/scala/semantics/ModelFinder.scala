@@ -287,7 +287,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     val additionalocobjs =  additionallocs.map{ loc => (loc, s"loc'${loc.id}") }.toMap
     val allLocobjs = locobjs ++ additionalocobjs
     val symobjs = symmap.map { case (sym, _) => (sym, s"sym'${sym.id}") }
-    val ssymobjs = ssymmap.map { case (ssym, _) => (ssym, s"set'${ssym.id}") }.toMap
+    val ssymobjs = ssymmap.map { case (ssym, _) => (ssym, s"set'${ssym.id}") }
     val typeobjs = TypesRel.typerels.map { case (c, _) => (c, s"type'${c.name}") }
     val fieldobjs = FieldsRel.fieldsrels.map { case (field, _) => (field, s"field'$field") }
     val varobjs = varmap.map { case (vr, _) => (vr, s"var'$vr") }

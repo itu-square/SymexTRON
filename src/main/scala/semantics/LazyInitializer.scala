@@ -42,7 +42,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
       nnheap
     }
     def assignLoc(sym: Symbol, excluded: Seq[Loc], cl: Class, notinstof: Set[Class], heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
-      val newLoc = Loc(loccounter.++())
+      val newLoc = Loc(loccounter.++)
       val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
       val aliasLocs = relevantLocs(nheap, cl, notinstof) diff excluded.toSet
       val nnheap: SHeap = addNewLoc(sym, newLoc, sdesc, Unfolded, nheap)
@@ -71,7 +71,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
       val (svltion, fields) = st
       fieldkv match {
         case (f, (cl, crd)) =>
-          val sym = SetSymbol(symcounter.++())
+          val sym = SetSymbol(symcounter.++)
           (svltion + (sym -> SSymbolDesc(cl, crd)), fields + (f -> sym))
       }
     }

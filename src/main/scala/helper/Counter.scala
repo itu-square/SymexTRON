@@ -11,11 +11,11 @@ class Counter(value : Int) extends Ref[Int](value) {
     this += -diff
   }
 
-  def ++() = {
+  def ++ = {
     this += 1
   }
 
-  def --() = {
+  def -- = {
     this -= 1
   }
 }
