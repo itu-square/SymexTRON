@@ -22,7 +22,7 @@ object ContactBookExample extends Example {
   override val pres: Set[SMem] = {
     val stack = Map("contactbook" -> SetLit(Seq(Symbol(-1))))
     Set(
-      SMem(stack, stack,
+      SMem(SStack.initial(stack),
         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("ContactBook"), Set())), Map(), Map(), Set()))
     )
   }

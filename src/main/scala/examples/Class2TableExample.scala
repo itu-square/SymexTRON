@@ -22,7 +22,7 @@ trait Class2TableExample extends Example {
   override val pres = {
     val stack = Map("class" -> SetLit(Seq(Symbol(-1))))
     Set(
-      SMem(stack, stack,
+      SMem(SStack.initial(stack),
         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Class"), Set())), Map(), Map(), Set()))
     )
   }

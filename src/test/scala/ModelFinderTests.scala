@@ -35,7 +35,7 @@ class ModelFinderTests extends FlatSpec
   }
 
   it should "find an instance with three lists in the head-tail equal transformation program" in {
-    val stack: SStack = Map("list" -> SetLit(Seq(Symbol(1))))
+    val stack: SStackState = Map("list" -> SetLit(Seq(Symbol(1))))
     val heap = SHeap(
       Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Single),
           SetSymbol(11) -> SSymbolDesc(Class("Int"),Single),
@@ -54,7 +54,7 @@ class ModelFinderTests extends FlatSpec
           Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
           Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)),Map("data" -> SetSymbol(20)),Map())),
       Set(Not(Eq(SetLit(List(Symbol(1))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(9))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(18))),SetLit(List())))))
-    val pre = SMem(stack, stack, heap)
+    val pre = SMem(SStack.initial(stack), heap)
     val modelFinder = new ModelFinder(IntListHeadTailEqExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 6)
     val ccr = modelFinder invokePrivate concretisationConstraints(pre)
     ccr should be a 'right

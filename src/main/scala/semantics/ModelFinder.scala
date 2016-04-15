@@ -7,6 +7,7 @@ import kodkod.engine.Solver
 import kodkod.engine.satlab.SATFactory
 import kodkod.engine.ucore.SCEStrategy
 import kodkod.instance.{Bounds, Instance, TupleSet, Universe}
+import semantics.domains.SMem._
 import semantics.domains._
 import syntax.ast._
 
@@ -453,7 +454,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
-      extractConcreteMemory(inst, smem.initStack.keySet)}
+      extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)}
   }
 
   private
@@ -465,9 +466,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     }
     val symmap = smem.heap.svltion.keySet.map(sym => sym -> Relation.unary(s"Sym$$${sym.id}")).toMap
     val ssymmap = smem.heap.ssvltion.keySet.map(ssym => ssym -> Relation.unary(s"SetSym$$${ssym.id}")).toMap
-    val varmap = smem.initStack.keySet.map(vr => vr -> Relation.unary(s"Var$$$vr")).toMap
+    val varmap = _sm_initStack.get(smem).keySet.map(vr => vr -> Relation.unary(s"Var$$$vr")).toMap
     val locmap = smem.heap.initSpatial.keySet.map(loc => loc -> Relation.unary(s"Loc$$${loc.id}")).toMap
-    val varconstraints = smem.initStack.foldLeft(List[Formula]().right[String]) { (str, vinfo) =>
+    val varconstraints = _sm_initStack.get(smem).foldLeft(List[Formula]().right[String]) { (str, vinfo) =>
       val (vr, exp) = vinfo
       for {
         constraints <- str

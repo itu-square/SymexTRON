@@ -1,13 +1,14 @@
 package semantics
 
 import domains._
+import semantics.domains.SMem._
 import syntax.ast.Statement.{NoMI, MI}
 import syntax.ast._
 import scalaz._, Scalaz._
 
 object PrettyPrinter {
 
-  def pretty(stack: SStack): String = s"σ# = [${stack.map {case (vr, e) => s"$vr ↦ ${pretty(e)}"}.mkString(", ")}]"
+  def pretty(stack: SStackState): String = s"σ# = [${stack.map {case (vr, e) => s"$vr ↦ ${pretty(e)}"}.mkString(", ")}]"
 
   private val symbs = "abcdefghijklmnopqrstuvwxyz"
 
@@ -166,7 +167,7 @@ object PrettyPrinter {
     sep(sep(sep(sep(pretty(heap.ssvltion) , ";", pretty(heap.svltion)), ";", pretty(heap.locOwnership)), ";", s"${pretty(if (initial) heap.initSpatial else heap.currentSpatial)}"), "∧", s"(${pretty(heap.pure)})")
 
   def pretty(mem : SMem, initial: Boolean): String =
-    sep(s"${pretty(if (initial) mem.initStack else mem.currentStack)}", ";", s"${pretty(mem.heap, initial)}")
+    sep(s"${pretty(if (initial) _sm_initStack.get(mem) else _sm_currentStack.get(mem))}", ";", s"${pretty(mem.heap, initial)}")
 
   def sep(s1 : String, ss : String, s2 : String) =
     if (s2.trim.isEmpty) s1

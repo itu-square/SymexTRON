@@ -1,5 +1,6 @@
 package semantics.domains
 
+import semantics.domains.SMem._
 import syntax.ast._
 
 import scalaz.Scalaz._
@@ -65,12 +66,12 @@ trait SymbolicOps {
     override val symbols = heap.ssvltion.symbols ++ heap.svltion.symbols ++ heap.currentSpatial.symbols ++ heap.pure.symbols
   }
 
-  implicit class SymbolicSStack(stack : SStack) extends Symbolic {
+  implicit class SymbolicSStack(stack : SStackState) extends Symbolic {
     override val symbols = stack.values.toSet.flatMap((e : SetExpr[IsSymbolic.type]) => e.symbols)
   }
 
   implicit class SymbolicSMem(mem : SMem) extends Symbolic {
-    override val symbols = mem.currentStack.symbols ++ mem.heap.symbols
+    override val symbols = _sm_currentStack.get(mem).symbols ++ mem.heap.symbols
   }
 
   implicit class SymbolIds(s : Set[SetSymbol \/ Symbol]) {

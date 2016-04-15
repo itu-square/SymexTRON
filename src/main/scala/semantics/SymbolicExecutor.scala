@@ -118,7 +118,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         memr.flatMap { mem => executeHelper(mem, s) }
       }
       case AssignVar(_,x, e) => for {
-          ee <- evalSetExpr[Process[Task, ?]](pre.currentStack, e)
+          ee <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(pre), e)
         } yield _sm_currentStack.modify(_ + (x -> ee))(pre)
       case New(_, x, c) =>
         val post = for {
@@ -135,21 +135,20 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         } yield updated
         EitherT[Process[Task, ?], String, SMem](post.point[Process[Task, ?]])
       case LoadField(_, x, e, f) => for {
-        eres <- evalSetExpr[Process[Task, ?]](pre.currentStack, e)
+        eres <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(pre), e)
         (Seq(sym), _, mem) <- EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, eres).point[Process[Task, ?]])
         (e, nheap) <- access(sym, f, mem.heap)
       } yield (_sm_currentStack.modify(_ + (x -> e)) andThen _sm_heap.set(nheap))(mem)
       case AssignField(_, e1, f, e2) => for {
-          e1res <- evalSetExpr[Process[Task, ?]](pre.currentStack, e1)
+          e1res <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(pre), e1)
           (Seq(sym), _, mem) <- EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](findSyms(1, pre, e1res).point[Process[Task, ?]])
-          ee2 <- evalSetExpr[Process[Task, ?]](mem.currentStack, e2)
+          ee2 <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(mem), e2)
           nheap <- update(sym, f, ee2, mem.heap)
         } yield _sm_heap.set(nheap)(mem)
       case If(_, cond, ts, fs) => for {
-        econd <- evalBoolExpr[Process[Task, ?]](pre.currentStack, cond)
+        econd <- evalBoolExpr[Process[Task, ?]](_sm_currentStack.get(pre), cond)
         newtmem = (_sm_heap ^|-> _sh_pure).modify(_ + econd)(pre)
         newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
-        // TODO rewrite using liftA2?
         execTrue =
           for {
             _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(newtmem))
@@ -164,7 +163,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       } yield res
       case For(_, x, m, sb) =>
         for {
-          ee <- evalSetExpr[Process[Task, ?]](pre.currentStack, _me_e.get(m))
+          ee <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(pre), _me_e.get(m))
           (syms, oee, imem) <-  EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
             count => findSyms(count, pre, ee)
           })
@@ -192,15 +191,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         def fixEqCase(bmem: SMem): EitherT[Process[Task, ?], String, SMem] = for {
             _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(bmem))
             amem <- executeHelper(bmem, sb)
-            eeb <- evalSetExpr[Process[Task, ?]](bmem.currentStack, e)
-            eea <- evalSetExpr[Process[Task, ?]](amem.currentStack, e)
+            eeb <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(bmem), e)
+            eea <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(amem), e)
             updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
           } yield updatedMem
         def fixNeqCase(bmem: SMem, k: Int): EitherT[Process[Task, ?], String, SMem] = for {
             _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(bmem))
             imem <- executeHelper(bmem, sb)
-            eeb <- evalSetExpr[Process[Task, ?]](bmem.currentStack, e)
-            eei <- evalSetExpr[Process[Task, ?]](imem.currentStack, e)
+            eeb <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(bmem), e)
+            eei <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(imem), e)
             updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Not(Eq(eeb, eei)))(imem)
             fixmore <- if (k <= 0) fixEqCase(imem) else EitherT[Process[Task, ?],String,SMem](fixEqCase(imem).run ++ fixNeqCase(imem, k - 1).run)
           } yield fixmore
@@ -253,7 +252,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
-  def evalSetExpr[M[_] : Monad](s : SStack, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
+  def evalSetExpr[M[_] : Monad](s : SStackState, e : SetExpr[IsProgram.type]) : EitherT[M, String, SetExpr[IsSymbolic.type]] = {
       e match {
         case SetLit(es) =>
           assert (es.isEmpty)
@@ -275,7 +274,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       }
     }
 
-  def evalBoolExpr[M[_] : Monad](st : SStack, sp : BoolExpr[IsProgram.type]) : EitherT[M, String, BoolExpr[IsSymbolic.type]] = sp match {
+  def evalBoolExpr[M[_] : Monad](st : SStackState, sp : BoolExpr[IsProgram.type]) : EitherT[M, String, BoolExpr[IsSymbolic.type]] = sp match {
     case Eq(e1, e2) =>
       for {
         ee1 <- evalSetExpr[M](st, e1)

@@ -1,5 +1,6 @@
 package semantics.domains
 
+import semantics.domains.SStack.{_ss_current, _ss_init}
 import syntax.ast._
 
 trait Subst[T] {
@@ -136,18 +137,23 @@ object Subst {
   implicit class SubstSStack(stack : SStack) extends Subst[SStack] {
     override def toT = stack
 
-    override def subst(x: Symbol, y: Symbol): SStack = stack.mapValues(_.subst(x, y))
+    override def subst(x: Symbol, y: Symbol): SStack =
+      (_ss_init.modify(_.mapValues(_.subst(x,y))) andThen
+          _ss_current.modify(_.mapValues(_.subst(x,y))))(stack)
 
-    override def subst(x: SetSymbol, e: SetExpr[IsSymbolic.type]): SStack = stack.mapValues(_.subst(x, e))
+
+    override def subst(x: SetSymbol, e: SetExpr[IsSymbolic.type]): SStack =
+      (_ss_init.modify(_.mapValues(_.subst(x,e))) andThen
+        _ss_current.modify(_.mapValues(_.subst(x,e))))(stack)
   }
 
   implicit class SubstSMem(mem : SMem) extends Subst[SMem] {
     override def toT = mem
 
     override def subst(x: Symbol, y: Symbol): SMem =
-      SMem(mem.initStack.subst(x,y), mem.currentStack.subst(x,y), mem.heap.subst(x, y))
+      SMem(mem.stack.subst(x,y), mem.heap.subst(x, y))
 
     override def subst(x: SetSymbol, e: SetExpr[IsSymbolic.type]): SMem =
-      SMem(mem.initStack.subst(x, e), mem.currentStack.subst(x, e), mem.heap.subst(x, e))
+      SMem(mem.stack.subst(x, e), mem.heap.subst(x, e))
   }
 }

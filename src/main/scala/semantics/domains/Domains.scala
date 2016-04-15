@@ -51,12 +51,19 @@ object SHeap {
     SHeap(ssvltion, svltion, locOwnership, spatial, spatial, pure)
 }
 
-// TODO Pair up initStack/initHeap currentStack/currentHeap
-case class SMem(initStack: SStack, currentStack: SStack, heap: SHeap)
+case class SStack(init: SStackState, current: SStackState)
+
+object SStack {
+  val _ss_init = GenLens[SStack](_.init)
+  val _ss_current = GenLens[SStack](_.current)
+  def initial(sstackstate: SStackState) = SStack(sstackstate, sstackstate)
+}
+
+case class SMem(stack: SStack, heap: SHeap)
 
 object SMem {
-  val _sm_initStack = GenLens[SMem](_.initStack)
-  val _sm_currentStack = GenLens[SMem](_.currentStack)
+  val _sm_initStack = GenLens[SMem](_.stack.init)
+  val _sm_currentStack = GenLens[SMem](_.stack.current)
   val _sm_heap = GenLens[SMem](_.heap)
 
   def allTypes(mem: SMem): Set[Class] = {
