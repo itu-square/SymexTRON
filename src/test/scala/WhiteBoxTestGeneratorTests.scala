@@ -69,7 +69,7 @@ class WhiteBoxTestGeneratorTests
   }
 
   // Inner for-loop only can run 0 or 1 time (not more)
-  it should "generate 100.0% covering tests for contact book transformation" in {
+  it should "generate 100% covering tests for contact book transformation" in {
     run(ContactBookExample, 100.0)
   }
 }
