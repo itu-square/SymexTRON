@@ -13,7 +13,6 @@ import scalaz._
 import scalaz.concurrent.Task
 import scalaz.stream._
 import MatchExpr._
-import Subst._
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {

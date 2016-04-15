@@ -4,7 +4,6 @@ import helper.Counter
 import semantics.domains.SHeap._
 import semantics.domains.SpatialDesc._
 import semantics.domains._
-import Subst._
 import syntax.ast._
 
 import scalaz.concurrent.Task
