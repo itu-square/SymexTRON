@@ -54,9 +54,6 @@ libraryDependencies ++= Seq(
 libraryDependencies += "org.scalactic" %% "scalactic" % "2.2.6"
 libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 
-libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
-libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
-
 libraryDependencies += "me.lessis" %% "lapse" % "0.1.0"
 
 addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.7.1")

@@ -1,6 +1,5 @@
 package semantics
 
-import com.typesafe.scalalogging.LazyLogging
 import helper._
 import kodkod.ast._
 import kodkod.engine.Solution.Outcome
@@ -16,8 +15,7 @@ import scala.collection.JavaConverters._
 import scala.language.higherKinds
 import scalaz._, Scalaz._
 
-class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int)
-  extends LazyLogging {
+class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
   private type StringE[T] = String \/ T
 
