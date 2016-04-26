@@ -35,6 +35,8 @@ scalaVersion := "2.11.7"
 
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
 
+libraryDependencies += "org.sat4j" % "org.sat4j.core" % "2.3.1"
+
 libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.3"
 
 libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.8"

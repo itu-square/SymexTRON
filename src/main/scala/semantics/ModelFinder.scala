@@ -3,8 +3,8 @@ package semantics
 import helper._
 import kodkod.ast._
 import kodkod.engine.Solution.Outcome
-import kodkod.engine.Solver
-import kodkod.engine.satlab.SATFactory
+import kodkod.engine.{Solution, AbortedException, Solver}
+import kodkod.engine.satlab.{SATAbortedException, SATFactory}
 import kodkod.engine.ucore.SCEStrategy
 import kodkod.instance.{Bounds, Instance, TupleSet, Universe}
 import semantics.domains.SMem._
@@ -566,10 +566,19 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
   private
   def findSolution(constraints: List[Formula], bounds: Bounds): String \/ Instance = {
-    val solver = new Solver
-    solver.options.setSolver(SATFactory.plingeling(Runtime.getRuntime.availableProcessors, true))
-    solver.options.setLogTranslation(2)
-    val solution = solver.solve(allFormulae(constraints), bounds)
+    def solveWith(factory: SATFactory, constraints: List[Formula], bounds: Bounds): Solution = {
+      // Try Java based solver as backup
+      val solver = new Solver
+      solver.options.setLogTranslation(2)
+      solver.options.setSolver(factory)
+      solver.solve(allFormulae(constraints), bounds)
+    }
+    val solution = try {
+      solveWith(SATFactory.plingeling(Runtime.getRuntime.availableProcessors, true), constraints, bounds)
+    } catch {
+      case ex: AbortedException if ex.getCause.isInstanceOf[SATAbortedException] =>
+        solveWith(SATFactory.DefaultSAT4J, constraints, bounds)
+    }
     solution.outcome match {
       case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
