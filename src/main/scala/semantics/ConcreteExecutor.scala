@@ -163,15 +163,15 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     case Union(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
-    } yield (os1 union os2)
+    } yield os1 union os2
     case Diff(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
-    } yield (os1 diff os2)
+    } yield os1 diff os2
     case ISect(e1, e2) => for {
       os1 <- evalExpr(e1, stack)
       os2 <- evalExpr(e2, stack)
-    } yield (os1 intersect os2)
+    } yield os1 intersect os2
     case Var(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 

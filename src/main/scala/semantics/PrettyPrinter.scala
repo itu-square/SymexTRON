@@ -46,7 +46,7 @@ object PrettyPrinter {
           else
             s"""
                |${"  " * indent}${pretty(metaInf)}
-               |${ifHead}
+               |$ifHead
                |${prettyHelper(ts, indent = indent + 1)}
                |${"  " * indent}else
                |${prettyHelper(fs, indent = indent + 1)}""".stripMargin

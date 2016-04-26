@@ -116,7 +116,7 @@ object Statement {
   def annotateUids(s : Statement) : Statement = {
     val counter = Counter(0)
     def annotateUidH(s : Statement) : Statement = {
-      val sMInf = MI(counter.++())
+      val sMInf = MI(counter.++)
       s match {
         case StmtSeq(_, ss) => StmtSeq(sMInf, ss.map(annotateUidH))
         case AssignVar(_, x, e) => AssignVar(sMInf, x, e)
