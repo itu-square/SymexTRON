@@ -1,4 +1,5 @@
 import org.scalatest.{Matchers, FlatSpec}
+import semantics.PrettyPrinter
 import semantics.domains.SMem
 import syntax.ast.Statement.BranchPoint
 import syntax.ast.{Class, ClassDefinition, Statement}
@@ -25,7 +26,9 @@ class WhiteBoxTestGeneratorTests
   def run(example: Example, target: Double) = {
     import example._
     val tg = testGenerator(classDefs, prog, excludedBranches)
-    coverageTarget(tg, pres, target)
+    withClue(s"Uncovered branches: ${tg.uncoveredBranches} --- ") {
+      coverageTarget(tg, pres, target)
+    }
   }
 
   "The whitebox test generator" should "generate 100% covering tests for simple sequential program" in {

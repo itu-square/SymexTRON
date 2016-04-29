@@ -65,8 +65,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
       case New(_, x, c) => for {
         defc <- defs.get(c).cata(_.right, s"Unknown class $c".left)
         o = freshInstance
-        ocs = defc.children.mapValues(_ => Set[Instances]())
-        ors = defc.refs.mapValues(_ => Set[Instances]())
+        ocs = defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())
+        ors = defs.refsOf(defs.supertypes(c) + c).mapValues(_ => Set[Instances]())
       } yield (_cm_stack.modify(_.updated(x, Set(o))) `andThen`
                 _cm_heap.modify(
                   _ch_typeenv.modify(_.updated(o, c)) `andThen`
@@ -144,14 +144,14 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     if (defs.childfields.contains(f))
       for {
         cs <- h.childenv.get(o).cata(_.right, s"Unknown object $o".left)
-        _ <- cs.get(f).cata(_.right, s"Unknown child $f of object o".left)
+        _ <- cs.get(f).cata(_.right, s"Unknown child $f of object o ${h.typeenv(o).name}".left)
       } yield h |>
         (nh => disown(nh, os2)) |>
         _ch_childenv.modify(_.updated(o, cs.updated(f, os2)))
     else if (defs.reffields.contains(f))
       for {
         rs <- h.refenv.get(o).cata(_.right, s"Unknown object $o".left)
-        _ <- rs.get(f).cata(_.right, s"Unknown reference $f of object $o".left)
+        _ <- rs.get(f).cata(_.right, s"Unknown reference $f of object $o of type ${h.typeenv(o).name}".left)
       } yield h |> _ch_refenv.modify(_.updated(o, rs.updated(f, os2)))
     else s"$f neither a child nor reference".left
   }

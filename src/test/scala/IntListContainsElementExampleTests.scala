@@ -7,8 +7,8 @@ import scalaz._, Scalaz._, scalaz.stream._
 import CMem._
 import CHeap._
 
-class IntListExampleTests extends FlatSpec
-                          with Matchers {
+class IntListContainsElementExampleTests extends FlatSpec
+                                         with Matchers {
 
   def execFixture = new ConcreteExecutor(IntListContainsElementExample.classDefs.map(cd => Class(cd.name) -> cd).toMap,
                                          IntListContainsElementExample.prog)
