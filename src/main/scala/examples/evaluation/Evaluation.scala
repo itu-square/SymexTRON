@@ -20,6 +20,7 @@ object Evaluation {
   case class EvaluationReport(testname: String, time: FiniteDuration, metaModelCoverage: Double, codeCoverage: Double)
 
   val input: List[(String, Example)] = List (
+    "Collapse alternatives between the same regular expression" -> RegexAltSimplification,
     "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample,
     "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample,
     "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample,
