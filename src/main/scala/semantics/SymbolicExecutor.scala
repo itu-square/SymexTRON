@@ -111,6 +111,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
   private def executeHelper(pre : SMem, stmt : Statement) : EitherT[Process[Task, ?], String, SMem] = {
+    println(PrettyPrinter.pretty(stmt, short = true))
     // TODO parallelise using mergeN
     stmt match {
       case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[Process[Task, ?], String, SMem](pre.right.point[Process[Task, ?]])) { (memr, s) =>
@@ -180,6 +181,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 })
               } yield (incsyms ++ msyms, nfmem)
           }
+          _ = println(nsyms.map(sym => PrettyPrinter.pretty(sym)))
+          _ = println(PrettyPrinter.pretty(nimem, initial = false))
           _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(nimem))
           // TODO: Fix ordering so it coincides with concrete executor ordering
           iterated <- nsyms.foldLeft(EitherT[Process[Task, ?], String, SMem](nimem.right.point[Process[Task, ?]])) { (memr, sym) =>
@@ -208,13 +211,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
   def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): DisjunctionT[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)] = {
-    def paritionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
+    def partitionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
       (incl, excl) <- Process.emitAll(List.range(0, syms.length + 1)).map(syms.splitAt)
       nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
-        if (excl.contains(s)) sdesc match {
-          case Loced(l) => sdesc
-          case sdesc:UnknownLoc => sdesc.copy(notinstof = sdesc.notinstof + c)
-        } else sdesc
+        sdesc match {
+          case Loced(l) => sdesc // TODO Refine loc with type?
+          case sdesc:UnknownLoc =>
+            if(excl.contains(s)) sdesc.copy(notinstof = sdesc.notinstof + c)
+            else sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c)))
+        }
       ))(mem)
     } yield (incl, excl, nmem)
     val ocr = typeInference.inferSetType(ee, imem.heap)
@@ -222,7 +227,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       if (defs.subtypesOrSelf(c).contains(oc))
         EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((syms, Seq(), imem).point[Process[Task, ?]])
       else if (defs.maxClass(c, oc).isDefined) {
-        EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](paritionSyms(syms, imem, c))
+        EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](partitionSyms(syms, imem, c))
       } else {
         EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[Process[Task, ?]])
       }

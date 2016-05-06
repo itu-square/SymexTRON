@@ -20,11 +20,11 @@ object Evaluation {
   case class EvaluationReport(testname: String, time: FiniteDuration, metaModelCoverage: Double, codeCoverage: Double)
 
   val input: List[(String, Example)] = List (
-    "Collapse alternatives between the same regular expression" -> RegexAltSimplification,
+    "Collapse alternatives between the same regular expression" -> RegexAltSimplification/*,
     "Remove epsilon from sequences in regular expressions" -> RegexEpsSeqSimplification,
     "Collapse star/optional with same regular expressions " -> RegexStarSimplification,
     "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample,
-    "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample/*,
+    "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample,
     "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample,
     "Int list element containment query program" -> IntListContainsElementExample,
     "Int list first equals last program" -> IntListHeadTailEqExample,
@@ -79,12 +79,12 @@ object Evaluation {
   }
 
   def main(args: Array[String]) {
-    println("Blackbox test generator:")
+   /* println("Blackbox test generator:")
     blackBoxTestGenerator(input).map { er =>
       import er._
       val (dur, un) = formatTime(time)
       f"| $testname%-70s | $dur%10s $un | $metaModelCoverage%10.2f%% | $codeCoverage%10.2f%% |"
-    }.to (scalaz.stream.io.stdOutLines).run[Task].run
+    }.to (scalaz.stream.io.stdOutLines).run[Task].run*/
     println("Whitebox test generator:")
     whiteBoxTestGenerator(input).map { er =>
       import er._
