@@ -42,7 +42,11 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, 
   }
 
   def codeCoverage: Option[Double] = concExec.coverage.some
-  def uncoveredBranches: Set[BranchPoint] = concExec.uncoveredBranches
+  def uncoveredBranches: List[BranchPoint] = concExec.uncoveredBranches.toList.sortWith((bp1, bp2) =>
+    if (bp1.stmt_uid <= bp2.stmt_uid) true
+    else if (bp1.stmt_uid >= bp2.stmt_uid) false
+    else bp1.branch_number <= bp2.branch_number
+  )
   def annotatedProg: Statement = concExec.prog
 }
 

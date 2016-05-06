@@ -36,7 +36,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
 
   def uncoveredBranches = {
     val coveredBranches = branchCoverageMap.filter(_._2).keySet
-    val allBranches     = progBranches.values.flatMap(_.toSet).toSet
+    val allBranches     = progBranches.values.flatMap(_.toSet).toSet diff excludedBranches
     allBranches diff coveredBranches
   }
 

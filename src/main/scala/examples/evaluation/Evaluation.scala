@@ -1,7 +1,7 @@
 package examples.evaluation
 
 import examples._
-import semantics.{MetaModelCoverageChecker, ConcreteExecutor}
+import semantics.{PrettyPrinter, MetaModelCoverageChecker, ConcreteExecutor}
 import semantics.domains.SMem
 import syntax.ast.Statement.BranchPoint
 import syntax.ast._
@@ -21,8 +21,10 @@ object Evaluation {
 
   val input: List[(String, Example)] = List (
     "Collapse alternatives between the same regular expression" -> RegexAltSimplification,
+    "Remove epsilon from sequences in regular expressions" -> RegexEpsSeqSimplification,
+    "Collapse star/optional with same regular expressions " -> RegexStarSimplification,
     "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample,
-    "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample,
+    "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample/*,
     "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample,
     "Int list element containment query program" -> IntListContainsElementExample,
     "Int list first equals last program" -> IntListHeadTailEqExample,
@@ -34,7 +36,7 @@ object Evaluation {
     "Rename field refactoring" -> RenameFieldRefactoring,
     "Rename method refactoring" -> RenameMethodRefactoring,
     "Extract super-class refactoring" -> ExtractSuperclassRefactoring,
-    "Replace delegation with inheritance refactoring" -> ReplaceDelegationWithInheritance
+    "Replace delegation with inheritance refactoring" -> ReplaceDelegationWithInheritance */
   )
 
   def runTestGenerator(tg: TestGenerator,
@@ -56,7 +58,10 @@ object Evaluation {
         val defsWithKeys = example.classDefs.map(cd => Class(cd.name) -> cd).toMap
         import example._
         val tg = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta, delta, kappa, 10L.minutes, 95.0)
-        runTestGenerator(tg, testname, defsWithKeys, prog, excludedBranches, pres)
+        val res = runTestGenerator(tg, testname, defsWithKeys, prog, excludedBranches, pres)
+        println(PrettyPrinter.pretty(tg.annotatedProg, short = false))
+        println(tg.uncoveredBranches)
+        res
     }
   }
 
