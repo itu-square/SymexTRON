@@ -73,7 +73,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   def checkMemoryConsistency(pre: SMem): Process[Task, String \/ CMem] = {
     val concretised = modelFinder.concretise(pre)
-    concretised.point[Process[Task,?]].map(_.leftMap(_ => s"Inconsistent memory: ${PrettyPrinter.pretty(pre, initial = true)}"))
+    concretised.point[Process[Task,?]].map(_.leftMap(err => { s"Inconsistent memory: ${PrettyPrinter.pretty(pre, initial = true)}" }))
   }
 
   def matchLocs(locs: Seq[Loc], c: Class, mem: SMem): String \/ (SetExpr[IsSymbolic.type], SMem) = {
@@ -96,7 +96,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       } yield (presyms :+ ssym,
             ((_sm_heap ^|-> _sh_ssvltion).modify(_ ++ newsslvtion) andThen
               (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
-                (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
+                (_sm_heap ^|-> _sh_currentSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
                   (_sm_heap ^|-> _sh_pure).modify(_ ++ newpure))(mem))
     }.map { case (ssyms, mem) =>
       if (ssyms.isEmpty) (SetLit(Seq()), mem) else {
@@ -111,7 +111,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
   private def executeHelper(pre : SMem, stmt : Statement) : EitherT[Process[Task, ?], String, SMem] = {
-    println(PrettyPrinter.pretty(stmt, short = true))
+    // println(PrettyPrinter.pretty(stmt, short = true))
     // TODO parallelise using mergeN
     stmt match {
       case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[Process[Task, ?], String, SMem](pre.right.point[Process[Task, ?]])) { (memr, s) =>
@@ -181,8 +181,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                 })
               } yield (incsyms ++ msyms, nfmem)
           }
-          _ = println(nsyms.map(sym => PrettyPrinter.pretty(sym)))
-          _ = println(PrettyPrinter.pretty(nimem, initial = false))
           _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(nimem))
           // TODO: Fix ordering so it coincides with concrete executor ordering
           iterated <- nsyms.foldLeft(EitherT[Process[Task, ?], String, SMem](nimem.right.point[Process[Task, ?]])) { (memr, sym) =>
@@ -218,7 +216,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           case Loced(l) => sdesc // TODO Refine loc with type?
           case sdesc:UnknownLoc =>
             if(excl.contains(s)) sdesc.copy(notinstof = sdesc.notinstof + c)
-            else sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c)))
+            else if (incl.contains(s)) sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c)))
+            else sdesc
         }
       ))(mem)
     } yield (incl, excl, nmem)

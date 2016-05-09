@@ -124,7 +124,7 @@ object PrettyPrinter {
             s"${pretty(loc)} <: ${all.map(_.name).mkString("{", ",", "}")}"
         }
         val refs = sdesc.refs.map { case (f, e) => s"${pretty(loc)}.$f ↝ ${pretty(e)}" }
-        val children = sdesc.refs.map { case (f, e) => s"${pretty(loc)}.$f ⤞ ${pretty(e)}" }
+        val children = sdesc.children.map { case (f, e) => s"${pretty(loc)}.$f ⤞ ${pretty(e)}" }
         val dps = sdesc.descendantpools.map { case (c, e) => s"${pretty(loc)}∇${c.name} = ${pretty(e)}" }
         (typeinfo, refs ++ children, dps)
     }.unzip3

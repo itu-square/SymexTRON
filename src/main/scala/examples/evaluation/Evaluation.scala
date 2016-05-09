@@ -20,23 +20,24 @@ object Evaluation {
   case class EvaluationReport(testname: String, time: FiniteDuration, metaModelCoverage: Double, codeCoverage: Double)
 
   val input: List[(String, Example)] = List (
-    "Collapse alternatives between the same regular expression" -> RegexAltSimplification/*,
-    "Remove epsilon from sequences in regular expressions" -> RegexEpsSeqSimplification,
-    "Collapse star/optional with same regular expressions " -> RegexStarSimplification,
-    "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample,
-    "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample,
-    "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample,
-    "Int list element containment query program" -> IntListContainsElementExample,
-    "Int list first equals last program" -> IntListHeadTailEqExample,
-    "Class-to-Table transformation with simple for-loop" -> Class2TableSimpleExample,
-    "Class-to-Table transformation with deep matching for-loop" -> Class2TableDeepMatchingExample,
-    "Blog post timestamp retrieval with deep query" -> BlogPostFeedTimestampsExample,
-    "Blog post capitalise all titles transformation" -> BlogPostFeedCapitaliseTitlesExample,
-    "Contact book-to-Invitation list transformation" -> ContactBookExample,
-    "Rename field refactoring" -> RenameFieldRefactoring,
-    "Rename method refactoring" -> RenameMethodRefactoring,
-    "Extract super-class refactoring" -> ExtractSuperclassRefactoring,
-    "Replace delegation with inheritance refactoring" -> ReplaceDelegationWithInheritance */
+    // Below programs require structural equality to work correctly it seems...
+/*     "Collapse alternatives between the same regular expression" -> RegexAltSimplification
+    , "Remove epsilon from sequences in regular expressions" -> RegexEpsSeqSimplification
+    , "Collapse star/optional with same regular expressions " -> RegexStarSimplification */
+    , "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample
+    , "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample
+    , "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample
+    , "Int list element containment query program" -> IntListContainsElementExample
+    , "Int list first equals last program" -> IntListHeadTailEqExample
+    , "Class-to-Table transformation with simple for-loop" -> Class2TableSimpleExample
+    , "Class-to-Table transformation with deep matching for-loop" -> Class2TableDeepMatchingExample
+    , "Blog post timestamp retrieval with deep query" -> BlogPostFeedTimestampsExample
+    , "Blog post capitalise all titles transformation" -> BlogPostFeedCapitaliseTitlesExample
+    , "Contact book-to-Invitation list transformation" -> ContactBookExample
+    , "Rename field refactoring" -> RenameFieldRefactoring
+    , "Rename method refactoring" -> RenameMethodRefactoring
+    , "Extract super-class refactoring" -> ExtractSuperclassRefactoring
+    , "Replace delegation with inheritance refactoring" -> ReplaceDelegationWithInheritance
   )
 
   def runTestGenerator(tg: TestGenerator,
