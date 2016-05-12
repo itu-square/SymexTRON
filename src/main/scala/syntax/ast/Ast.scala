@@ -40,6 +40,7 @@ case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolEx
 case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T]
 case class True[T <: ASTType]() extends BoolExpr[T]
 case class Not[T <: ASTType](b: BoolExpr[T]) extends BoolExpr[T]
+case class BagSubEquiv[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
 
 sealed trait MatchExpr
 case class MSet(e : SetExpr[IsProgram.type]) extends MatchExpr

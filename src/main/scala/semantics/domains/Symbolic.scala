@@ -32,6 +32,7 @@ trait SymbolicOps {
         case True() => Set()
         case And(p1, p2) => symbols(p1) ++ symbols(p2)
         case Not(pp) => symbols(pp)
+        case BagSubEquiv(e1, e2) => e1.symbols ++ e2.symbols
       }
       symbols(b)
     }
