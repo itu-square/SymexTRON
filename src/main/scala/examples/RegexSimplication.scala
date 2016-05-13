@@ -10,6 +10,8 @@ import syntax.ast._
   * Created by asal on 03/05/2016.
   */
 trait RegexSimplication extends Example {
+  override val beta = 3
+
   override val classDefs =
     Shared.stdClassDefs ++
     Set (
@@ -41,8 +43,10 @@ object RegexAltSimplification extends RegexSimplication {
       `for`("alt", Match(Var("r"), Class("Alt")), stmtSeq(
         loadField("alt_r", Var("alt"), "right"),
         loadField("alt_l", Var("alt"), "left"),
-        `if`(Eq(Var("alt_r"), Var("alt_l")), stmtSeq(
-          assignField(Var("r_ref"), "value", Var("alt_r"))
+        loadField("alt_r_value", Var("alt_r"), "value"),
+        loadField("alt_l_value", Var("alt_l"), "value"),
+        `if`(equiv(Var("alt_r_value"), Var("alt_l_value")), stmtSeq(
+          assignField(Var("r_ref"), "value", Var("alt_r_value"))
         ), stmtSeq())
       ))
     ))
@@ -50,7 +54,7 @@ object RegexAltSimplification extends RegexSimplication {
 }
 
 object RegexEpsSeqSimplification extends RegexSimplication {
-  override val excludedBranches = Set(BranchPoint(0,0), BranchPoint(3,2), BranchPoint(7,2))
+  override val excludedBranches = Set(BranchPoint(0,0), BranchPoint(3,2), BranchPoint(9,2))
 
   override val prog: Statement = {
     `for`("r_ref", MatchStar(Var("regex"), Class("RegexRef")), stmtSeq(
@@ -58,8 +62,10 @@ object RegexEpsSeqSimplification extends RegexSimplication {
       `for`("seq", Match(Var("r"), Class("Seq")), stmtSeq(
         loadField("seq_r", Var("seq"), "right"),
         loadField("seq_l", Var("seq"), "left"),
-        `for`("_", Match(Var("seq_r"), Class("Epsilon")), stmtSeq(
-          assignField(Var("r_ref"), "value", Var("seq_l"))
+        loadField("seq_r_value", Var("seq_r"), "value"),
+        loadField("seq_l_value", Var("seq_l"), "value"),
+        `for`("_", Match(Var("seq_r_value"), Class("Epsilon")), stmtSeq(
+          assignField(Var("r_ref"), "value", Var("seq_l_value"))
         ))
       ))
     ))
@@ -67,7 +73,7 @@ object RegexEpsSeqSimplification extends RegexSimplication {
 }
 
 object RegexStarSimplification extends RegexSimplication {
-  override val excludedBranches = Set(BranchPoint(0,0), BranchPoint(3,2), BranchPoint(7,2), BranchPoint(8,2))
+  override val excludedBranches = Set(BranchPoint(0,0), BranchPoint(3,2), BranchPoint(9,2), BranchPoint(10,2))
 
   override val prog: Statement = {
     `for`("r_ref", MatchStar(Var("regex"), Class("RegexRef")), stmtSeq(
@@ -75,15 +81,21 @@ object RegexStarSimplification extends RegexSimplication {
       `for`("seq", Match(Var("r"), Class("Seq")), stmtSeq(
         loadField("seq_r", Var("seq"), "right"),
         loadField("seq_l", Var("seq"), "left"),
-        `for`("star", Match(Var("seq_l"), Class("Star")),
-          `for`("alt", Match(Var("seq_r"), Class("Alt")), stmtSeq(
+        loadField("seq_r_value", Var("seq_r"), "value"),
+        loadField("seq_l_value", Var("seq_l"), "value"),
+        `for`("star", Match(Var("seq_l_value"), Class("Star")),
+          `for`("alt", Match(Var("seq_r_value"), Class("Alt")), stmtSeq(
             loadField("alt_r", Var("alt"), "right"),
             loadField("alt_l", Var("alt"), "left"),
+            loadField("alt_r_value", Var("alt_r"), "value"),
+            loadField("alt_l_value", Var("alt_l"), "value"),
             loadField("star_i", Var("star"), "inner"),
-            `if`(Eq(Var("star_i"), Var("alt_l")),
-              assignField(Var("r_ref"), "value", Var("star_i")),
-              stmtSeq()
-          ))
+            loadField("star_i_value", Var("star_i"), "value"),
+            `for`("_", Match(Var("alt_r_value"), Class("Epsilon")),
+              `if`(equiv(Var("star_i_value"), Var("alt_l_value")),
+                assignField(Var("r_ref"), "value", Var("star_i_value")),
+                stmtSeq()
+            )))
         )
       ))
     )))

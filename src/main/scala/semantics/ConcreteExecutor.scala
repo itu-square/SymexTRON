@@ -175,7 +175,31 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     case Var(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 
-  def instanceEquivalent(meml: CMem, memr: CMem, ol: Instances, or: Instances): String \/ Boolean = ???
+  def instanceEquivalent(meml: CMem, memr: CMem, ol: Instances, or: Instances): String \/ Boolean =
+    for {
+      tl <- meml.heap.typeenv.get(ol).cata(_.right, s"${meml.heap} does not have object $ol".left)
+      tr <- memr.heap.typeenv.get(or).cata(_.right, s"${memr.heap} does not have object $ol".left)
+      res <-
+        if (tl != tr) false.right
+        else {
+            val cs = defs.childrenOf(defs.supertypes(tl) + tl).keySet
+            val rs = defs.refsOf(defs.supertypes(tl) + tl).keySet
+            for {
+              cequiv <-
+                cs.allM[String \/ ?](f => for {
+                  olf <- meml.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have child $f of $ol".left)
+                  orf <- memr.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have child $f of $or".left)
+                  sbequivl <- subBagEquivalent(meml, memr, olf, orf)
+                  sbequivr <- subBagEquivalent(memr, meml, orf, olf)
+                } yield sbequivl && sbequivr)
+              req <-
+                rs.allM[String \/ ?](f => for {
+                  olf <- meml.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have reference $f of $ol".left)
+                  orf <- memr.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have reference $f of $or".left)
+                } yield olf == orf)
+            } yield cequiv && req
+        }
+    } yield res
 
   def subBagEquivalent(meml: CMem, memr: CMem, osl: Set[Instances], osr: Set[Instances]): String \/ Boolean =
     if (osl.isEmpty) true.right
