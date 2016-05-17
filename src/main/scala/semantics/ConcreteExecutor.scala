@@ -189,9 +189,8 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
                 cs.allM[String \/ ?](f => for {
                   olf <- meml.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have child $f of $ol".left)
                   orf <- memr.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have child $f of $or".left)
-                  sbequivl <- subBagEquivalent(meml, memr, olf, orf)
-                  sbequivr <- subBagEquivalent(memr, meml, orf, olf)
-                } yield sbequivl && sbequivr)
+                  fequiv <- bagEquivalent(meml, memr, olf, orf)
+                } yield fequiv)
               req <-
                 rs.allM[String \/ ?](f => for {
                   olf <- meml.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have reference $f of $ol".left)
@@ -201,7 +200,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         }
     } yield res
 
-  def subBagEquivalent(meml: CMem, memr: CMem, osl: Set[Instances], osr: Set[Instances]): String \/ Boolean =
+  def subBagEquivalent(meml: CMem, memr: CMem, osl: Set[Instances], osr: Set[Instances]): String \/ Boolean = {
     if (osl.isEmpty) true.right
     else {
       val ol = osl.head
@@ -211,6 +210,14 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         } yield if (equiv) or.some else none
       }.flatMap(_.cata(or => subBagEquivalent(meml, memr, osl.tail, osr - or), false.right[String]))
     }
+  }
+
+  def bagEquivalent(meml: CMem, memr: CMem, osl: Set[Instances], osr: Set[Instances]): String \/ Boolean = {
+    for {
+      sbequivl <- subBagEquivalent(meml, memr, osl, osr)
+      sbequivr <- subBagEquivalent(memr, meml, osr, osl)
+    } yield sbequivl && sbequivr
+  }
 
   private def evalBoolExpr(b: BoolExpr[IsProgram.type], mem: CMem): String \/ Boolean = {
     b match {
