@@ -19,9 +19,29 @@ case object Opt extends Cardinality { def isOptional = true }
 case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
                            refs: Map[Fields, (Class, Cardinality)], superclass: Option[Class] = None)
 
-sealed trait ASTType
-case object IsSymbolic extends ASTType
-case object IsProgram extends ASTType
+sealed trait ASTType {
+  type Elim[+S, +P]
+}
+case object IsSymbolic extends ASTType {
+  type Elim[+S, +P] = S
+}
+case object IsProgram extends ASTType {
+  type Elim[+S, +P] = P
+}
+object ASTType {
+  implicit val isProgram: IsProgram.type = IsProgram
+  implicit val isSymbolic: IsSymbolic.type = IsSymbolic
+
+  def elim[T <: ASTType, S, P](s : S, p : P)(implicit t: T): T#Elim[S, P] = t match {
+    case IsProgram => p.asInstanceOf[T#Elim[S, P]] // Cast should be safe
+    case IsSymbolic => s.asInstanceOf[T#Elim[S, P]]
+  }
+
+  def unelim[T <: ASTType, S, P, Q](e : T#Elim[S, P], f: S => Q, g: P => Q)(implicit t: T): Q = t match {
+    case IsSymbolic => f(e.asInstanceOf[S])
+    case IsProgram => g(e.asInstanceOf[P])
+  }
+}
 
 sealed trait BasicExpr[T <: ASTType]
 case class Symbol(id: Symbols) extends BasicExpr[IsSymbolic.type]
@@ -40,7 +60,7 @@ case class SetSubEq[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolEx
 case class And[T <: ASTType](b1: BoolExpr[T], b2: BoolExpr[T]) extends BoolExpr[T]
 case class True[T <: ASTType]() extends BoolExpr[T]
 case class Not[T <: ASTType](b: BoolExpr[T]) extends BoolExpr[T]
-case class BagSubEquiv[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
+case class BagSubEquiv[+A, T <: ASTType](ctxt: T#Elim[Option[A], Unit], e1: SetExpr[T], e2: SetExpr[T]) extends BoolExpr[T]
 
 sealed trait MatchExpr
 case class MSet(e : SetExpr[IsProgram.type]) extends MatchExpr

@@ -233,7 +233,7 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         os1 <- evalExpr(e1, mem.stack)
         os2 <- evalExpr(e2, mem.stack)
       } yield os1 subsetOf os2
-      case BagSubEquiv(e1, e2) => for {
+      case BagSubEquiv(_, e1, e2) => for {
         os1 <- evalExpr(e1, mem.stack)
         os2 <- evalExpr(e2, mem.stack)
         res <- subBagEquivalent(mem, mem, os1, os2)

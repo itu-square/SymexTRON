@@ -297,6 +297,11 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         ee1 <- evalSetExpr[M](st, e1)
         ee2 <- evalSetExpr[M](st, e2)
       } yield SetSubEq(ee1, ee2)
+    case BagSubEquiv(_, e1, e2) =>
+      for {
+        ee1 <- evalSetExpr[M](st, e1)
+        ee2 <- evalSetExpr[M](st, e2)
+      } yield BagSubEquiv[Option[Any], IsSymbolic.type](None, ee1, ee2)
   }
 
 

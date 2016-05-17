@@ -16,7 +16,8 @@ package object ast {
 
   def or[T <: ASTType](p1 : BoolExpr[T], p2 : BoolExpr[T]): BoolExpr[T] = Not(And(Not(p1), Not(p2)))
 
-  def equiv[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T]): BoolExpr[T] = And(BagSubEquiv(e1, e2), BagSubEquiv(e2, e1))
+  def equiv[T <: ASTType](e1: SetExpr[T], e2: SetExpr[T])(implicit t: T): BoolExpr[T]
+    = And(BagSubEquiv[Any, T](ASTType.elim(None : Option[Any], ()), e1, e2), BagSubEquiv[Any, T](ASTType.elim(None : Option[Any], ()), e2, e1))
 
   implicit class RichDefs(defs: Map[Class, ClassDefinition]){
     val childfields: Set[Fields] = defs.values.flatMap(_.children.keys).toSet
