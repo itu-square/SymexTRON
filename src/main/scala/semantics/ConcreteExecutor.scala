@@ -106,19 +106,22 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
         }
       } yield res
       case Fix(_, e, sb) =>
-        def fix(prev: Set[Instances], mem: CMem, iteration: Int = 0): String \/ CMem = for {
-          nmem <- executeStmt(mem, sb)
-          ee <- evalExpr(e, nmem.stack)
-          res <- if (prev == ee) {
-            iteration match {
-              case 0 => _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
-              case _ => _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+        def fix(prev: Set[Instances], mem: CMem, iteration: Int = 0): String \/ CMem =  {
+          for {
+            nmem <- executeStmt(mem, sb)
+            ee <- evalExpr(e, nmem.stack)
+            fixed <- bagEquivalent(mem, nmem, prev, ee)
+            res <- if (fixed) {
+              iteration match {
+                case 0 => _branchCoverageMap.updateValue(BranchPoint(uid, 0), _ => true)
+                case _ => _branchCoverageMap.updateValue(BranchPoint(uid, 1), _ => true)
+              }
+              nmem.right
+            } else {
+              fix(ee, nmem, iteration = iteration + 1)
             }
-            nmem.right
-          } else {
-            fix(ee, nmem, iteration = iteration + 1)
-          }
-        } yield res
+          } yield res
+        }
         for {
           ee <- evalExpr(e, mem.stack)
           res <- fix(ee, mem)
@@ -175,30 +178,31 @@ class ConcreteExecutor(defs: Map[Class, ClassDefinition], _prog: Statement, excl
     case Var(name) => stack.get(name).cata(_.right, s"Unknown variable $name".left)
   }
 
-  def instanceEquivalent(meml: CMem, memr: CMem, ol: Instances, or: Instances): String \/ Boolean =
+  def instanceEquivalent(meml: CMem, memr: CMem, ol: Instances, or: Instances): String \/ Boolean = {
     for {
       tl <- meml.heap.typeenv.get(ol).cata(_.right, s"${meml.heap} does not have object $ol".left)
       tr <- memr.heap.typeenv.get(or).cata(_.right, s"${memr.heap} does not have object $ol".left)
       res <-
-        if (tl != tr) false.right
-        else {
-            val cs = defs.childrenOf(defs.supertypes(tl) + tl).keySet
-            val rs = defs.refsOf(defs.supertypes(tl) + tl).keySet
-            for {
-              cequiv <-
-                cs.allM[String \/ ?](f => for {
-                  olf <- meml.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have child $f of $ol".left)
-                  orf <- memr.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have child $f of $or".left)
-                  fequiv <- bagEquivalent(meml, memr, olf, orf)
-                } yield fequiv)
-              req <-
-                rs.allM[String \/ ?](f => for {
-                  olf <- meml.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have reference $f of $ol".left)
-                  orf <- memr.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have reference $f of $or".left)
-                } yield olf == orf)
-            } yield cequiv && req
-        }
+      if (tl != tr) false.right
+      else {
+        val cs = defs.childrenOf(defs.supertypes(tl) + tl).keySet
+        val rs = defs.refsOf(defs.supertypes(tl) + tl).keySet
+        for {
+          cequiv <-
+          cs.allM[String \/ ?](f => for {
+            olf <- meml.heap.childenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have child $f of $ol".left)
+            orf <- memr.heap.childenv.get(or).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have child $f of $or".left)
+            fequiv <- bagEquivalent(meml, memr, olf, orf)
+          } yield fequiv)
+          req <-
+          rs.allM[String \/ ?](f => for {
+            olf <- meml.heap.refenv.get(ol).flatMap(_.get(f)).cata(_.right, s"${meml.heap} does not have reference $f of $ol".left)
+            orf <- memr.heap.refenv.get(or).flatMap(_.get(f)).cata(_.right, s"${memr.heap} does not have reference $f of $or".left)
+          } yield olf == orf)
+        } yield cequiv && req
+      }
     } yield res
+  }
 
   def subBagEquivalent(meml: CMem, memr: CMem, osl: Set[Instances], osr: Set[Instances]): String \/ Boolean = {
     if (osl.isEmpty) true.right
