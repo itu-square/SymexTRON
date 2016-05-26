@@ -7,15 +7,15 @@ import syntax.ast._
 trait Class2TableExample extends Example {
 
   val sourceClassDefs = Set(
-    new ClassDefinition("Class", Map("attributes" -> ((Class("Attribute"), Many))), Map()),
-    new ClassDefinition("Attribute", Map(), Map("type" -> ((Class("String"), Single))))
+    new ClassDefinition("Class", Map("attributes" -> FieldDefinition(Class("Attribute"), Many, Ordinary)), Map()),
+    new ClassDefinition("Attribute", Map(), Map("type" -> FieldDefinition(Class("String"), Single, Ordinary)))
   )
   val targetClassDefs = Set(
-    new ClassDefinition("Table", Map("columns" -> ((Class("Column"), Many))),
-      Map("id" -> (Class("IdColumn"), Single))),
+    new ClassDefinition("Table", Map("columns" -> FieldDefinition(Class("Column"), Many, Ordinary)),
+      Map("id" -> FieldDefinition(Class("IdColumn"), Single, Ordinary))),
     new ClassDefinition("Column", Map(), Map()),
     new ClassDefinition("IdColumn", Map(), Map(), Some(Class("Column"))),
-    new ClassDefinition("DataColumn", Map(), Map("type" -> (Class("String"), Single)), Some(Class("Column")))
+    new ClassDefinition("DataColumn", Map(), Map("type" -> FieldDefinition(Class("String"), Single, Ordinary)), Some(Class("Column")))
   )
   override val classDefs = Shared.stdClassDefs ++ sourceClassDefs ++ targetClassDefs
 

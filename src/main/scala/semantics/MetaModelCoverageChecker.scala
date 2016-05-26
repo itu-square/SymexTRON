@@ -1,7 +1,7 @@
 package semantics
 
 import semantics.domains.{CMem, Instances}
-import syntax.ast.{Class, ClassDefinition, Fields, Single}
+import _root_.syntax.ast._
 
 import scala.concurrent.stm._
 import scalaz.Scalaz._
@@ -20,8 +20,8 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
       val clazz = todoClasses.head
       val classDef = defs(clazz)
       val fields = (classDef.children.keys ++ classDef.refs.keys).toSet
-      val reachedByOwnership = classDef.children.values.map(_._1).toSet
-      val reachedByRequiredRef = classDef.refs.values.collect { case (c, Single) => c }.toSet
+      val reachedByOwnership = classDef.children.values.map(_.`class`).toSet
+      val reachedByRequiredRef = classDef.refs.values.filterNot(_.card.isOptional).map(_.`class`).toSet
       val reachedBySubtyping = defs.subtypes(clazz)
       val classesRelevant = visitedClasses + clazz
       val newTodoClasses: Set[Class] = (todoClasses.tail ++ reachedByOwnership ++ reachedByRequiredRef ++ reachedBySubtyping) diff classesRelevant

@@ -9,7 +9,7 @@ import syntax.ast._
   */
 object IdIterExample extends Example {
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-    new ClassDefinition("IntSet", Map("data" -> (Class("Int"), Many)), Map())
+    ClassDefinition("IntSet", Map("data" -> FieldDefinition(Class("Int"), Many, Ordinary)), Map())
   )
 
   override val pres: Set[SMem] = {

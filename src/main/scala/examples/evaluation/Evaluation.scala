@@ -21,10 +21,11 @@ object Evaluation {
 
   val input: List[(String, Example)] = List (
     // Below programs require structural equality to work correctly it seems...
-      "Collapse alternatives between the same regular expression" -> RegexAltSimplification
+   /*   "Collapse alternatives between the same regular expression" -> RegexAltSimplification
     , "Remove epsilon from sequences in regular expressions" -> RegexEpsSeqSimplification
     , "Collapse star/optional with same regular expressions " -> RegexStarSimplification
-    , "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample
+    ,*/
+     "Simple sequential loading program" -> SimpleBoxSequentialLoadingExample
     , "Simple loading-then-branching program" -> SimpleBoxLoadingBranchingExample
     , "Simple branching-then-loading program" -> SimpleBoxBranchingLoadingExample
     , "Int list element containment query program" -> IntListContainsElementExample
@@ -34,6 +35,7 @@ object Evaluation {
     , "Blog post timestamp retrieval with deep query" -> BlogPostFeedTimestampsExample
     , "Blog post capitalise all titles transformation" -> BlogPostFeedCapitaliseTitlesExample
     , "Contact book-to-Invitation list transformation" -> ContactBookExample
+    , "Families to Person transformation" -> FamiliesToPersonsTransformation
     , "Rename field refactoring" -> RenameFieldRefactoring
     , "Rename method refactoring" -> RenameMethodRefactoring
     , "Extract super-class refactoring" -> ExtractSuperclassRefactoring

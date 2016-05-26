@@ -14,10 +14,16 @@ case object Single extends Cardinality { def isOptional = false }
 case object Many extends Cardinality { def isOptional = true }
 case object Opt extends Cardinality { def isOptional = true }
 
+sealed trait FieldType
+case object Ordinary extends FieldType
+case object Tracking extends FieldType
+case class Bidirectional(oppositeOf: Fields) extends FieldType
+
+case class FieldDefinition(`class`: Class, card: Cardinality, fieldtype: FieldType)
 
 // We only support single inheritance
-case class ClassDefinition(name: String, children: Map[Fields, (Class, Cardinality)],
-                           refs: Map[Fields, (Class, Cardinality)], superclass: Option[Class] = None)
+case class ClassDefinition(name: String, children: Map[Fields, FieldDefinition],
+                           refs: Map[Fields, FieldDefinition], superclass: Option[Class] = None)
 
 sealed trait ASTType {
   type Elim[+S, +P]

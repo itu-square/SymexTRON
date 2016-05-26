@@ -31,8 +31,8 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
         case Unfolded => true
         case NewlyCreated => false
       }
-      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(heap.currentSpatial(loc).cl) &&
-         !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(heap.currentSpatial(loc).cl)) }.keySet
+      }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(nheap.currentSpatial(loc).cl) &&
+         !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(nheap.currentSpatial(loc).cl)) }.keySet
     }
     def addNewLoc(sym: Symbol, newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
       val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
@@ -66,13 +66,18 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     }.run
   }
 
-  def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, (Class, Cardinality)]): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
+  def unfoldFieldSet(loc: Loc, fieldSet: Map[Fields, FieldDefinition]): (SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]) = {
     fieldSet.foldLeft((Map(): SetSymbolValuation, Map[Fields, SetExpr[IsSymbolic.type]]())) { (st, fieldkv) =>
       val (svltion, fields) = st
       fieldkv match {
-        case (f, (cl, crd)) =>
-          val sym = SetSymbol(symcounter.++)
-          (svltion + (sym -> SSymbolDesc(cl, crd)), fields + (f -> sym))
+        case (f, FieldDefinition(cl, crd, ft)) =>
+          ft match {
+            case Tracking =>
+              (svltion, fields + (f -> SetLit(Seq())))
+            case _ =>
+              val sym = SetSymbol(symcounter.++)
+              (svltion + (sym -> SSymbolDesc(cl, crd)), fields + (f -> sym))
+          }
       }
     }
   }

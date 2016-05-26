@@ -159,7 +159,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
             ((ol oneOf LocsRel.self) and (l oneOf LocsRel.self) and
               (f oneOf FieldsRel.fieldsrels(field)) and (t oneOf TypesRel.typerels(c)))
         })
-        val fieldTyping = allFormulae((cd.children ++ cd.refs).toList.map { case (field, (oc, crd)) =>
+        val fieldTyping = allFormulae((cd.children ++ cd.refs).toList.map { case (field, FieldDefinition(oc, crd, ft)) =>
           val cardConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies (crd match {
             case Single => f.join(l.join(LocsRel.fields)).one
             case Many => Formula.TRUE
@@ -170,7 +170,16 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
             ((ot product ote) in TypesRel.isSubType)  forAll
             ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and (ol oneOf LocsRel.self) and
               (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.self) and (ote oneOf TypesRel.typerels(oc)))
-          allFormulae(List(cardConstraint,typingConstraint))
+          val bidiConstraint = ft match {
+            case Bidirectional(oppositeOf) =>
+              val of = Variable.unary("of")
+              (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields) and (ot eq ol.join(typeOfLoc)) implies
+                ((ol product of product l) in LocsRel.fields)  forAll
+                ((f oneOf FieldsRel.fieldsrels(field)) and (of oneOf FieldsRel.fieldsrels(oppositeOf)) and (l oneOf LocsRel.self) and (ol oneOf LocsRel.self) and
+                  (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.self) and (ote oneOf TypesRel.typerels(oc)))
+            case _ => Formula.TRUE
+          }
+          allFormulae(List(cardConstraint,typingConstraint, bidiConstraint))
         })
         allFormulae(List(fieldTyping, fieldAbsence))
       })

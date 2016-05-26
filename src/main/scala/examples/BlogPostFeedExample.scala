@@ -16,13 +16,13 @@ trait BlogPostFeedExample extends Example {
   }
 
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-      new ClassDefinition("Title", Map(), Map("value" -> (Class("String"), Single)))
-    , new ClassDefinition("CapitalisedTitle", Map(), Map(), Some(Class("Title")))
-    , new ClassDefinition("Timestamp", Map(), Map("value" -> (Class("Int"), Single)))
-    , new ClassDefinition("Post", Map(), Map())
-    , new ClassDefinition("SinglePost", Map("title" -> (Class("Title"), Single),
-                                            "timestamp" -> (Class("Timestamp"), Single)), Map(), Some(Class("Post")))
-    , new ClassDefinition("AggregatePost", Map("content" -> (Class("Post"), Many)), Map(), Some(Class("Post")))
+      ClassDefinition("Title", Map(), Map("value" -> FieldDefinition(Class("String"), Single, Ordinary)))
+    , ClassDefinition("CapitalisedTitle", Map(), Map(), Some(Class("Title")))
+    , ClassDefinition("Timestamp", Map(), Map("value" -> FieldDefinition(Class("Int"), Single, Ordinary)))
+    , ClassDefinition("Post", Map(), Map())
+    , ClassDefinition("SinglePost", Map("title" -> FieldDefinition(Class("Title"), Single, Ordinary),
+                                        "timestamp" -> FieldDefinition(Class("Timestamp"), Single, Ordinary)), Map(), Some(Class("Post")))
+    , ClassDefinition("AggregatePost", Map("content" -> FieldDefinition(Class("Post"), Many, Ordinary)), Map(), Some(Class("Post")))
   )
 }
 

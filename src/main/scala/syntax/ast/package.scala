@@ -45,11 +45,11 @@ package object ast {
       )
     }
 
-    def childrenOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.children).toMap
+    def childrenOf(cs: Set[Class]): Map[Fields, FieldDefinition] = cs.map(defs).flatMap(_.children).toMap
 
-    def refsOf(cs: Set[Class]): Map[Fields, (Class, Cardinality)] = cs.map(defs).flatMap(_.refs).toMap
+    def refsOf(cs: Set[Class]): Map[Fields, FieldDefinition] = cs.map(defs).flatMap(_.refs).toMap
 
-    def fieldType(c : Class, f : Fields): Option[(Class, Cardinality)] = {
+    def fieldType(c : Class, f : Fields): Option[FieldDefinition] = {
       val selforsupers = Set(c) ++ supertypes(c)
       (childrenOf(selforsupers) ++ refsOf(selforsupers)).get(f)
     }
