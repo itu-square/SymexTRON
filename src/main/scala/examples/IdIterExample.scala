@@ -9,14 +9,14 @@ import syntax.ast._
   */
 object IdIterExample extends Example {
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-    ClassDefinition("IntSet", Map("data" -> FieldDefinition(Class("Int"), Many, Ordinary)), Map())
+    ClassDefinition("IntSet", Map("data" -> FieldDefinition(Class("Int"), ManyOpt, Ordinary)), Map())
   )
 
   override val pres: Set[SMem] = {
     val stack = Map("X" -> SetSymbol(-1))
     Set(
       SMem(SStack.initial(stack),
-        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntSet"), Many)), Map(), Map(), Map(), Set()))
+        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntSet"), ManyOpt)), Map(), Map(), Map(), Set()))
     )
   }
 

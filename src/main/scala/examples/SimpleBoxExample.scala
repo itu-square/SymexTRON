@@ -9,7 +9,7 @@ import syntax.ast._
 trait SimpleBoxExample extends Example {
 
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-    ClassDefinition("IntBox", Map(), Map("unbox" -> FieldDefinition(Class("Int"), Single, Ordinary)))
+    ClassDefinition("IntBox", Map(), Map("unbox" -> FieldDefinition(Class("Int"), Req, Ordinary)))
   )
 
   override val pres: Set[SMem] = {

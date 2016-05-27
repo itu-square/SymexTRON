@@ -12,22 +12,24 @@ trait ATLModelZooTransformation extends Example { }
 
 object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   override val classDefs = Shared.stdClassDefs ++ Set (
-    ClassDefinition("Family", Map("father" -> FieldDefinition(Class("Member"), Single, Bidirectional(oppositeOf = "familyFather")),
-                                  "mother" -> FieldDefinition(Class("Member"), Single, Bidirectional(oppositeOf = "familyMother")),
-                                  "sons" -> FieldDefinition(Class("Member"), Many, Bidirectional(oppositeOf = "familySon")),
-                                  "daughters" -> FieldDefinition(Class("Member"), Many, Bidirectional(oppositeOf = "familyDaughter"))),
-                              Map("lastName" -> FieldDefinition(Class("String"), Single, Ordinary)), superclass = Some(Class("Any"))),
-    ClassDefinition("Member", Map(), Map("firstName" -> FieldDefinition(Class("String"), Single, Ordinary),
+    // Family meta-model
+    ClassDefinition("Family", Map("father" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyFather")),
+                                  "mother" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyMother")),
+                                  "sons" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familySon")),
+                                  "daughters" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familyDaughter"))),
+                              Map("lastName" -> FieldDefinition(Class("String"), Req, Ordinary)), superclass = Some(Class("Any"))),
+    ClassDefinition("Member", Map(), Map("firstName" -> FieldDefinition(Class("String"), Req, Ordinary),
                                          "familyFather" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "father")),
                                          "familyMother" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "mother")),
                                          "familySon" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "sons")),
                                          "familyDaughter" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "daughters"))), superclass = Some(Class("Any"))),
-    ClassDefinition("Person", Map(), Map("fullName" -> FieldDefinition(Class("String"), Single, Ordinary)), superclass = Some(Class("Any"))),
+    // Person meta-model
+    ClassDefinition("Person", Map(), Map("fullName" -> FieldDefinition(Class("String"), Req, Ordinary)), superclass = Some(Class("Any"))),
     ClassDefinition("Male", Map(), Map(), superclass = Some(Class("Person"))),
     ClassDefinition("Female", Map(), Map(), superclass = Some(Class("Person")))
   )
   override val pres: Set[SMem] = Set(SMem(SStack.initial(Map("families" -> SetSymbol(-1))),
-    SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("Family"), Many)), Map(), Map(), Map(), Set())))
+    SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("Family"), ManyOpt)), Map(), Map(), Map(), Set())))
   override val prog: Statement = {
     def isFemaleHelper(self: SetExpr[IsProgram.type], outVar: Vars): Statement = stmtSeq(
       loadField("self_familyMother", self, "familyMother"),
@@ -87,24 +89,24 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
 
   object ClassToRelationalTransformation extends ATLModelZooTransformation {
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-      // Class
-      ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Single, Ordinary))),
+      // Class meta-model
+      ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
       ClassDefinition("Classifier", Map(), Map(), superclass = Some(Class("NamedElt"))),
       ClassDefinition("DataType", Map(), Map("_Type" -> FieldDefinition(Class("Type"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
-      ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Any"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), Many, Bidirectional(oppositeOf = "owner"))),
+      ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Any"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), ManyOpt, Bidirectional(oppositeOf = "owner"))),
         Map("super" -> FieldDefinition(Class("Class"), Opt, Ordinary), "_Table" -> FieldDefinition(Class("Table"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
       ClassDefinition("Attribute", Map(),
-        Map("isMultivalued" -> FieldDefinition(Class("Any"), Opt, Ordinary), "type" -> FieldDefinition(Class("Class"), Single, Ordinary),
-          "owner" -> FieldDefinition(Class("Class"), Single, Bidirectional(oppositeOf = "attributes")),
+        Map("isMultivalued" -> FieldDefinition(Class("Any"), Opt, Ordinary), "type" -> FieldDefinition(Class("Class"), Req, Ordinary),
+          "owner" -> FieldDefinition(Class("Class"), Req, Bidirectional(oppositeOf = "attributes")),
           "_Column" -> FieldDefinition(Class("Column"), Opt, Tracking)), superclass = Some(Class("NamedElt"))),
-      ClassDefinition("Package", Map("classifiers" -> FieldDefinition(Class("Classifier"), Many, Ordinary)), Map()),
-      // Relational
-      ClassDefinition("Named", Map(), Map("name" -> FieldDefinition(Class("String"), Single, Ordinary))),
-      ClassDefinition("Table", Map("columns" -> FieldDefinition(Class("Column"), Many, Ordinary)),
-        Map("key" -> FieldDefinition(Class("Column"), Single, Ordinary)), superclass = Some(Class("Named"))),
-      ClassDefinition("Column", Map(), Map("type" -> FieldDefinition(Class("Type"), Single, Ordinary)), superclass = Some(Class("Named"))),
+      ClassDefinition("Package", Map("classifiers" -> FieldDefinition(Class("Classifier"), ManyOpt, Ordinary)), Map()),
+      // Relational meta-model
+      ClassDefinition("Named", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
+      ClassDefinition("Table", Map("columns" -> FieldDefinition(Class("Column"), ManyOpt, Ordinary)),
+        Map("key" -> FieldDefinition(Class("Column"), Req, Ordinary)), superclass = Some(Class("Named"))),
+      ClassDefinition("Column", Map(), Map("type" -> FieldDefinition(Class("Type"), Req, Ordinary)), superclass = Some(Class("Named"))),
       ClassDefinition("Type", Map(), Map(), superclass = Some(Class("Type"))),
-      ClassDefinition("Schema", Map("tables" -> FieldDefinition(Class("Table"), Many, Ordinary), "types" -> FieldDefinition(Class("Type"), Many, Ordinary)), Map())
+      ClassDefinition("Schema", Map("tables" -> FieldDefinition(Class("Table"), ManyOpt, Ordinary), "types" -> FieldDefinition(Class("Type"), ManyOpt, Ordinary)), Map())
     )
     override val pres: Set[SMem] = Set(SMem(SStack.initial(Map("package" -> SetLit(Seq(Symbol(-1))))),
       SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Package"), Set())), Map(), Map(), Set())))

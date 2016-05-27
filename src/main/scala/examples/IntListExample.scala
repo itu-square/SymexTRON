@@ -10,7 +10,7 @@ import syntax.ast.Statement._
 trait IntListExample extends Example {
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
     new ClassDefinition("IntList", Map("next" -> FieldDefinition(Class("IntList"), Opt, Ordinary)),
-                                   Map("data" -> FieldDefinition(Class("Int"), Single, Ordinary)))
+                                   Map("data" -> FieldDefinition(Class("Int"), Req, Ordinary)))
   )
 
 }

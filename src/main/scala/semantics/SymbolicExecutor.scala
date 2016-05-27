@@ -85,7 +85,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         val subdps = defs.subtypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
         val constraints = superdps.map(superssym => SetSubEq(ssym, superssym)).toSet[BoolExpr[IsSymbolic.type]] ++
                              subdps.map(subssym => SetSubEq(subssym, ssym)).toSet[BoolExpr[IsSymbolic.type]]
-        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Many)), constraints)
+        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, ManyOpt)), constraints)
       }
     }
     locs.foldLeft((Seq[SetExpr[IsSymbolic.type]](), mem).right[String]) { (st, loc) =>
@@ -235,8 +235,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
   private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SetExpr[IsSymbolic.type], SMem) = {
     def cardMatches(crd: Cardinality, count: Symbols) = crd match {
-      case Single => count == 1
-      case Many => true
+      case ManyReq => 1 <= count
+      case Req => count == 1
+      case ManyOpt => true
       case Opt => count <= 1
     }
     eres match {

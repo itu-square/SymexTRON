@@ -16,21 +16,21 @@ trait RegexSimplication extends Example {
     Shared.stdClassDefs ++
     Set (
       ClassDefinition("Regex", Map(), Map()),
-      ClassDefinition("RegexRef", Map("value" -> FieldDefinition(Class("Regex"), Single, Ordinary)), Map()),
+      ClassDefinition("RegexRef", Map("value" -> FieldDefinition(Class("Regex"), Req, Ordinary)), Map()),
       ClassDefinition("Char", Map(), Map(), superclass = Some(Class("Regex"))),
       ClassDefinition("CharA", Map(), Map(), superclass = Some(Class("Char"))),
       ClassDefinition("CharB", Map(), Map(), superclass = Some(Class("Char"))),
       ClassDefinition("CharC", Map(), Map(), superclass = Some(Class("Char"))),
       ClassDefinition("Epsilon", Map(), Map(), superclass = Some(Class("Regex"))),
-      ClassDefinition("Alt", Map("left" -> FieldDefinition(Class("RegexRef"), Single, Ordinary),
-                                 "right" -> FieldDefinition(Class("RegexRef"), Single, Ordinary)), Map(), superclass = Some(Class("Regex"))),
-      ClassDefinition("Seq", Map("left" -> FieldDefinition(Class("RegexRef"), Single, Ordinary),
-                                 "right" -> FieldDefinition(Class("RegexRef"), Single, Ordinary)), Map(), superclass = Some(Class("Regex"))),
-      ClassDefinition("Star", Map("inner" -> FieldDefinition(Class("RegexRef"), Single, Ordinary)), Map(), superclass = Some(Class("Regex")))
+      ClassDefinition("Alt", Map("left" -> FieldDefinition(Class("RegexRef"), Req, Ordinary),
+                                 "right" -> FieldDefinition(Class("RegexRef"), Req, Ordinary)), Map(), superclass = Some(Class("Regex"))),
+      ClassDefinition("Seq", Map("left" -> FieldDefinition(Class("RegexRef"), Req, Ordinary),
+                                 "right" -> FieldDefinition(Class("RegexRef"), Req, Ordinary)), Map(), superclass = Some(Class("Regex"))),
+      ClassDefinition("Star", Map("inner" -> FieldDefinition(Class("RegexRef"), Req, Ordinary)), Map(), superclass = Some(Class("Regex")))
     )
   override val pres: Set[SMem] = Set(
     SMem(SStack.initial(Map("regex" -> SetSymbol(-1))),
-      SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("RegexRef"), Single)),Map(),Map(), Map(), Set()))
+      SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("RegexRef"), Req)),Map(),Map(), Map(), Set()))
   )
 }
 

@@ -11,13 +11,13 @@ object ContactBookExample extends Example {
   override val excludedBranches = Set(BranchPoint(7,2))
 
   override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
-    new ClassDefinition("ContactBook", Map("persons" -> FieldDefinition(Class("Person"), Many, Ordinary)), Map())
-  , new ClassDefinition("Person", Map("age" -> FieldDefinition(Class("Age"), Single, Ordinary),
-                                      "name" -> FieldDefinition(Class("String"), Single, Ordinary)), Map())
+    new ClassDefinition("ContactBook", Map("persons" -> FieldDefinition(Class("Person"), ManyOpt, Ordinary)), Map())
+  , new ClassDefinition("Person", Map("age" -> FieldDefinition(Class("Age"), Req, Ordinary),
+                                      "name" -> FieldDefinition(Class("String"), Req, Ordinary)), Map())
   , new ClassDefinition("Age", Map(), Map())
   , new ClassDefinition("Adult", Map(), Map(), Some(Class("Age")))
   , new ClassDefinition("Child", Map(), Map(), Some(Class("Age")))
-  , new ClassDefinition("Invited", Map("name" -> FieldDefinition(Class("String"), Single, Ordinary)), Map())
+  , new ClassDefinition("Invited", Map("name" -> FieldDefinition(Class("String"), Req, Ordinary)), Map())
   )
   override val pres: Set[SMem] = {
     val stack = Map("contactbook" -> SetLit(Seq(Symbol(-1))))

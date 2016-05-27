@@ -37,10 +37,10 @@ class ModelFinderTests extends FlatSpec
   it should "find an instance with three lists in the head-tail equal transformation program" in {
     val stack: SStackState = Map("list" -> SetLit(Seq(Symbol(1))))
     val heap = SHeap(
-      Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Single),
-          SetSymbol(11) -> SSymbolDesc(Class("Int"),Single),
+      Map(SetSymbol(3) -> SSymbolDesc(Class("Int"),Req),
+          SetSymbol(11) -> SSymbolDesc(Class("Int"),Req),
           SetSymbol(19) -> SSymbolDesc(Class("IntList"),Opt),
-          SetSymbol(20) -> SSymbolDesc(Class("Int"),Single)),
+          SetSymbol(20) -> SSymbolDesc(Class("Int"),Req)),
       Map(Symbol(1) -> Loced(Loc(1)),
           Symbol(9) -> Loced(Loc(5)),
           Symbol(18) -> Loced(Loc(10))),

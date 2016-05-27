@@ -10,9 +10,10 @@ import scalaz.{Node => _}
 case class Class(name: String)
 
 sealed trait Cardinality { def isOptional: Boolean }
-case object Single extends Cardinality { def isOptional = false }
-case object Many extends Cardinality { def isOptional = true }
+case object Req extends Cardinality { def isOptional = false }
+case object ManyReq extends Cardinality { def isOptional = false}
 case object Opt extends Cardinality { def isOptional = true }
+case object ManyOpt extends Cardinality { def isOptional = true }
 
 sealed trait FieldType
 case object Ordinary extends FieldType

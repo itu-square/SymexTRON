@@ -161,8 +161,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         })
         val fieldTyping = allFormulae((cd.children ++ cd.refs).toList.map { case (field, FieldDefinition(oc, crd, ft)) =>
           val cardConstraint = (t in l.join(typeOfLoc).join(isSubType)) implies (crd match {
-            case Single => f.join(l.join(LocsRel.fields)).one
-            case Many => Formula.TRUE
+            case ManyReq => f.join(l.join(LocsRel.fields)).some
+            case Req => f.join(l.join(LocsRel.fields)).one
+            case ManyOpt => Formula.TRUE
             case Opt => f.join(l.join(LocsRel.fields)).lone
           }) forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and
             (t oneOf TypesRel.typerels(c)))
@@ -469,8 +470,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   private
   def concretisationConstraints(smem: SMem): String \/ (List[Formula], Bounds) = {
     def cardConstraint(s: Expression, crd: Cardinality): Formula = crd match {
-      case Single => s.join(SymbolicSetRel.locs).one
-      case Many => Formula.TRUE
+      case ManyReq => s.join(SymbolicSetRel.locs).some
+      case Req => s.join(SymbolicSetRel.locs).one
+      case ManyOpt => Formula.TRUE
       case Opt =>  s.join(SymbolicSetRel.locs).lone
     }
     val symmap = smem.heap.svltion.keySet.map(sym => sym -> Relation.unary(s"Sym$$${sym.id}")).toMap

@@ -139,8 +139,9 @@ object PrettyPrinter {
     s"${pretty(loc)}.$f $sep ${pretty(e)}"
 
   def pretty(crd: Cardinality): String = crd match {
-    case Single => ""
-    case Many => "*"
+    case ManyReq => "+"
+    case Req => ""
+    case ManyOpt => "*"
     case Opt => "?"
   }
 
