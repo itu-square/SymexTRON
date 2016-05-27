@@ -64,20 +64,20 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
             `new`("female", Class("Female")),
             familyNameHelper(Var("member"), "familyName"),
             loadField("member_firstName", Var("member"), "firstName"),
-            `new`("concat", Class("Concat")),
-            assignField(Var("concat"), "s1", Var("member_firstName")),
-            assignField(Var("concat"), "s2", Var("familyName")),
-            assignField(Var("female"), "fullName", Var("concat")),
+            `new`("fullName", Class("Concat")),
+            assignField(Var("fullName"), "s1", Var("member_firstName")),
+            assignField(Var("fullName"), "s2", Var("familyName")),
+            assignField(Var("female"), "fullName", Var("fullName")),
             assignVar("persons", Union(Var("persons"), Var("female")))
           ),
           stmtSeq(
             `new`("male", Class("Male")),
             familyNameHelper(Var("member"), "familyName"),
             loadField("member_firstName", Var("member"), "firstName"),
-            `new`("concat", Class("Concat")),
-            assignField(Var("concat"), "s1", Var("member_firstName")),
-            assignField(Var("concat"), "s2", Var("familyName")),
-            assignField(Var("male"), "fullName", Var("concat")),
+            `new`("fullName", Class("Concat")),
+            assignField(Var("fullName"), "s1", Var("member_firstName")),
+            assignField(Var("fullName"), "s2", Var("familyName")),
+            assignField(Var("male"), "fullName", Var("fullName")),
             assignVar("persons", Union(Var("persons"), Var("male")))
           )
         )
@@ -91,10 +91,12 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
       ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Single, Ordinary))),
       ClassDefinition("Classifier", Map(), Map(), superclass = Some(Class("NamedElt"))),
       ClassDefinition("DataType", Map(), Map("_Type" -> FieldDefinition(Class("Type"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
-      ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Any"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), Many, Ordinary)),
+      ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Any"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), Many, Bidirectional(oppositeOf = "owner"))),
         Map("super" -> FieldDefinition(Class("Class"), Opt, Ordinary), "_Table" -> FieldDefinition(Class("Table"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
-      ClassDefinition("Attribute", Map("multivalued" -> FieldDefinition(Class("Any"), Opt, Ordinary)),
-        Map("type" -> FieldDefinition(Class("Class"), Single, Ordinary), "_Column" -> FieldDefinition(Class("Column"), Opt, Tracking)), superclass = Some(Class("NamedElt"))),
+      ClassDefinition("Attribute", Map(),
+        Map("isMultivalued" -> FieldDefinition(Class("Any"), Opt, Ordinary), "type" -> FieldDefinition(Class("Class"), Single, Ordinary),
+          "owner" -> FieldDefinition(Class("Class"), Single, Bidirectional(oppositeOf = "attributes")),
+          "_Column" -> FieldDefinition(Class("Column"), Opt, Tracking)), superclass = Some(Class("NamedElt"))),
       ClassDefinition("Package", Map("classifiers" -> FieldDefinition(Class("Classifier"), Many, Ordinary)), Map()),
       // Relational
       ClassDefinition("Named", Map(), Map("name" -> FieldDefinition(Class("String"), Single, Ordinary))),
@@ -132,16 +134,110 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
           )
         ),
         objectIdTypeHelper("objectIdType"),
-        // rule SingleValuedDataTypeAttribute2Column
-        stmtSeq(),
-        // rule MultiValuedDataTypeAttribute2Column
-        stmtSeq(),
-        // rule ClassAttribute2Column
-        stmtSeq(),
-        // rule MultiValuedClassAttribute2Column
-        stmtSeq(),
+        `new`("idString", Class("String")),
+        `new`("objectIdString", Class("String")),
+        `for`("at", MatchStar(Var("package"), Class("Attribute")), stmtSeq(
+          loadField("at_type", Var("at"), "type"),
+          loadField("at_isMultivalued", Var("at"), "isMultivalued"),
+          `for`("_", Match(Var("at_type"), Class("DataType")),
+            `if`(Eq(Var("at_isMultivalued"), SetLit(Seq())),
+              // rule SingleValuedDataTypeAttribute2Column
+              stmtSeq(
+                loadField("at_name", Var("at"), "name"),
+                loadField("at_type_Type", Var("at_type"), "_Type"),
+                `new`("column", Class("Column")),
+                assignField(Var("column"), "name", Var("at_name")),
+                assignField(Var("column"), "type", Var("at_type_Type")),
+                assignField(Var("at"), "_Column", Var("column"))
+              ),
+              // rule MultiValuedDataTypeAttribute2Column
+              stmtSeq(
+                loadField("at_owner", Var("at"), "owner"),
+                loadField("at_owner_name", Var("at_owner"), "name"),
+                loadField("at_name", Var("at"), "name"),
+                loadField("at_type_Type", Var("at_type"), "_Type"),
+                `new`("tableName", Class("Concat")),
+                assignField(Var("tableName"), "s1", Var("at_owner_name")),
+                assignField(Var("tableName"), "s2", Var("at_name")),
+                `new`("idName", Class("Concat")),
+                assignField(Var("idName"), "s1", Var("at_owner_name")),
+                assignField(Var("idName"), "s2", Var("idString")),
+                `new`("id", Class("Column")),
+                assignField(Var("id"), "name", Var("idName")),
+                assignField(Var("id"), "type", Var("objectIdType")),
+                `new`("value", Class("Column")),
+                assignField(Var("value"), "name", Var("at_name")),
+                assignField(Var("value"), "type", Var("at_type_Type")),
+                `new`("table", Class("Table")),
+                assignField(Var("table"), "name", Var("tableName")),
+                assignField(Var("table"), "key", Var("id")), // !!! Actually missing in example ATL transformation
+                assignField(Var("table"), "columns", Union(Var("id"), Var("value"))),
+                loadField("schema_tables", Var("schema"), "tables"),
+                assignField(Var("schema"), "tables", Union(Var("schema_tables"), Var("table")))
+              )
+            )),
+          `for`("_", Match(Var("at_type"), Class("Class")),
+            `if`(Eq(Var("at_isMultivalued"), SetLit(Seq())),
+              // rule ClassAttribute2Column
+              stmtSeq(
+                loadField("at_name", Var("at"), "name"),
+                `new`("column_name", Class("Concat")),
+                assignField(Var("column_name"), "s1", Var("at_name")),
+                assignField(Var("column_name"), "s2", Var("idString")),
+                `new`("column", Class("Column")),
+                assignField(Var("column"), "name", Var("column_name")),
+                assignField(Var("column"), "type", Var("objectIdType")),
+                assignField(Var("at"), "_Column", Var("column"))
+              ),
+              // rule MultiValuedClassAttribute2Column
+              stmtSeq(
+                loadField("at_owner", Var("at"), "owner"),
+                loadField("at_owner_name", Var("at_owner"), "name"),
+                loadField("at_name", Var("at"), "name"),
+                `new`("tableName", Class("Concat")),
+                assignField(Var("tableName"), "s1", Var("at_owner_name")),
+                assignField(Var("tableName"), "s2", Var("at_name")),
+                `new`("idName", Class("Concat")),
+                assignField(Var("idName"), "s1", Var("at_owner_name")),
+                assignField(Var("idName"), "s2", Var("idString")),
+                `new`("id", Class("Column")),
+                assignField(Var("id"), "name", Var("idName")),
+                assignField(Var("id"), "type", Var("objectIdType")),
+                `new`("foreignKey", Class("Column")),
+                assignField(Var("foreignKey"), "name", Var("at_name")),
+                assignField(Var("foreignKey"), "type", Var("objectIdType")),
+                `new`("table", Class("Table")),
+                assignField(Var("table"), "name", Var("tableName")),
+                assignField(Var("table"), "key", Var("id")), // !!! Actually missing in example ATL transformation
+                assignField(Var("table"), "columns", Union(Var("id"), Var("foreignKey"))),
+                loadField("schema_tables", Var("schema"), "tables"),
+                assignField(Var("schema"), "tables", Union(Var("schema_tables"), Var("table")))
+              )))
+        )),
         // rule Class2Table
-        stmtSeq()
+        `for`("class", MatchStar(Var("package"), Class("Class")), stmtSeq(
+          loadField("class_name", Var("class"), "name"),
+          loadField("class_attributes", Var("class"), "attributes"),
+          `new`("key", Class("Column")),
+          assignField(Var("key"), "name", Var("objectIdString")),
+          assignField(Var("key"), "type", Var("objectIdType")),
+          assignVar("cols", Var("key")),
+          `for`("at", MSet(Var("class_attributes")), stmtSeq(
+            loadField("at_isMultivalued", Var("at"), "isMultivalued"),
+            `if`(Eq(Var("at_isMultivalued"), SetLit(Seq())),
+              stmtSeq(
+                loadField("at_Column", Var("at"), "_Column"),
+                assignVar("cols", Union(Var("cols"), Var("at_Column")))
+              ),
+              stmtSeq()
+          ))),
+          `new`("table", Class("Table")),
+          assignField(Var("table"), "name", Var("class_name")),
+          assignField(Var("table"), "key", Var("key")),
+          assignField(Var("table"), "columns", Var("cols")), // TODO Handle bidirectional assignment in executors
+          loadField("schema_tables", Var("schema"), "tables"),
+          assignField(Var("schema"), "tables", Union(Var("schema_tables"), Var("table")))
+        ))
       )
     }
   }
