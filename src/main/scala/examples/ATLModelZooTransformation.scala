@@ -243,4 +243,33 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
       )
     }
   }
+
+  object PathExp2PetriNetTransformation extends ATLModelZooTransformation {
+    override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
+      // Shared
+      ClassDefinition("Element", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
+      // PathExp meta-model
+      ClassDefinition("PathExp", Map("transitions" -> FieldDefinition(Class("PETransition"), ManyOpt, Ordinary),
+                                     "states" -> FieldDefinition(Class("State"), ManyReq, Ordinary)), Map(), superclass = Some(Class("Element"))),
+      ClassDefinition("State", Map(), Map("outgoing" -> FieldDefinition(Class("PETransition"), ManyOpt, Bidirectional(oppositeOf = "source")),
+                                          "incoming" -> FieldDefinition(Class("PETransition"), ManyOpt, Bidirectional(oppositeOf = "target"))), superclass = Some(Class("Element"))),
+      ClassDefinition("PETransition", Map(), Map("source" -> FieldDefinition(Class("State"), Req, Bidirectional(oppositeOf = "outgoing")), // To avoid name clash
+                                                 "target" -> FieldDefinition(Class("State"), Req, Bidirectional(oppositeOf = "incoming"))), superclass = Some(Class("Element"))),
+      // PetriNet meta-model
+      ClassDefinition("PetriNet", Map("transitions" -> FieldDefinition(Class("PNTransition"), ManyOpt, Ordinary),
+                                      "arcs" -> FieldDefinition(Class("Arc"), ManyOpt, Ordinary),
+                                      "places" -> FieldDefinition(Class("Place"), ManyReq, Ordinary)), Map(), superclass = Some(Class("Element"))),
+      ClassDefinition("PNTransition", Map(), Map("outgoing" -> FieldDefinition(Class("TransToPlaceArc"), ManyOpt, Bidirectional(oppositeOf = "source")),
+                                                 "incoming" -> FieldDefinition(Class("PlaceToTransArc"), ManyOpt, Bidirectional(oppositeOf = "target"))), superclass = Some(Class("Element"))), // To avoid name clash
+      ClassDefinition("Place", Map(), Map("outgoing" -> FieldDefinition(Class("PlaceToTransArc"), ManyOpt, Bidirectional(oppositeOf = "source")),
+                                          "incoming" -> FieldDefinition(Class("TransToPlaceArc"), ManyOpt, Bidirectional(oppositeOf = "target"))), superclass = Some(Class("Element"))),
+      ClassDefinition("Arc", Map(), Map("weight" -> FieldDefinition(Class("Int"), Req, Ordinary)), superclass = Some(Class("Element"))),
+      ClassDefinition("TransToPlaceArc", Map(), Map("source" -> FieldDefinition(Class("PNTransition"), Req, Bidirectional(oppositeOf = "outgoing")),
+                                                    "target" -> FieldDefinition(Class("Place"), Req, Bidirectional(oppositeOf = "incoming"))), superclass = Some(Class("Arc"))),
+      ClassDefinition("PlaceToTransArc", Map(), Map("source" -> FieldDefinition(Class("Place"), Req, Bidirectional(oppositeOf = "outgoing")),
+                                                    "target" -> FieldDefinition(Class("PNTransition"), Req, Bidirectional(oppositeOf = "incoming"))), superclass = Some(Class("Arc")))
+    )
+    override val pres: Set[SMem] = Set(SMem(SStack.initial(Map("pe" -> SetLit(Seq(Symbol(-1))))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("PathExp"), Set())), Map(), Map(), Set())))
+    override val prog: Statement = ???
+  }
 }
