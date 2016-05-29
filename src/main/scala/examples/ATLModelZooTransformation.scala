@@ -11,18 +11,18 @@ import syntax.ast.Statement._
 trait ATLModelZooTransformation extends Example { }
 
 object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
-  override val classDefs = Shared.stdClassDefs ++ Set (
+  override val classDefs = Shared.stdClassDefs ++ Set(
     // Family meta-model
     ClassDefinition("Family", Map("father" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyFather")),
-                                  "mother" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyMother")),
-                                  "sons" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familySon")),
-                                  "daughters" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familyDaughter"))),
-                              Map("lastName" -> FieldDefinition(Class("String"), Req, Ordinary)), superclass = Some(Class("Any"))),
+      "mother" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyMother")),
+      "sons" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familySon")),
+      "daughters" -> FieldDefinition(Class("Member"), ManyOpt, Bidirectional(oppositeOf = "familyDaughter"))),
+      Map("lastName" -> FieldDefinition(Class("String"), Req, Ordinary)), superclass = Some(Class("Any"))),
     ClassDefinition("Member", Map(), Map("firstName" -> FieldDefinition(Class("String"), Req, Ordinary),
-                                         "familyFather" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "father")),
-                                         "familyMother" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "mother")),
-                                         "familySon" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "sons")),
-                                         "familyDaughter" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "daughters"))), superclass = Some(Class("Any"))),
+      "familyFather" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "father")),
+      "familyMother" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "mother")),
+      "familySon" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "sons")),
+      "familyDaughter" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "daughters"))), superclass = Some(Class("Any"))),
     // Person meta-model
     ClassDefinition("Person", Map(), Map("fullName" -> FieldDefinition(Class("String"), Req, Ordinary)), superclass = Some(Class("Any"))),
     ClassDefinition("Male", Map(), Map(), superclass = Some(Class("Person"))),
@@ -54,8 +54,8 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
           `if`(Not(Eq(Var("self_familySon"), SetLit(Seq()))),
             loadField(outVar, Var("self_familySon"), "lastName"),
             loadField(outVar, Var("self_familyDaughter"), "lastName")
-        )
-      ))
+          )
+        ))
     )
     stmtSeq(
       assignVar("persons", SetLit(Seq())),
@@ -85,6 +85,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
         )
       ))
     )
+    }
   }
 
   object ClassToRelationalTransformation extends ATLModelZooTransformation {
@@ -245,6 +246,8 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   }
 
   object PathExp2PetriNetTransformation extends ATLModelZooTransformation {
+    // Particularly interesting because it requires an ordering of resolution of elements which I am not sure is supported
+    // by other frameworks
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       // Shared
       ClassDefinition("Element", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
@@ -252,9 +255,13 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
       ClassDefinition("PathExp", Map("transitions" -> FieldDefinition(Class("PETransition"), ManyOpt, Ordinary),
                                      "states" -> FieldDefinition(Class("State"), ManyReq, Ordinary)), Map(), superclass = Some(Class("Element"))),
       ClassDefinition("State", Map(), Map("outgoing" -> FieldDefinition(Class("PETransition"), ManyOpt, Bidirectional(oppositeOf = "source")),
-                                          "incoming" -> FieldDefinition(Class("PETransition"), ManyOpt, Bidirectional(oppositeOf = "target"))), superclass = Some(Class("Element"))),
+                                          "incoming" -> FieldDefinition(Class("PETransition"), ManyOpt, Bidirectional(oppositeOf = "target")),
+                                          "_Place" -> FieldDefinition(Class("Place"), Opt, Tracking))),
       ClassDefinition("PETransition", Map(), Map("source" -> FieldDefinition(Class("State"), Req, Bidirectional(oppositeOf = "outgoing")), // To avoid name clash
-                                                 "target" -> FieldDefinition(Class("State"), Req, Bidirectional(oppositeOf = "incoming"))), superclass = Some(Class("Element"))),
+                                                 "target" -> FieldDefinition(Class("State"), Req, Bidirectional(oppositeOf = "incoming")),
+                                                 "_PNTransition" -> FieldDefinition(Class("PNTransition"), Opt, Tracking),
+                                                 "_PN_OA" -> FieldDefinition(Class("TransToPlaceArc"), Opt, Tracking),
+                                                 "_PN_IA" -> FieldDefinition(Class("PlaceToTransArc"), Opt, Tracking)), superclass = Some(Class("Element"))),
       // PetriNet meta-model
       ClassDefinition("PetriNet", Map("transitions" -> FieldDefinition(Class("PNTransition"), ManyOpt, Ordinary),
                                       "arcs" -> FieldDefinition(Class("Arc"), ManyOpt, Ordinary),
@@ -270,6 +277,72 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
                                                     "target" -> FieldDefinition(Class("PNTransition"), Req, Bidirectional(oppositeOf = "incoming"))), superclass = Some(Class("Arc")))
     )
     override val pres: Set[SMem] = Set(SMem(SStack.initial(Map("pe" -> SetLit(Seq(Symbol(-1))))), SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("PathExp"), Set())), Map(), Map(), Set())))
-    override val prog: Statement = ???
+    override val prog: Statement = stmtSeq(
+      assignVar("places", SetLit(Seq())),
+      assignVar("transitions", SetLit(Seq())),
+      `new`("emptyString", Class("Empty")),
+      `new`("int1", Class("Int")),
+      // rule State2Place -- Part 1 -- creating the places
+      `for`("st", MatchStar(Var("pe"), Class("State")), stmtSeq(
+        `new`("place", Class("Place")),
+        assignField(Var("st"), "_Place", Var("place")),
+        assignField(Var("place"), "name", Var("emptyString")),
+        assignVar("places", Union(Var("places"), Var("place")))
+      )),
+      // rule Transition2Transition
+      `for`("tr", MatchStar(Var("pe"), Class("PETransition")), stmtSeq(
+        `new`("pntr", Class("PNTransition")),
+        assignField(Var("tr"), "_PNTransition", Var("pntr")),
+        loadField("tr_name", Var("tr"), "name"),
+        assignField(Var("pntr"), "name", Var("tr_name")),
+        `new`("pnia", Class("PlaceToTransArc")),
+        assignField(Var("tr"), "_PN_IA", Var("pnia")),
+        assignField(Var("pntr"), "incoming", Var("pnia")),
+        loadField("tr_source", Var("tr"), "source"),
+        loadField("tr_source_Place", Var("tr_source"), "_Place"),
+        assignField(Var("pnia"), "source", Var("tr_source_Place")),
+        assignField(Var("pnia"), "target", Var("pntr")),
+        assignField(Var("pnia"), "weight", Var("int1")),
+        `new`("pnoa", Class("TransToPlaceArc")),
+        assignField(Var("tr"), "_PN_OA", Var("pnoa")),
+        assignField(Var("pntr"), "outgoing", Var("pnoa")),
+        assignField(Var("pnoa"), "source", Var("pntr")),
+        loadField("tr_target", Var("tr"), "target"),
+        loadField("tr_target_Place", Var("tr_target"), "_Place"),
+        assignField(Var("pnoa"), "target", Var("tr_target_Place")),
+        assignField(Var("pnia"), "weight", Var("int1")),
+        assignVar("transitions", Union(Var("transitions"), Var("pntr")))
+      )),
+      // rule State2Place -- Part 2 -- connecting things together
+      `for`("st", MatchStar(Var("pe"), Class("State")), stmtSeq(
+        loadField("st_Place", Var("st"), "_Place"),
+        assignVar("pnoas", SetLit(Seq())),
+        loadField("st_incoming", Var("st"), "incoming"),
+        `for`("inc", MSet(Var("st_incoming")), stmtSeq(
+          loadField("inc_PN_OA", Var("inc"), "_PN_OA"),
+          assignVar("pnoas", Union(Var("pnoas"), Var("inc_PN_OA")))
+        )),
+        assignField(Var("st_Place"), "incoming", Var("pnoas")),
+        assignVar("pnias", SetLit(Seq())),
+        loadField("st_outgoing", Var("st"), "outgoing"),
+        `for`("outg", MSet(Var("st_outgoing")), stmtSeq(
+          loadField("outg_PN_IA", Var("outg"), "_PN_IA"),
+          assignVar("pnias", Union(Var("pnias"), Var("outg_PN_IA")))
+        )),
+        assignField(Var("st_Place"), "outgoing", Var("pnias"))
+      )),
+      // rule PathExp2PetriNet
+      `new`("pn", Class("PetriNet")),
+      loadField("pe_name", Var("pe"), "name"),
+      assignField(Var("pn"), "name", Var("pe_name")),
+      assignField(Var("pn"), "places", Var("places")),
+      assignField(Var("pn"), "transitions", Var("transitions")),
+      assignVar("arcs", SetLit(Seq())),
+      `for`("pntr", MSet(Var("transitions")), stmtSeq(
+        loadField("pnia", Var("pntr"), "_PN_IA"),
+        loadField("pnoa", Var("pntr"), "_PN_OA"),
+        assignVar("arcs", Union(Var("arcs"), Union(Var("pnia"), Var("pnoa"))))
+      )),
+      assignField(Var("pn"), "arcs", Var("arcs"))
+    )
   }
-}
