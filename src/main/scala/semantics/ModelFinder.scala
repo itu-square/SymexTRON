@@ -142,7 +142,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         (ts in t.join(isSubType))) forAll
           ((l oneOf LocsRel.self) and (ss oneOf SymbolicSetRel.self) and (t oneOf self) and (ts oneOf self))
     }
-    lazy val typeOfFieldCorrectness = {
+    def typeOfFieldCorrectness(hasTracking: Boolean) = {
       val l = Variable.unary("l")
       val f = Variable.unary("f")
       val ol = Variable.unary("ol")
@@ -174,11 +174,16 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
           val bidiConstraint = ft match {
             case Bidirectional(oppositeOf) =>
               val of = Variable.unary("of")
-              (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields) and (ot eq ol.join(typeOfLoc)) implies
+              (t in l.join(typeOfLoc).join(isSubType)) and ((l product f product ol) in LocsRel.fields) implies
                 ((ol product of product l) in LocsRel.fields)  forAll
-                ((f oneOf FieldsRel.fieldsrels(field)) and (of oneOf FieldsRel.fieldsrels(oppositeOf)) and (l oneOf LocsRel.self) and (ol oneOf LocsRel.self) and
-                  (t oneOf TypesRel.typerels(c)) and (ot oneOf TypesRel.self) and (ote oneOf TypesRel.typerels(oc)))
-            case _ => Formula.TRUE
+                ((f oneOf FieldsRel.fieldsrels(field)) and (of oneOf FieldsRel.fieldsrels(oppositeOf)) and (l oneOf LocsRel.self)
+                  and (ol oneOf LocsRel.self) and (t oneOf TypesRel.typerels(c)))
+            case Tracking =>
+              if (hasTracking) Formula.TRUE
+              else {
+                (t in l.join(typeOfLoc).join(isSubType)) implies f.join(l.join(LocsRel.fields)).no forAll ((f oneOf FieldsRel.fieldsrels(field)) and (l oneOf LocsRel.self) and (t oneOf TypesRel.typerels(c)))
+              }
+            case Ordinary => Formula.TRUE
           }
           allFormulae(List(cardConstraint,typingConstraint, bidiConstraint))
         })
@@ -245,13 +250,13 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   }
 
   private
-  def staticConstraints : List[Formula] = List(
+  def staticConstraints(hasTracking: Boolean) : List[Formula] = List(
    SymbolsRel.locTyping , SymbolicSetRel.locsTyping , LocsRel.fieldsTyping ,
    FieldsRel.childsTyping , FieldsRel.refsTyping ,
    FieldsRel.childsRefsDisjoint , FieldsRel.childsDefFields , FieldsRel.refsDefFields ,
    VarsRel.valsTyping , TypesRel.typeOfLocTyping , TypesRel.typeOfSymTyping , TypesRel.typeOfSetTyping ,
    TypesRel.isSubTypeTyping , TypesRel.typeOfLocTypeOfSetSubtyping , TypesRel.typeOfLocTypeOfSymEquality ,
-   TypesRel.typeOfFieldCorrectness , ReachabilityRel.ownerTyping , ReachabilityRel.ownerDefinition ,
+   TypesRel.typeOfFieldCorrectness(hasTracking), ReachabilityRel.ownerTyping , ReachabilityRel.ownerDefinition ,
    ReachabilityRel.ownerAcyclic , ReachabilityRel.owningFieldUniqueness , ReachabilityRel.referencedByTyping ,
    ReachabilityRel.referencedByDefinition , ReachabilityRel.reachableByTyping , ReachabilityRel.reachableByDefinition
   )
@@ -459,16 +464,17 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     } yield (cs1 ++ cs2, op(ee1, ee2))
   }
 
-  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set()): String \/ CMem = {
-    concretisationConstraints(smem).flatMap{ case (cs, bs) =>
+  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false): String \/ CMem = {
+    concretisationConstraints(smem, hasTracking).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
-      extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)}
+      extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)
+    }
   }
 
   private
-  def concretisationConstraints(smem: SMem): String \/ (List[Formula], Bounds) = {
+  def concretisationConstraints(smem: SMem, hasTracking : Boolean): String \/ (List[Formula], Bounds) = {
     def cardConstraint(s: Expression, crd: Cardinality): Formula = crd match {
       case ManyReq => s.join(SymbolicSetRel.locs).some
       case Req => s.join(SymbolicSetRel.locs).one
@@ -558,7 +564,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         }
       // Consider using RWS monad
       scs <- spatialConstraints
-      allConstraints = staticConstraints ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
+      allConstraints = staticConstraints(hasTracking) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
       bounds = calculateBounds(symmap, ssymmap, locmap, varmap)
     } yield (allConstraints, bounds)
   }

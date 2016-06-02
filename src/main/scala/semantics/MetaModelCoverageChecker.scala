@@ -19,7 +19,7 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
     else {
       val clazz = todoClasses.head
       val classDef = defs(clazz)
-      val fields = (classDef.children.keys ++ classDef.refs.keys).toSet
+      val fields = (classDef.children.keys ++ classDef.refs.filterNot {case (f, fd) => fd.fieldtype == Tracking} .keys).toSet
       val reachedByOwnership = classDef.children.values.map(_.`class`).toSet
       val reachedByRequiredRef = classDef.refs.values.filterNot(_.card.isOptional).map(_.`class`).toSet
       val reachedBySubtyping = defs.subtypes(clazz)
@@ -39,7 +39,7 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
     (coveredClasses.size + coveredFields.size) * 100.0 / (relevantClasses.size + relevantFields.size)
   }
 
-  def registerMem(mem: CMem): String \/ Unit = {
+  def registerMem(mem: CMem): Unit = {
     val coveredClasses = mem.heap.typeenv.values.toSet
     val coveredFields =
       mem.heap.typeenv.foldLeft(Set[(Class, Fields)]()) { (st, instinfo) =>
@@ -49,14 +49,8 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
         }
         st ++ covered(mem.heap.childenv) ++ covered(mem.heap.refenv)
       }
-    val irrelevantClasses = coveredClasses diff relevantClasses
-    val irrelevantFields  = coveredFields diff relevantFields
-    if (irrelevantClasses.nonEmpty) s"Irrelevant classes in mem: ${irrelevantClasses.map(_.name).mkString(",")}".left
-    else if (irrelevantFields.nonEmpty) s"Irrelevant fields in mem: ${irrelevantFields.map{case (c,f) => s"$c.$f" }.mkString(",")}".left
-    else {
-      coveredClasses.foreach { c => atomic { implicit txn => _coveredClasses.update(c, true) } }
-      coveredFields.foreach { case (c,f) => atomic { implicit txn => _coveredFields.update((c,f), true) } }
-    }.right
+    coveredClasses.foreach { c => atomic { implicit txn => _coveredClasses.update(c, true) } }
+    coveredFields.foreach { case (c,f) => atomic { implicit txn => _coveredFields.update((c,f), true) } }
   }
 
 }

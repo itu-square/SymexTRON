@@ -51,12 +51,13 @@ object SHeap {
     SHeap(ssvltion, svltion, locOwnership, spatial, spatial, pure)
 }
 
-case class SStack(init: SStackState, current: SStackState)
+case class SStack(init: SStackState, roots: Set[Vars], current: SStackState)
 
 object SStack {
   val _ss_init = GenLens[SStack](_.init)
   val _ss_current = GenLens[SStack](_.current)
-  def initial(sstackstate: SStackState) = SStack(sstackstate, sstackstate)
+  val _ss_roots = GenLens[SStack](_.roots)
+  def initial(roots: Set[Vars], sstackstate: SStackState) = SStack(sstackstate, roots, sstackstate)
 }
 
 case class SMem(stack: SStack, heap: SHeap)

@@ -29,7 +29,7 @@ trait RegexSimplication extends Example {
       ClassDefinition("Star", Map("inner" -> FieldDefinition(Class("RegexRef"), Req, Ordinary)), Map(), superclass = Some(Class("Regex")))
     )
   override val pres: Set[SMem] = Set(
-    SMem(SStack.initial(Map("regex" -> SetSymbol(-1))),
+    SMem(SStack.initial(Set(), Map("regex" -> SetSymbol(-1))),
       SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("RegexRef"), Req)),Map(),Map(), Map(), Set()))
   )
 }

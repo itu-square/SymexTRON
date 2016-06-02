@@ -15,7 +15,7 @@ trait SimpleBoxExample extends Example {
   override val pres: Set[SMem] = {
     val stack = Map("x" -> SetLit(Seq(Symbol(-1))), "y" -> SetLit(Seq(Symbol(-2))))
     Set(
-      SMem(SStack.initial(stack),
+      SMem(SStack.initial(Set(), stack),
         SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("IntBox"), Set()),
           Symbol(-2) -> UnknownLoc(Class("IntBox"), Set())), Map(), Map(), Set()) )
     )

@@ -15,7 +15,7 @@ object IdIterExample extends Example {
   override val pres: Set[SMem] = {
     val stack = Map("X" -> SetSymbol(-1))
     Set(
-      SMem(SStack.initial(stack),
+      SMem(SStack.initial(Set(), stack),
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntSet"), ManyOpt)), Map(), Map(), Map(), Set()))
     )
   }

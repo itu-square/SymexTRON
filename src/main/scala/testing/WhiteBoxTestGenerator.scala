@@ -35,9 +35,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, 
                symbExec.execute(pres, concExec.prog)
               .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm) })
               .takeWhile(_ => concExec.coverage <= coverageTarget)
-              .map { mem => mem.fold(_ => (), m => { concExec.execute(m).leftMap { err =>
-                println(s"Failed while executing with memory $m with $err"); System.exit(1)
-              }; }); mem  }
+              .map { mem => mem.fold(_ => (), m => { concExec.execute(m) }); mem  }
               )(wye.interrupt)
   }
 

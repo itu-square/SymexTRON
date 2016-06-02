@@ -19,7 +19,7 @@ object IntListContainsElementExample extends IntListExample {
   override val pres: Set[SMem] = {
     val stack = Map("list" -> SetSymbol(-1), "elem" -> SetLit(Seq(Symbol(-2))))
     Set(
-      SMem(SStack.initial(stack),
+      SMem(SStack.initial(Set(),stack),
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt)), Map(Symbol(-2) -> UnknownLoc(Class("Int"), Set())), Map(), Map(), Set()))
     )
   }
@@ -38,7 +38,7 @@ object IntListHeadTailEqExample extends IntListExample {
   override val pres: Set[SMem] = {
     val stack = Map("list" -> SetSymbol(-1))
     Set(
-      SMem(SStack.initial(stack),
+      SMem(SStack.initial(Set(),stack),
         SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntList"), Opt)), Map(), Map(), Map(), Set()))
     )
   }

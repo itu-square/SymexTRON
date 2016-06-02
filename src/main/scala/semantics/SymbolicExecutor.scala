@@ -111,7 +111,6 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
 
 
   private def executeHelper(pre : SMem, stmt : Statement) : EitherT[Process[Task, ?], String, SMem] = {
-    // println(PrettyPrinter.pretty(stmt, short = true))
     // TODO parallelise using mergeN
     stmt match {
       case StmtSeq(_,ss) => ss.toList.foldLeft(EitherT[Process[Task, ?], String, SMem](pre.right.point[Process[Task, ?]])) { (memr, s) =>

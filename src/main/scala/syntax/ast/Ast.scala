@@ -24,7 +24,7 @@ case class FieldDefinition(`class`: Class, card: Cardinality, fieldtype: FieldTy
 
 // We only support single inheritance
 case class ClassDefinition(name: String, children: Map[Fields, FieldDefinition],
-                           refs: Map[Fields, FieldDefinition], superclass: Option[Class] = None)
+                           refs: Map[Fields, FieldDefinition], superclass: Option[Class] = None, isStandalone: Boolean = false)
 
 sealed trait ASTType {
   type Elim[+S, +P]

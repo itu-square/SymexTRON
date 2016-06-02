@@ -54,8 +54,9 @@ package object ast {
       (childrenOf(selforsupers) ++ refsOf(selforsupers)).get(f)
     }
 
-    def supertypes(c : Class): Set[Class] =
-     defs(c).superclass.toSet.|>(s => s ++ s.flatMap(supertypes)) + Class("Any")
+    def supertypes(c : Class): Set[Class] = {
+      defs(c).superclass.toSet.|>(s => s ++ s.flatMap(supertypes)) + Class("Any")
+    }
 
     def definingClass(c : Class, f : Fields): Class = {
       if (defs(c).children.contains(f) || defs(c).refs.contains(f)) c

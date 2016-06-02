@@ -23,6 +23,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int)
   private
   def generateCoveringTests(consideredTypes: Set[Class], pre: SMem, mems: Set[CMem]): Process0[CMem] = {
     val metamodelcoverage = new MetaModelCoverageChecker(defs, consideredTypes)
+    mems.foreach(metamodelcoverage.registerMem)
     def gctHelper(classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Process0[CMem] = {
       val additionalClassesToCover = metamodelcoverage.relevantClasses diff metamodelcoverage.coveredClasses
       val additionalFieldsToCover = metamodelcoverage.relevantFields diff metamodelcoverage.coveredFields
