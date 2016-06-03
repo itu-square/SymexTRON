@@ -109,6 +109,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
       (t.join(isSubType) in self) forAll (t oneOf self) and
         (isSubType.join(Expression.UNIV) in self)
     }
+    val standalone = Relation.unary("Types/standalone")
     val typeOfSet = Relation.binary("Types/typeOfSet")
     lazy val typeOfSetTyping = {
       val ss = Variable.unary("ss")
@@ -354,6 +355,10 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
     for ((c, trelname) <- TypesRel.typerels) bounds.boundExactly(trelname, f setOf typeobjs(c))
     bounds.boundExactly(TypesRel.self, f setOf (typeobjs.values.toSeq :_*))
+
+    val standaloneBounds = f noneOf 1
+    defs.values.toSet.foreach[Unit](cd => if (cd.isStandalone) standaloneBounds.add(f tuple typeobjs(Class(cd.name))))
+    bounds.boundExactly(TypesRel.standalone, standaloneBounds)
 
     val stBounds = f noneOf 2
     for ((c, sc) <- defs.subtypesOrSelf.toList.flatMap { case (c, scs) => scs.toList.map(sc => (c,sc)) }) {
