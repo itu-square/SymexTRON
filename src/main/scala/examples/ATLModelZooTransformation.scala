@@ -25,7 +25,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
       "familySon" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "sons")),
       "familyDaughter" -> FieldDefinition(Class("Family"), Opt, Bidirectional(oppositeOf = "daughters")))),
     // Person meta-model
-    ClassDefinition("Person", Map(), Map("fullName" -> FieldDefinition(Class("String"), Req, Ordinary))),
+    ClassDefinition("Person", Map(), Map("fullName" -> FieldDefinition(Class("String"), Req, Ordinary)), isAbstract = true),
     ClassDefinition("Male", Map(), Map(), superclass = Some(Class("Person"))),
     ClassDefinition("Female", Map(), Map(), superclass = Some(Class("Person")))
   )
@@ -92,8 +92,8 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   object ClassToRelationalTransformation extends ATLModelZooTransformation {
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       // Class meta-model
-      ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
-      ClassDefinition("Classifier", Map(), Map(), superclass = Some(Class("NamedElt"))),
+      ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary)), isAbstract = true),
+      ClassDefinition("Classifier", Map(), Map(), superclass = Some(Class("NamedElt")), isAbstract = true),
       ClassDefinition("DataType", Map(), Map("_Type" -> FieldDefinition(Class("Type"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
       ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Unit"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), ManyOpt, Bidirectional(oppositeOf = "owner"))),
         Map("super" -> FieldDefinition(Class("Class"), Opt, Ordinary), "_Table" -> FieldDefinition(Class("Table"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
@@ -103,7 +103,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
           "_Column" -> FieldDefinition(Class("Column"), Opt, Tracking)), superclass = Some(Class("NamedElt"))),
       ClassDefinition("Package", Map("classifiers" -> FieldDefinition(Class("Classifier"), ManyOpt, Ordinary)), Map()),
       // Relational meta-model
-      ClassDefinition("Named", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
+      ClassDefinition("Named", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary)), isAbstract = true),
       ClassDefinition("Table", Map("columns" -> FieldDefinition(Class("Column"), ManyOpt, Ordinary)),
         Map("key" -> FieldDefinition(Class("Column"), Req, Ordinary)), superclass = Some(Class("Named"))),
       ClassDefinition("Column", Map(), Map("type" -> FieldDefinition(Class("Type"), Req, Ordinary)), superclass = Some(Class("Named"))),
@@ -251,7 +251,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
     // by other frameworks
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       // Shared
-      ClassDefinition("Element", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary))),
+      ClassDefinition("Element", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary)), isAbstract = true),
       // PathExp meta-model
       ClassDefinition("PathExp", Map("transitions" -> FieldDefinition(Class("PETransition"), ManyOpt, Ordinary),
                                      "states" -> FieldDefinition(Class("State"), ManyReq, Ordinary)), Map(), superclass = Some(Class("Element"))),

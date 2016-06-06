@@ -23,7 +23,7 @@ class ModelFinderTests extends FlatSpec
 
   "The model finder" should "find an instance with an attribute for the class-to-table transformation" in {
     val modelFinder = new ModelFinder(Class2TableSimpleExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 3)
-    val ccr = modelFinder invokePrivate concretisationConstraints(Class2TableSimpleExample.pres.head, false)
+    val ccr = modelFinder invokePrivate concretisationConstraints(Class2TableSimpleExample.pres.head, false, true)
     ccr should be a 'right
     ccr match {
       case \/-((constraints, bounds)) =>
@@ -56,7 +56,7 @@ class ModelFinderTests extends FlatSpec
       Set(Not(Eq(SetLit(List(Symbol(1))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(9))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(18))),SetLit(List())))))
     val pre = SMem(SStack.initial(Set(), stack), heap)
     val modelFinder = new ModelFinder(IntListHeadTailEqExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 6)
-    val ccr = modelFinder invokePrivate concretisationConstraints(pre, false)
+    val ccr = modelFinder invokePrivate concretisationConstraints(pre, false, true)
     ccr should be a 'right
     ccr match {
       case \/-((constraints, bounds)) =>

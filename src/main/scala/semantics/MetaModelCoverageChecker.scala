@@ -28,7 +28,10 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
       relevantFeatures(newTodoClasses, classesRelevant, relevantFields ++ fields.map(clazz -> _))
     }
   }
-  val (relevantClasses, relevantFields) = relevantFeatures(inputTypes, Set[Class](),Set[(Class,Fields)]())
+  val (relevantClasses, relevantFields) = {
+    val (rc, rf) = relevantFeatures(inputTypes, Set[Class](),Set[(Class,Fields)]())
+    (rc.filterNot(c => defs(c).isAbstract), rf)
+  }
   private val _coveredClasses: TMap[Class, Boolean] = TMap.empty[Class, Boolean]
   private val _coveredFields: TMap[(Class, Fields), Boolean] = TMap.empty[(Class, Fields),Boolean]
 
@@ -36,7 +39,7 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
   def coveredFields: Set[(Class, Fields)] = _coveredFields.snapshot.keySet
 
   def coverage: Double = {
-    (coveredClasses.size + coveredFields.size) * 100.0 / (relevantClasses.size + relevantFields.size)
+    ((relevantClasses intersect coveredClasses).size + (relevantFields intersect coveredFields).size) * 100.0 / (relevantClasses.size + relevantFields.size)
   }
 
   def registerMem(mem: CMem): Unit = {

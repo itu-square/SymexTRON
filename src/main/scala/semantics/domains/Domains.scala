@@ -65,6 +65,7 @@ case class SMem(stack: SStack, heap: SHeap)
 object SMem {
   val _sm_initStack = GenLens[SMem](_.stack.init)
   val _sm_currentStack = GenLens[SMem](_.stack.current)
+  val _sm_roots = GenLens[SMem](_.stack.roots)
   val _sm_heap = GenLens[SMem](_.heap)
 
   def allTypes(mem: SMem): Set[Class] = {

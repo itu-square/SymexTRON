@@ -54,6 +54,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   object VarsRel {
     val self = Relation.unary("Vars")
     val vals = Relation.binary("Vars/vals")
+    val isRoot = Relation.unary("Vars/isRoot")
     lazy val valsTyping = {
       val v = Variable.unary("v")
       (v.join(vals) in LocsRel.self) forAll (v oneOf self) and
@@ -293,7 +294,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   }
 
   private
-  def calculateBounds(symmap: Map[Symbol, Relation], ssymmap: Map[SetSymbol, Relation], locmap: Map[Loc, Relation], varmap: Map[String, Relation]) : Bounds = {
+  def calculateBounds(symmap: Map[Symbol, Relation], ssymmap: Map[SetSymbol, Relation], locmap: Map[Loc, Relation], varmap: Map[String, Relation], varroots: Set[String]) : Bounds = {
     val additionallocs = {
       // See if .max works instead of maximum
       val maxid = try { locmap.keySet.toList.map(_.id).max + 1 } catch { case e:UnsupportedOperationException => 0 }
@@ -331,6 +332,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
     for ((vr, rel) <- varmap) bounds.boundExactly(rel, f setOf varobjs(vr))
 
+    bounds.boundExactly(VarsRel.isRoot, f setOf (varroots.map(varobjs).toSeq :_*))
+
     val varvalsUpper = f noneOf 2
     for (varid <- varobjs.values.toSeq; locid <- allLocobjs.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple locid))
     bounds.bound(VarsRel.vals, varvalsUpper)
@@ -357,6 +360,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     bounds.boundExactly(TypesRel.self, f setOf (typeobjs.values.toSeq :_*))
 
     val standaloneBounds = f noneOf 1
+
     defs.values.toSet.foreach[Unit](cd => if (cd.isStandalone) standaloneBounds.add(f tuple typeobjs(Class(cd.name))))
     bounds.boundExactly(TypesRel.standalone, standaloneBounds)
 
@@ -380,7 +384,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     }
     bounds.bound(TypesRel.typeOfSym, typeOfSymUpper)
     val typeOfLocUpper = f noneOf 2
-    for (lid <- allLocobjs.values.toSeq; typ <- typeobjs.values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
+    for (lid <- allLocobjs.values.toSeq; typ <- typeobjs.filterKeys(c => !defs(c).isAbstract).values.toSeq) typeOfLocUpper.add((f tuple lid) product (f tuple typ))
     bounds.bound(TypesRel.typeOfLoc, typeOfLocUpper)
 
     val locReachUpper = f noneOf 2
@@ -469,8 +473,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     } yield (cs1 ++ cs2, op(ee1, ee2))
   }
 
-  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false): String \/ CMem = {
-    concretisationConstraints(smem, hasTracking).flatMap{ case (cs, bs) =>
+  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false, wellRooted: Boolean = true): String \/ CMem = {
+    concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
@@ -479,13 +483,14 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   }
 
   private
-  def concretisationConstraints(smem: SMem, hasTracking : Boolean): String \/ (List[Formula], Bounds) = {
+  def concretisationConstraints(smem: SMem, hasTracking : Boolean, wellRooted: Boolean): String \/ (List[Formula], Bounds) = {
     def cardConstraint(s: Expression, crd: Cardinality): Formula = crd match {
       case ManyReq => s.join(SymbolicSetRel.locs).some
       case Req => s.join(SymbolicSetRel.locs).one
       case ManyOpt => Formula.TRUE
       case Opt =>  s.join(SymbolicSetRel.locs).lone
     }
+
     val symmap = smem.heap.svltion.keySet.map(sym => sym -> Relation.unary(s"Sym$$${sym.id}")).toMap
     val ssymmap = smem.heap.ssvltion.keySet.map(ssym => ssym -> Relation.unary(s"SetSym$$${ssym.id}")).toMap
     val varmap = _sm_initStack.get(smem).keySet.map(vr => vr -> Relation.unary(s"Var$$$vr")).toMap
@@ -498,6 +503,17 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         varconstraint = varmap(vr).join(VarsRel.vals) eq eexp
       } yield varconstraint :: expcs ++ constraints
     }
+    val rootconstraints = if (wellRooted) {
+      val l = Variable.unary("l")
+      val ol = Variable.unary("ol")
+      val v = Variable.unary("v")
+      (((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)) or
+        l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType).intersection(TypesRel.standalone).some).not and
+          ((l product VarsRel.self.join(VarsRel.vals)).intersection(ReachabilityRel.reachableBy.closure)).some  implies
+            ((l product ol) in ReachabilityRel.owner `forSome` (ol oneOf (LocsRel.self))) forAll (l oneOf LocsRel.self)
+
+    } else Formula.TRUE
+    val varroots = _sm_roots.get(smem)
     val ssvconstraints = smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
         cardConstraint(ssymmap(ssym), ssdesc.crd) and
           (ssymmap(ssym).join(TypesRel.typeOfSet) eq TypesRel.typerels(ssdesc.cl))
@@ -569,8 +585,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         }
       // Consider using RWS monad
       scs <- spatialConstraints
-      allConstraints = staticConstraints(hasTracking) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
-      bounds = calculateBounds(symmap, ssymmap, locmap, varmap)
+      allConstraints = staticConstraints(hasTracking) ++ List(rootconstraints) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
+      bounds = calculateBounds(symmap, ssymmap, locmap, varmap, varroots)
     } yield (allConstraints, bounds)
   }
 
