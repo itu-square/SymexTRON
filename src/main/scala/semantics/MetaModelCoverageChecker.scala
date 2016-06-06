@@ -43,14 +43,15 @@ class MetaModelCoverageChecker(defs: Map[Class, ClassDefinition], inputTypes: Se
   }
 
   def registerMem(mem: CMem): Unit = {
-    val coveredClasses = mem.heap.typeenv.values.toSet
+    val mem_ = GarbageCollection.gc(mem)
+    val coveredClasses = mem_.heap.typeenv.values.toSet
     val coveredFields =
-      mem.heap.typeenv.foldLeft(Set[(Class, Fields)]()) { (st, instinfo) =>
+      mem_.heap.typeenv.foldLeft(Set[(Class, Fields)]()) { (st, instinfo) =>
         val (inst, clazz) = instinfo
         def covered(env: Map[Instances, Map[Fields, Set[Instances]]]) : Set[(Class, Fields)] = {
-          env.get(inst).cata(_.keySet, Set[Fields]()).map(f => defs.definingClass(clazz, f) -> f)
+          env.get(inst).toSet.flatMap(_.toSet[(Fields, Set[Instances])].flatMap[(Class, Fields), Set[(Class, Fields)]] { case (f, os) => if (os.nonEmpty) Set(defs.definingClass(clazz, f) -> f) else Set() })
         }
-        st ++ covered(mem.heap.childenv) ++ covered(mem.heap.refenv)
+        st ++ covered(mem_.heap.childenv) ++ covered(mem_.heap.refenv)
       }
     coveredClasses.foreach { c => atomic { implicit txn => _coveredClasses.update(c, true) } }
     coveredFields.foreach { case (c,f) => atomic { implicit txn => _coveredFields.update((c,f), true) } }
