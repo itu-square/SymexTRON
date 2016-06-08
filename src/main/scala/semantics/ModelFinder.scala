@@ -514,28 +514,10 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
       val v = Variable.unary("v")
       val t = Variable.unary("t")
       ((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)).not and
-        ((t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType) and (t in TypesRel.standalone)).not forAll (t oneOf TypesRel.self)) and
-         ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure and (ol in v.join(VarsRel.vals)) `forSome` ((ol oneOf LocsRel.self) and (v oneOf VarsRel.self)) ) implies
+        ((t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType) and (t in TypesRel.standalone)).not forAll (t oneOf TypesRel.self)) implies
                ((l product ol) in ReachabilityRel.owner `forSome` (ol oneOf LocsRel.self)) forAll (l oneOf LocsRel.self)
 
     } else Formula.TRUE
-    val sanitrootrel1 = {
-      val l = Variable.unary("l")
-      val v = Variable.unary("v")
-      val t = Variable.unary("t")
-      SanityRel.sr1 eq (((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)).not comprehension (l oneOf LocsRel.self))
-    }
-    val sanitrootrel2 = {
-      val l = Variable.unary("l")
-      val t = Variable.unary("t")
-      SanityRel.sr2 eq ((t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType) and (t in TypesRel.standalone)).not forAll(t oneOf TypesRel.self) comprehension (l oneOf LocsRel.self))
-    }
-    val sanitroolrel3 = {
-      val l = Variable.unary("l")
-      val ol = Variable.unary("ol")
-      val v = Variable.unary("v")
-      SanityRel.sr3 eq (((l product ol) in ReachabilityRel.reachableBy and (ol in v.join(VarsRel.vals)) `forSome` ((ol oneOf LocsRel.self) and (v oneOf VarsRel.self))) comprehension (l oneOf LocsRel.self))
-    }
     val varroots = _sm_roots.get(smem)
     val ssvconstraints = smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
         cardConstraint(ssymmap(ssym), ssdesc.crd) and
@@ -608,7 +590,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         }
       // Consider using RWS monad
       scs <- spatialConstraints
-      allConstraints = staticConstraints(hasTracking) ++ List(rootconstraints, sanitrootrel1, sanitrootrel2, sanitroolrel3) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
+      allConstraints = staticConstraints(hasTracking) ++ List(rootconstraints) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
       bounds = calculateBounds(symmap, ssymmap, locmap, varmap, varroots)
     } yield (allConstraints, bounds)
   }
