@@ -23,7 +23,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   var counter = 0
 
   object SanityRel {
-    val self = Relation.unary("SanityRel")
+    val sr1 = Relation.unary("SanityRel/sr1")
+    val sr2 = Relation.unary("SanityRel/sr2")
+    val sr3 = Relation.unary("SanityRel/sr3")
   }
 
   object SymbolicSetRel {
@@ -287,7 +289,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     (ol in v.join(VarsRel.vals)) and
       ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
-          (f eq FieldsRel.fieldsrels(field._2)) and
+          (f in FieldsRel.fieldsrels(field._2)) and
             ((l product f product ool) in LocsRel.fields) `forSome`
               ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (ool oneOf LocsRel.self) and (l oneOf LocsRel.self) and
                 (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
@@ -314,7 +316,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     val bounds = new Bounds(universe)
     val f = universe.factory
 
-    bounds.bound(SanityRel.self, f allOf 1)
+    bounds.bound(SanityRel.sr1, f allOf 1)
+    bounds.bound(SanityRel.sr2, f allOf 1)
+    bounds.bound(SanityRel.sr3, f allOf 1)
 
     bounds.boundExactly(SymbolsRel.self, f setOf (symobjs.values.toSeq :_*))
 
@@ -477,6 +481,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
+      //println(PrettyPrinter.pretty(smem, initial = true))
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
       extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)
     }
@@ -507,12 +512,30 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
       val l = Variable.unary("l")
       val ol = Variable.unary("ol")
       val v = Variable.unary("v")
-      (((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)) or
-        l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType).intersection(TypesRel.standalone).some).not and
-          ((l product VarsRel.self.join(VarsRel.vals)).intersection(ReachabilityRel.reachableBy.closure)).some  implies
-            ((l product ol) in ReachabilityRel.owner `forSome` (ol oneOf (LocsRel.self))) forAll (l oneOf LocsRel.self)
+      val t = Variable.unary("t")
+      ((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)).not and
+        ((t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType) and (t in TypesRel.standalone)).not forAll (t oneOf TypesRel.self)) and
+         ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure and (ol in v.join(VarsRel.vals)) `forSome` ((ol oneOf LocsRel.self) and (v oneOf VarsRel.self)) ) implies
+               ((l product ol) in ReachabilityRel.owner `forSome` (ol oneOf LocsRel.self)) forAll (l oneOf LocsRel.self)
 
     } else Formula.TRUE
+    val sanitrootrel1 = {
+      val l = Variable.unary("l")
+      val v = Variable.unary("v")
+      val t = Variable.unary("t")
+      SanityRel.sr1 eq (((l in v.join(VarsRel.vals)) and (v in VarsRel.isRoot) `forSome` (v oneOf VarsRel.self)).not comprehension (l oneOf LocsRel.self))
+    }
+    val sanitrootrel2 = {
+      val l = Variable.unary("l")
+      val t = Variable.unary("t")
+      SanityRel.sr2 eq ((t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType) and (t in TypesRel.standalone)).not forAll(t oneOf TypesRel.self) comprehension (l oneOf LocsRel.self))
+    }
+    val sanitroolrel3 = {
+      val l = Variable.unary("l")
+      val ol = Variable.unary("ol")
+      val v = Variable.unary("v")
+      SanityRel.sr3 eq (((l product ol) in ReachabilityRel.reachableBy and (ol in v.join(VarsRel.vals)) `forSome` ((ol oneOf LocsRel.self) and (v oneOf VarsRel.self))) comprehension (l oneOf LocsRel.self))
+    }
     val varroots = _sm_roots.get(smem)
     val ssvconstraints = smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
         cardConstraint(ssymmap(ssym), ssdesc.crd) and
@@ -585,7 +608,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
         }
       // Consider using RWS monad
       scs <- spatialConstraints
-      allConstraints = staticConstraints(hasTracking) ++ List(rootconstraints) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
+      allConstraints = staticConstraints(hasTracking) ++ List(rootconstraints, sanitrootrel1, sanitrootrel2, sanitroolrel3) ++ ssvconstraints ++ svconstraints ++ vcs ++ purecs ++ scs
       bounds = calculateBounds(symmap, ssymmap, locmap, varmap, varroots)
     } yield (allConstraints, bounds)
   }
@@ -620,6 +643,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     solution.outcome match {
       case Outcome.SATISFIABLE | Outcome.TRIVIALLY_SATISFIABLE => solution.instance.right
       case Outcome.UNSATISFIABLE | Outcome.TRIVIALLY_UNSATISFIABLE =>
+        //println(solution.outcome)
         val proof = solution.proof
         val core = if (proof != null) { proof.minimize(new SCEStrategy(proof.log)); proof.highLevelCore.keySet.toString } else "No core!"
         s""" |Unsatisfiable!

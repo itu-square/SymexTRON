@@ -1,7 +1,7 @@
 package testing
 
 import _root_.syntax.ast.Statement.BranchPoint
-import semantics.{MetaModelCoverageChecker, SymbolicExecutor, ConcreteExecutor, PrettyPrinter}
+import semantics.{SymbolicExecutor, ConcreteExecutor}
 import semantics.domains._
 
 import syntax.ast._
@@ -10,7 +10,6 @@ import scalaz.stream._, scalaz.stream.time._
 import scala.concurrent.duration._
 import scalaz.concurrent.Task
 import java.util.concurrent.ScheduledExecutorService
-import helper._
 
 class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, excludedBranches: Set[BranchPoint],
                             beta: Int, delta: Int, kappa: Int,

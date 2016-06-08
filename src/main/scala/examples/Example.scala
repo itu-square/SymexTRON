@@ -14,7 +14,7 @@ import testing.{BlackBoxTestGenerator, WhiteBoxTestGenerator}
 
 import scalaz.concurrent.Task
 import scalaz.stream.io
-
+import scala.concurrent.duration._
 
 /**
   * Created by asal on 15/01/2016.
@@ -36,7 +36,7 @@ trait Example {
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, Set(), beta = 2, delta = delta, kappa = 2)
+    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta = beta, delta = delta, kappa = kappa, timeout = 30L.minutes)
     println("""------------ Whitebox test generation -----------------""")
     wbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println(s"Coverage: ${wbtestgenerator.codeCoverage}")

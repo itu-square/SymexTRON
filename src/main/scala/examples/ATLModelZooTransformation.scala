@@ -10,8 +10,12 @@ import syntax.ast.Statement._
   */
 trait ATLModelZooTransformation extends Example { }
 
+// This example is a bit traditionalist, but we wanted to pick something from the transformation Zoo
 object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   override val beta = 3
+  override val excludedBranches = Set(BranchPoint(2,1) /* There must be at least two members (father and mother) in each family */
+    , BranchPoint(22,0) /* Not female means not mother */, BranchPoint(24,1) /* Not female means not daughter */,
+      BranchPoint(40,0) /* Female means not father */, BranchPoint(44,0) /* Female means not son */)
   override val classDefs = Shared.stdClassDefs ++ Set(
     // Family meta-model
     ClassDefinition("Family", Map("father" -> FieldDefinition(Class("Member"), Req, Bidirectional(oppositeOf = "familyFather")),
@@ -90,15 +94,17 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   }
 
   object ClassToRelationalTransformation extends ATLModelZooTransformation {
+    override val excludedBranches = Set(BranchPoint(24,2), BranchPoint(56,2))
+
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       // Class meta-model
       ClassDefinition("NamedElt", Map(), Map("name" -> FieldDefinition(Class("String"), Req, Ordinary)), isAbstract = true),
       ClassDefinition("Classifier", Map(), Map(), superclass = Some(Class("NamedElt")), isAbstract = true),
       ClassDefinition("DataType", Map(), Map("_Type" -> FieldDefinition(Class("Type"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
-      ClassDefinition("Class", Map("isAbstract" -> FieldDefinition(Class("Unit"), Opt, Ordinary), "attributes" -> FieldDefinition(Class("Attribute"), ManyOpt, Bidirectional(oppositeOf = "owner"))),
-        Map("super" -> FieldDefinition(Class("Class"), Opt, Ordinary), "_Table" -> FieldDefinition(Class("Table"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
+      ClassDefinition("Class", Map("attributes" -> FieldDefinition(Class("Attribute"), ManyOpt, Bidirectional(oppositeOf = "owner"))),
+        Map("isAbstract" -> FieldDefinition(Class("Unit"), Opt, Ordinary),"super" -> FieldDefinition(Class("Class"), Opt, Ordinary), "_Table" -> FieldDefinition(Class("Table"), Opt, Tracking)), superclass = Some(Class("Classifier"))),
       ClassDefinition("Attribute", Map(),
-        Map("isMultivalued" -> FieldDefinition(Class("Unit"), Opt, Ordinary), "type" -> FieldDefinition(Class("Class"), Req, Ordinary),
+        Map("isMultivalued" -> FieldDefinition(Class("Unit"), Opt, Ordinary), "type" -> FieldDefinition(Class("Classifier"), Req, Ordinary),
           "owner" -> FieldDefinition(Class("Class"), Req, Bidirectional(oppositeOf = "attributes")),
           "_Column" -> FieldDefinition(Class("Column"), Opt, Tracking)), superclass = Some(Class("NamedElt"))),
       ClassDefinition("Package", Map("classifiers" -> FieldDefinition(Class("Classifier"), ManyOpt, Ordinary)), Map()),
