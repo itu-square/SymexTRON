@@ -22,12 +22,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
   var counter = 0
 
-  object SanityRel {
-    val sr1 = Relation.unary("SanityRel/sr1")
-    val sr2 = Relation.unary("SanityRel/sr2")
-    val sr3 = Relation.unary("SanityRel/sr3")
-  }
-
   object SymbolicSetRel {
     val self = Relation.unary("SymbolicSet")
     val locs = Relation.binary("SymbolicSet/locs")
@@ -289,7 +283,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     (ol in v.join(VarsRel.vals)) and
       ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
-          (f in FieldsRel.fieldsrels(field._2)) and
+          (f eq FieldsRel.fieldsrels(field._2)) and
             ((l product f product ool) in LocsRel.fields) `forSome`
               ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (ool oneOf LocsRel.self) and (l oneOf LocsRel.self) and
                 (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
@@ -315,10 +309,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     val universe = new Universe(atoms.toSeq.asJava)
     val bounds = new Bounds(universe)
     val f = universe.factory
-
-    bounds.bound(SanityRel.sr1, f allOf 1)
-    bounds.bound(SanityRel.sr2, f allOf 1)
-    bounds.bound(SanityRel.sr3, f allOf 1)
 
     bounds.boundExactly(SymbolsRel.self, f setOf (symobjs.values.toSeq :_*))
 
@@ -477,7 +467,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     } yield (cs1 ++ cs2, op(ee1, ee2))
   }
 
-  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false, wellRooted: Boolean = true): String \/ CMem = {
+  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false, wellRooted: Boolean = false): String \/ CMem = {
     concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
