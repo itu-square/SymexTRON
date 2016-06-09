@@ -61,30 +61,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   object FieldsRel {
     val self = Relation.unary("Fields")
     val childs = Relation.unary("Fields@child")
-    lazy val childsTyping = {
-      val f = Variable.unary("f")
-      f in self forAll (f oneOf childs)
-    }
     val refs = Relation.unary("Fields@ref")
-    lazy val refsTyping = {
-      val f = Variable.unary("f")
-      f in self forAll (f oneOf refs)
-    }
-    lazy val childsRefsDisjoint = {
-      (childs intersection refs) eq Expression.NONE
-    }
-    lazy val childsDefFields = {
-      allFormulae(defs.childfields.toList.map { field =>
-        val f = Variable.unary("f")
-        f in childs forAll (f oneOf fieldsrels(field))
-      })
-    }
-    lazy val refsDefFields = {
-      allFormulae(defs.reffields.toList.map { field =>
-        val f = Variable.unary("f")
-        f in refs forAll (f oneOf fieldsrels(field))
-      })
-    }
     val fieldsrels = (defs.childfields ++ defs.reffields).map(f => (f, Relation.unary(s"Field$$$f"))).toMap
   }
 
@@ -101,11 +78,6 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   object TypesRel {
     val self = Relation.unary("Types")
     val isSubType = Relation.binary("Types/isSubType")
-    lazy val isSubTypeTyping = {
-      val t = Variable.unary("t")
-      (t.join(isSubType) in self) forAll (t oneOf self) and
-        (isSubType.join(Expression.UNIV) in self)
-    }
     val standalone = Relation.unary("Types/standalone")
     val typeOfSet = Relation.binary("Types/typeOfSet")
     lazy val typeOfSetTyping = {
@@ -250,10 +222,8 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   private
   def staticConstraints(hasTracking: Boolean) : List[Formula] = List(
    SymbolsRel.locTyping , SymbolicSetRel.locsTyping , LocsRel.fieldsTyping ,
-   FieldsRel.childsTyping , FieldsRel.refsTyping ,
-   FieldsRel.childsRefsDisjoint , FieldsRel.childsDefFields , FieldsRel.refsDefFields ,
    VarsRel.valsTyping , TypesRel.typeOfLocTyping , TypesRel.typeOfSymTyping , TypesRel.typeOfSetTyping ,
-   TypesRel.isSubTypeTyping , TypesRel.typeOfLocTypeOfSetSubtyping , TypesRel.typeOfLocTypeOfSymEquality ,
+   TypesRel.typeOfLocTypeOfSetSubtyping , TypesRel.typeOfLocTypeOfSymEquality ,
    TypesRel.typeOfFieldCorrectness(hasTracking), ReachabilityRel.ownerTyping , ReachabilityRel.ownerDefinition ,
    ReachabilityRel.ownerAcyclic , ReachabilityRel.owningFieldUniqueness , ReachabilityRel.referencedByTyping ,
    ReachabilityRel.referencedByDefinition , ReachabilityRel.reachableByTyping , ReachabilityRel.reachableByDefinition
@@ -332,11 +302,12 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     for (varid <- varobjs.values.toSeq; locid <- allLocobjs.values.toSeq) varvalsUpper.add((f tuple varid) product (f tuple locid))
     bounds.bound(VarsRel.vals, varvalsUpper)
 
+
     for ((field, rel) <- FieldsRel.fieldsrels) bounds.boundExactly(rel, f setOf fieldobjs(field))
 
     bounds.boundExactly(FieldsRel.self, f setOf (fieldobjs.values.toSeq :_*))
-    bounds.bound(FieldsRel.childs, f setOf (fieldobjs.values.toSeq :_*))
-    bounds.bound(FieldsRel.refs, f setOf (fieldobjs.values.toSeq :_*))
+    bounds.boundExactly(FieldsRel.childs, f setOf (fieldobjs.filterKeys(defs.childfields.contains).values.toSeq :_*))
+    bounds.boundExactly(FieldsRel.refs, f setOf (fieldobjs.filterKeys(defs.reffields.contains).values.toSeq :_*))
 
     val ssetrellocsUpper = f noneOf 2
     for (locid <- allLocobjs.values.toSeq; sset <- ssymobjs.values) ssetrellocsUpper.add((f tuple sset) product (f tuple locid))
