@@ -14,7 +14,7 @@ import scalaz.stream.{Process0, Process}
 /**
   * Created by asal on 02/03/2016.
   */
-class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int)
+class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int, wellRooted: Boolean)
   extends TestGenerator {
   val modelFinder = new ModelFinder(defs, delta)
 
@@ -31,7 +31,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int)
         if (additionalFieldsToCover.isEmpty) Process()
         else {
           val fieldToCover = additionalFieldsToCover.head
-          modelFinder.concretise(pre, fieldsPresent = Set(fieldToCover)).fold(_ =>
+          modelFinder.concretise(pre, fieldsPresent = Set(fieldToCover), wellRooted = wellRooted).fold(_ =>
             gctHelper(classesUncoverable, fieldsUncoverable + fieldToCover),
             nmem => {
               metamodelcoverage.registerMem(nmem)
@@ -41,7 +41,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int)
         }
       else {
         val classToCover = additionalClassesToCover.head
-        modelFinder.concretise(pre, classesPresent = Set(classToCover)).fold(_ =>
+        modelFinder.concretise(pre, classesPresent = Set(classToCover), wellRooted = wellRooted).fold(_ =>
           gctHelper(classesUncoverable + classToCover, fieldsUncoverable),
           nmem => {
             metamodelcoverage.registerMem(nmem)
@@ -56,7 +56,7 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int)
 
   def generateTests(pres: Set[SMem]): Process[Task, CMem] = Process.emitAll(pres.toSeq).flatMap[Task, CMem] { pre =>
     (for {
-       startMem <- modelFinder.concretise(pre)
+       startMem <- modelFinder.concretise(pre, wellRooted = wellRooted)
        mems = generateCoveringTests(SMem.allTypes(pre), pre, Set(startMem))
      } yield mems).fold(_ => Process.empty, identity)
   }

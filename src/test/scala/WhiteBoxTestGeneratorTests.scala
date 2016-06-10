@@ -16,7 +16,7 @@ class WhiteBoxTestGeneratorTests
   extends FlatSpec
   with Matchers {
 
-  def testGenerator(defs: Set[ClassDefinition], prog: Statement, excludedBranches: Set[BranchPoint]) = new WhiteBoxTestGenerator(defs.map(cd => Class(cd.name) -> cd).toMap, prog, excludedBranches, beta = 2, delta = 8, kappa = 2)
+  def testGenerator(defs: Set[ClassDefinition], prog: Statement, excludedBranches: Set[BranchPoint], wellRooted: Boolean = false) = new WhiteBoxTestGenerator(defs.map(cd => Class(cd.name) -> cd).toMap, prog, excludedBranches, beta = 2, delta = 8, kappa = 2, wellRooted = wellRooted)
 
   def coverageTarget(tg: WhiteBoxTestGenerator, pres: Set[SMem], target: Double): Unit = {
     tg.generateTests(pres).run[Task].run

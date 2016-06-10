@@ -12,7 +12,7 @@ import scalaz.concurrent.Task
 import java.util.concurrent.ScheduledExecutorService
 
 class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, excludedBranches: Set[BranchPoint],
-                            beta: Int, delta: Int, kappa: Int,
+                            beta: Int, delta: Int, kappa: Int, wellRooted: Boolean,
                             timeout : FiniteDuration = WhiteBoxTestGenerator.defaultTimeout,
                             coverageTarget : Double = WhiteBoxTestGenerator.defaultCoverageTarget)
  extends TestGenerator {
@@ -32,7 +32,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, 
       // TODO Rewrite using writer monad to be pure
       sleep(timeout).wye(
                symbExec.execute(pres, concExec.prog)
-              .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm) })
+              .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm, wellRooted = wellRooted) })
               .takeWhile(_ => concExec.coverage <= coverageTarget)
               .map { mem => mem.fold(_ => (), m => { concExec.execute(m) }); mem  }
               )(wye.interrupt)

@@ -25,6 +25,7 @@ trait Example {
   val delta = 10
   val beta = 2
   val kappa = 2
+  val wellRooted = false
 
   val pres : Set[SMem]
   val prog : Statement
@@ -32,16 +33,16 @@ trait Example {
 
   def main(args: Array[String]): Unit = {
     val defsWithKeys = classDefs.map(cd => Class(cd.name) -> cd).toMap
-    val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = delta)
+    val bbtestgenerator = new BlackBoxTestGenerator(defsWithKeys, delta = delta, wellRooted = wellRooted)
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta = beta, delta = delta, kappa = kappa, timeout = 30L.minutes)
+    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta = beta, delta = delta, kappa = kappa, wellRooted = wellRooted, timeout = 30L.minutes)
     println("""------------ Whitebox test generation -----------------""")
     wbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println(s"Coverage: ${wbtestgenerator.codeCoverage}")
     println(s"Uncovered branches: ${wbtestgenerator.uncoveredBranches}")
-    println(s"Program: ${PrettyPrinter.pretty(wbtestgenerator.annotatedProg, false)}")
+    println(s"Program: ${PrettyPrinter.pretty(wbtestgenerator.annotatedProg, short = false)}")
     println("""-------------------------------------------------------""")
   }
 }

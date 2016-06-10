@@ -47,7 +47,7 @@ object Evaluation {
     Process.emitAll(input).map { case (testname, example) =>
         val defsWithKeys = example.classDefs.map(cd => Class(cd.name) -> cd).toMap
         import example._
-        val tg = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta, delta, kappa, 10L.minutes, 95.0)
+        val tg = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta, delta, kappa, wellRooted = wellRooted, timeout = 10L.minutes, coverageTarget = 95.0)
         val res = runTestGenerator(tg, testname, defsWithKeys, prog, excludedBranches, pres)
         res
     }
@@ -57,7 +57,7 @@ object Evaluation {
     Process.emitAll(input).map { case (testname, example) =>
       val defsWithKeys = example.classDefs.map(cd => Class(cd.name) -> cd).toMap
       import example._
-      val tg = new BlackBoxTestGenerator(defsWithKeys, delta)
+      val tg = new BlackBoxTestGenerator(defsWithKeys, delta, wellRooted = wellRooted)
       runTestGenerator(tg, testname, defsWithKeys, prog, excludedBranches, pres)
     }
   }
