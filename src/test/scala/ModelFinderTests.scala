@@ -47,12 +47,12 @@ class ModelFinderTests extends FlatSpec
       Map(Loc(1) -> Unfolded,
           Loc(5) -> Unfolded,
           Loc(10) -> Unfolded),
-      Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
-          Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
-          Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)), Map("data" -> SetSymbol(20)),Map())),
-      Map(Loc(1) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()), Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
-          Loc(5) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
-          Loc(10) -> SpatialDesc(Class("IntList"),PartialDesc(true,Set()),Map("next" -> SetSymbol(19)),Map("data" -> SetSymbol(20)),Map())),
+      Map(Loc(1) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
+          Loc(5) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
+          Loc(10) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()),Map("next" -> SetSymbol(19)), Map("data" -> SetSymbol(20)),Map())),
+      Map(Loc(1) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()), Map("next" -> SetLit(List(Symbol(9)))),Map("data" -> SetSymbol(3)),Map()),
+          Loc(5) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()),Map("next" -> SetLit(List(Symbol(18)))),Map("data" -> SetSymbol(11)),Map()),
+          Loc(10) -> SpatialDesc(Class("IntList"), Set(), PartialDesc(true,Set()),Map("next" -> SetSymbol(19)),Map("data" -> SetSymbol(20)),Map())),
       Set(Not(Eq(SetLit(List(Symbol(1))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(9))),SetLit(List()))), Not(Eq(SetLit(List(Symbol(18))),SetLit(List())))))
     val pre = SMem(SStack.initial(Set(), stack), heap)
     val modelFinder = new ModelFinder(IntListHeadTailEqExample.classDefs.map(cd => Class(cd.name) -> cd).toMap, 6)

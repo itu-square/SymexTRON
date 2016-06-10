@@ -80,6 +80,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     def addDescendantPool(descendantpools: DescendantPools, c: Class) = {
       if (descendantpools.contains(c)) (descendantpools(c), descendantpools, Map[SetSymbol, SSymbolDesc](), Set[BoolExpr[IsSymbolic.type]]())
       else {
+        // TODO optimize if can't contain things of that type
         val ssym = SetSymbol(freshSym)
         val superdps = defs.supertypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
         val subdps = defs.subtypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
@@ -125,7 +126,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           xsym = freshSym
           loc = freshLoc
           alloced =
-              loc -> SpatialDesc(c, ExactDesc, defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), defs.refsOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), Map())
+              loc -> SpatialDesc(c, Set(), ExactDesc, defs.childrenOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), defs.refsOf(defs.supertypes(c) + c).mapValues(_ => SetLit(Seq())), Map())
           updated =
             (_sm_currentStack.modify(_ + (x -> SetLit(Seq(Symbol(xsym))))) andThen
             (_sm_heap ^|-> _sh_svltion).modify(_ + (Symbol(xsym) -> Loced(loc))) andThen
@@ -174,7 +175,8 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
               for {
                 (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
                 (locs, nniheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
-                (dpe, fmem) <- EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, _sm_heap.set(nniheap)(nimem)).point[Process[Task, ?]])
+                nnmem = _sm_heap.set(nniheap)(nimem)
+                (dpe, fmem) <- EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, nnmem).point[Process[Task, ?]])
                 (msyms, _, nfmem) <- EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
                   count => findSyms(count, fmem, dpe)
                 })
@@ -207,15 +209,15 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   }
 
 
-  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): DisjunctionT[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)] = {
+  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): EitherT[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)] = {
     def partitionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
       (incl, excl) <- Process.emitAll(List.range(0, syms.length + 1)).map(syms.splitAt)
       nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
         sdesc match {
           case Loced(l) => sdesc // TODO Refine loc with type?
           case sdesc:UnknownLoc =>
-            if(excl.contains(s)) sdesc.copy(notinstof = sdesc.notinstof + c)
-            else if (incl.contains(s)) sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c)))
+            if (excl.contains(s)) { sdesc.copy(notinstof = sdesc.notinstof + c) }
+            else if (incl.contains(s)) { sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c))) }
             else sdesc
         }
       ))(mem)

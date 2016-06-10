@@ -35,8 +35,8 @@ object RenameFieldRefactoring extends Refactoring {
         Symbol(newFieldId) -> UnknownLoc(Class("Field"), Set()),
         Symbol(classNameId) -> UnknownLoc(Class("String"), Set()))
       , Map(Loc(packageId) -> Unfolded, Loc(classId) -> Unfolded)
-      , Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
-        Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))),
+      , Map(Loc(packageId) -> SpatialDesc(Class("Package"), Set(), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
+            Loc(classId) -> SpatialDesc(Class("Class"), Set(), ExactDesc, Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(oldFieldId)))),
           "methods" -> SetSymbol(classMethodsId))
           , Map("name" -> SetLit(Seq(Symbol(classNameId))),
             "super" -> SetSymbol(classSuperId)), Map()))
@@ -96,8 +96,8 @@ object RenameMethodRefactoring extends Refactoring {
         Symbol(newMethodId) -> UnknownLoc(Class("Method"), Set()),
         Symbol(classNameId) -> UnknownLoc(Class("String"), Set())),
       Map(Loc(packageId) -> Unfolded, Loc(classId) -> Unfolded),
-      Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
-        Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
+      Map(Loc(packageId) -> SpatialDesc(Class("Package"), Set(), ExactDesc, Map("classes" -> Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(classId))))), Map(), Map()),
+          Loc(classId) -> SpatialDesc(Class("Class"), Set(), ExactDesc
           , Map("fields" -> SetSymbol(classFieldsId),
             "methods" -> Union(SetSymbol(classMethodsId), SetLit(Seq(Symbol(oldMethodId)))))
           , Map("name" -> SetLit(Seq(Symbol(classNameId))),
@@ -167,7 +167,7 @@ object ExtractSuperclassRefactoring extends Refactoring {
         Symbol(class1Id) -> UnknownLoc(Class("Class"), Set()),
         Symbol(class2Id) -> UnknownLoc(Class("Class"), Set())),
       Map(Loc(packageId) -> Unfolded),
-      Map(Loc(packageId) -> SpatialDesc(Class("Package"), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map(), Map())),
+      Map(Loc(packageId) -> SpatialDesc(Class("Package"), Set(), ExactDesc, Map("classes" -> Union(Union(SetSymbol(packageClassesId), SetLit(Seq(Symbol(class2Id)))), SetLit(Seq(Symbol(class2Id))))), Map(), Map())),
       Set()
     )
     Set(SMem(inputStack, inputHeap))
@@ -233,7 +233,7 @@ object ReplaceDelegationWithInheritance extends Refactoring {
               Symbol(fieldId) -> UnknownLoc(Class("Field"), Set()),
               Symbol(classNameId) -> UnknownLoc(Class("String"), Set())),
           Map(Loc(classId) -> Unfolded),
-          Map(Loc(classId) -> SpatialDesc(Class("Class"), ExactDesc
+          Map(Loc(classId) -> SpatialDesc(Class("Class"), Set(), ExactDesc
             , Map("fields" -> Union(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))
               ,   "methods" -> SetSymbol(classMethodsId)), Map("name" -> SetLit(Seq(Symbol(classNameId))), "super" -> SetSymbol(classSuperId)), Map())),
           Set(Eq(SetLit(Seq()), ISect(SetSymbol(classFieldsId), SetLit(Seq(Symbol(fieldId))))))

@@ -17,11 +17,11 @@ import helper._
   */
 class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class, ClassDefinition], optimistic: Boolean = false) {
   private
-  def mkAbstractSpatialDesc(loc : Loc, cl : Class, heap: SHeap): (SpatialDesc, SHeap) = {
+  def mkAbstractSpatialDesc(loc : Loc, cl : Class, notinstof : Set[Class], heap: SHeap): (SpatialDesc, SHeap) = {
     val clSupers = defs.supertypes(cl)
     val (newssvltionc, children) = unfoldFieldSet(loc, defs.childrenOf(clSupers))
     val (newssvltionr, refs) = unfoldFieldSet(loc, defs.refsOf(clSupers))
-    (SpatialDesc(cl, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
+    (SpatialDesc(cl, notinstof, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
   }
 
   def findLocs(syms: Seq[Symbol], heap: SHeap): Process0[String \/ (Seq[Loc], SHeap)] = {
@@ -43,12 +43,15 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     }
     def assignLoc(sym: Symbol, excluded: Seq[Loc], cl: Class, notinstof: Set[Class], heap: SHeap): Process0[String \/ (Loc, SHeap)] = {
       val newLoc = Loc(loccounter.++)
-      val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, heap)
+      val (sdesc, nheap) = mkAbstractSpatialDesc(newLoc, cl, notinstof, heap)
+      // TODO Think if relevantLocs need updating after negative constraints were added to locs
       val aliasLocs = relevantLocs(nheap, cl, notinstof) diff excluded.toSet
       val nnheap: SHeap = addNewLoc(sym, newLoc, sdesc, Unfolded, nheap)
       Process((newLoc, nnheap).right) ++
         (for (loc <- Process.emitAll(aliasLocs.toSeq)) yield {
-          (loc, _sh_svltion.modify(_ + (sym -> Loced(loc)))(nheap)).right
+          (loc, (_sh_initSpatial.modify(sp => sp.updated(loc, sp(loc).copy(notinstof = sp(loc).notinstof ++ notinstof))) `andThen`
+                  _sh_currentSpatial.modify(sp => sp.updated(loc, sp(loc).copy(notinstof = sp(loc).notinstof ++ notinstof))) `andThen`
+                   _sh_svltion.modify(_ + (sym -> Loced(loc))))(nheap)).right
         })
     }
     syms.foldLeft(EitherT.right[Process0, String, (Seq[Loc], SHeap)](Process((Seq[Loc](), heap)))) { (st, sym) =>
@@ -86,7 +89,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     def containsTargetField(psdesc: SpatialDesc): Boolean = {
       psdesc.children.contains(targetField) || psdesc.refs.contains(targetField)
     }
-    def unfoldPartial(c: Class, dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
+    def unfoldPartial(c: Class, notinstof: Set[Class], dt: PartialDesc, children: Map[Fields, SetExpr[IsSymbolic.type]],
                       refs: Map[Fields, SetExpr[IsSymbolic.type]], descendantpool: DescendantPools, heap: SHeap): Process0[String \/ (SpatialDesc, SHeap)] = {
       val err = Process(s"Location ${PrettyPrinter.pretty(loc)} of type ${c.name} has no field $targetField".left)
       if (!optimistic) {
@@ -95,10 +98,11 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
         (if(dt.hasExact) err else Process()) ++ (for {
           nc <- EitherT[Process0,String,Class](Process.emitAll(dt.possible.toSeq).map(_.right))
           cd <- EitherT[Process0, String, ClassDefinition](defs.get(nc).cata(_.right, s"No such class: ${nc.name}".left).point[Process0])
-          (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, AbstractDesc, children, refs, descendantpool), cd, heap)
+          (psdesc, nheap) = unfoldAbstract(SpatialDesc(c, notinstof, AbstractDesc, children, refs, descendantpool), cd, heap)
           res <- EitherT[Process0, String, (SpatialDesc, SHeap)](
             if (containsTargetField(psdesc)) (psdesc, nheap).right.point[Process0]
-            else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
+              // TODO Something smelly here, look at it when having time (we don't use it in evaluation so not so important now)
+            else unfoldPartial(psdesc.cl, psdesc.notinstof, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap))
         } yield res).run
       }
     }
@@ -124,9 +128,9 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
           defs.get(sdesc.cl).cata({ cd =>
             val (psdesc, nheap) = unfoldAbstract(sdesc, cd, heap)
             if (containsTargetField(psdesc)) Process((psdesc, nheap).right)
-            else unfoldPartial(psdesc.cl, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
+            else unfoldPartial(psdesc.cl, psdesc.notinstof, psdesc.desctype.asInstanceOf[PartialDesc], psdesc.children, psdesc.refs, psdesc.descendantpools, nheap)
           }, Process(s"No such class: ${sdesc.cl.name}".left))
-        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.cl, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
+        case dt@PartialDesc(hasExact, possible) => unfoldPartial(sdesc.cl, sdesc.notinstof, dt, sdesc.children, sdesc.refs, sdesc.descendantpools, heap)
       }
     }, Process(s"No such location: ${PrettyPrinter.pretty(loc)}".left))
   }

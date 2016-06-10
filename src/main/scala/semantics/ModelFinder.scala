@@ -513,6 +513,9 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
             val possibleConstraints = anyFormulae(possible.toList.map(c => TypesRel.typerels(c) in t.join(TypesRel.isSubType)))
             allFormulae(List(t2 in t.join(TypesRel.isSubType), anyFormulae(List(exactConstraint, possibleConstraints))))
         }) forAll ((t oneOf TypesRel.self) and (t2 oneOf TypesRel.typerels(sdesc.cl)))
+      val notinstofconstraints = sdesc.notinstof.map(ncl =>
+        (TypesRel.typerels(ncl) in locmap(loc).join(TypesRel.typeOfLoc).join(TypesRel.isSubType)).not
+      ).toList
       for {
         constraints <- st
         dpConstraints <- sdesc.descendantpools.foldLeft(List[Formula]().right[String]) { (st, dpinfo) =>
@@ -538,7 +541,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
             }
           } yield fieldconstraint :: fieldcs ++ constraints
         }
-      } yield typeConstraint :: (fieldConstraints ++ dpConstraints ++ constraints)
+      } yield typeConstraint :: (notinstofconstraints ++ fieldConstraints ++ dpConstraints ++ constraints)
     }
 
     for {

@@ -120,10 +120,10 @@ object PrettyPrinter {
     val (types, links, descendantpools) = spatial.map { case (loc, sdesc) =>
         val typeinfo = sdesc.desctype match {
           case ExactDesc => s"${pretty(loc)} : ${sdesc.cl.name}"
-          case AbstractDesc => s"${pretty(loc)} <: ${sdesc.cl.name}"
+          case AbstractDesc => s"${pretty(loc)} <: ({${sdesc.cl.name}}, ${sdesc.notinstof.map(_.name).mkString("{", ",", "}")})"
           case PartialDesc(hasExact, possible) =>
             val all = possible ++ (if (hasExact) Set(sdesc.cl) else Set())
-            s"${pretty(loc)} <: ${all.map(_.name).mkString("{", ",", "}")}"
+            s"${pretty(loc)} <: (${all.map(_.name).mkString("{", ",", "}")}, ${sdesc.notinstof.map(_.name).mkString("{", ",", "}")})"
         }
         val refs = sdesc.refs.map { case (f, e) => s"${pretty(loc)}.$f ↝ ${pretty(e)}" }
         val children = sdesc.children.map { case (f, e) => s"${pretty(loc)}.$f ⤞ ${pretty(e)}" }
