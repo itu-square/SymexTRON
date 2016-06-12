@@ -170,10 +170,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
           (nsyms, nimem) <- m match {
             case MSet(e) => EitherT.right[Process[Task, ?], String, (Seq[Symbol], SMem)]((syms, imem).point[Process[Task, ?]])
             case Match(e, c) =>
-                matchSyms(oee, syms, imem, c).map { case (incsyms, _, mem) => (incsyms, mem) }
+                EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](Process.emitAll(matchSyms(oee, syms, imem, c))).map { case (incsyms, _, mem) => (incsyms, mem) }
             case MatchStar(e, c) =>
               for {
-                (incsyms, excsyms, nimem) <- matchSyms(oee, syms, imem, c)
+                (incsyms, excsyms, nimem) <- EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](Process.emitAll(matchSyms(oee, syms, imem, c)))
                 (locs, nniheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
                 nnmem = _sm_heap.set(nniheap)(nimem)
                 (dpe, fmem) <- EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, nnmem).point[Process[Task, ?]])
@@ -209,9 +209,9 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   }
 
 
-  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): EitherT[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)] = {
-    def partitionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Process[Task, (Seq[Symbol], Seq[Symbol], SMem)] = for {
-      (incl, excl) <- Process.emitAll(List.range(0, syms.length + 1)).map(syms.splitAt)
+  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): Seq[(Seq[Symbol], Seq[Symbol], SMem)] = {
+    def partitionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Seq[(Seq[Symbol], Seq[Symbol], SMem)] = for {
+      (incl, excl) <- List.range(0, syms.length + 1).map(syms.splitAt)
       nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
         sdesc match {
           case Loced(l) => sdesc // TODO Refine loc with type?
@@ -224,14 +224,10 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     } yield (incl, excl, nmem)
     val ocr = typeInference.inferSetType(ee, imem.heap)
     ocr.cata({ oc =>
-      if (defs.subtypesOrSelf(c).contains(oc))
-        EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((syms, Seq(), imem).point[Process[Task, ?]])
-      else if (defs.maxClass(c, oc).isDefined) {
-        EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](partitionSyms(syms, imem, c))
-      } else {
-        EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[Process[Task, ?]])
-      }
-    }, EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)]((Seq(), syms, imem).point[Process[Task, ?]]))
+      if (defs.subtypesOrSelf(c).contains(oc)) Seq((syms, Seq(), imem))
+      else if (defs.maxClass(c, oc).isDefined) partitionSyms(syms, imem, c)
+      else Seq((Seq(), syms, imem))
+    }, Seq((Seq(), syms, imem)))
   }
 
   private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SetExpr[IsSymbolic.type], SMem) = {
