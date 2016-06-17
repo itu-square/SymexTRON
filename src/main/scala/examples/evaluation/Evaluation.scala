@@ -20,9 +20,9 @@ object Evaluation {
   case class EvaluationReport(testname: String, time: FiniteDuration, metaModelCoverage: Double, codeCoverage: Double)
 
   val input: List[(String, Example)] = List (
-      "Families to Persons" -> FamiliesToPersonsTransformation
-    , "Class to Relational" -> ClassToRelationalTransformation
-    , "Path expression to Petri net" -> PathExp2PetriNetTransformation
+      //"Families to Persons" -> FamiliesToPersonsTransformation ,
+    "Class to Relational" -> ClassToRelationalTransformation
+   // , "Path expression to Petri net" -> PathExp2PetriNetTransformation
     /*, "Rename field refactoring" -> RenameFieldRefactoring
     , "Rename method refactoring" -> RenameMethodRefactoring
     , "Extract super-class refactoring" -> ExtractSuperclassRefactoring
@@ -47,7 +47,7 @@ object Evaluation {
     Process.emitAll(input).map { case (testname, example) =>
         val defsWithKeys = example.classDefs.map(cd => Class(cd.name) -> cd).toMap
         import example._
-        val tg = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta, delta, kappa, wellRooted = wellRooted, timeout = 10L.minutes, coverageTarget = 95.0)
+        val tg = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta, delta, kappa, wellRooted = wellRooted, timeout = 30L.minutes, coverageTarget = 95.0)
         val res = runTestGenerator(tg, testname, defsWithKeys, prog, excludedBranches, pres)
         res
     }

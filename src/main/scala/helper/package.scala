@@ -88,6 +88,27 @@ package object helper {
 
   implicit val pmn = scalaz.stream.Process.processMonadPlus[Nothing]
   implicit val pmt = scalaz.stream.Process.processMonadPlus[Task]
+
+  case class Interleaved[+F[_],+O](toProcess: Process[F, O]) {
+    def map[O2](f : O => O2) = Interleaved(toProcess.map(f))
+
+    def flatMap[F2[x] >: F[x], O2](f: O => Interleaved[F2, O2])
+    : Interleaved[F2, O2] = Interleaved {
+      toProcess.fold(Process.halt : Process[F2, O2])((ps, o) =>
+        ps.tee((f(o).toProcess))(helper.teePlus.interleaveAll)
+      ).flatMap(identity)
+    }
+  }
+
+  implicit class InterleavedProcess[F[_],O](p: Process[F,O]) {
+    val interleaved: Interleaved[F, O] = Interleaved(p)
+  }
+
+  implicit def interleavedMonad[F[_]] = new Monad[Interleaved[F, ?]] {
+    override def bind[A, B](fa: Interleaved[F, A])(f: (A) => Interleaved[F, B]): Interleaved[F, B] = fa.flatMap[F,B](f)
+
+    override def point[A](a: => A): Interleaved[F, A] = Interleaved(Process(a))
+  }
 }
 
 

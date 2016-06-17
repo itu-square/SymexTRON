@@ -94,3 +94,8 @@ object CMem {
   val _cm_stack = GenLens[CMem](_.stack)
   val _cm_heap  = GenLens[CMem](_.heap)
 }
+
+sealed trait ForState
+case object NormalForState extends ForState
+case class MatchForState(continue: Boolean) extends ForState
+case class MatchStarForState(totalCount: Int, continue: Boolean) // last dp count should be added as well for symmetry breaking

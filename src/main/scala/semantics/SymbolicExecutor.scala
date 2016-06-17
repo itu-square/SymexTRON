@@ -13,6 +13,7 @@ import scalaz._
 import scalaz.concurrent.Task
 import scalaz.stream._
 import MatchExpr._
+import org.scalatest.tools.ReporterConfigurations
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
@@ -228,6 +229,23 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
       else if (defs.maxClass(c, oc).isDefined) partitionSyms(syms, imem, c)
       else Seq((Seq(), syms, imem))
     }, Seq((Seq(), syms, imem)))
+  }
+
+  private def partition1(mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Symbol, SetExpr[IsSymbolic.type], SMem) = eres match {
+    case SetLit(es) =>
+      es match {
+        case Seq() => s"Empty set: $eres".left
+        case x@Symbol(_) +: xs => (x, SetLit(xs) : SetExpr[IsSymbolic.type], mem).right[String]
+      }
+    case _ =>
+      val nsym = Symbol(freshSym)
+      val nssym = SetSymbol(freshSym)
+      for {
+        nsymtype <- typeInference.inferSetType(eres, mem.heap).cata(_.right, s"Empty set: $eres".left)
+        nmem = ((_sm_heap ^|-> _sh_svltion).modify(_.updated(nsym, UnknownLoc(nsymtype, Set()))) andThen
+                (_sm_heap ^|-> _sh_ssvltion).modify(_.updated(nssym, SSymbolDesc(nsymtype, ManyOpt))) andThen
+                (_sm_heap ^|-> _sh_pure).modify(_ + Eq(ISect(SetLit(Seq(nsym)), nssym), SetLit(Seq())) + Eq(Union(SetLit(Seq(nsym)), nssym), eres)))(mem)
+      } yield (nsym, nssym, nmem)
   }
 
   private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SetExpr[IsSymbolic.type], SMem) = {

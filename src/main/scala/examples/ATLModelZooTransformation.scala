@@ -96,7 +96,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   }
 
   object ClassToRelationalTransformation extends ATLModelZooTransformation {
-    override val delta = 5
+    override val delta = 6
 
     override val wellRooted = true
 
@@ -119,37 +119,31 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
       ClassDefinition("Table", Map("columns" -> FieldDefinition(Class("Column"), ManyOpt, Ordinary)),
         Map("key" -> FieldDefinition(Class("Column"), Req, Ordinary)), superclass = Some(Class("Named"))),
       ClassDefinition("Column", Map(), Map("type" -> FieldDefinition(Class("Type"), Req, Ordinary)), superclass = Some(Class("Named"))),
-      ClassDefinition("Type", Map(), Map()),
+      ClassDefinition("Type", Map(), Map(), superclass = Some(Class("Named"))),
       ClassDefinition("Schema", Map("tables" -> FieldDefinition(Class("Table"), ManyOpt, Ordinary), "types" -> FieldDefinition(Class("Type"), ManyOpt, Ordinary)), Map())
     )
-    override val pres: Set[SMem] = Set(SMem(SStack.initial(Set("package"),Map("package" -> SetLit(Seq(Symbol(-1))))),
-      SHeap.initial(Map(), Map(Symbol(-1) -> UnknownLoc(Class("Package"), Set())), Map(), Map(), Set())))
+    override val pres: Set[SMem] = Set(SMem(SStack.initial(Set("package", "integer_name"),Map("package" -> SetLit(Seq(Symbol(-1))),
+      "integer_name" -> SetSymbol(-2))),
+      SHeap.initial(Map(SetSymbol(-2) -> SSymbolDesc(Class("Int"), Req)), Map(Symbol(-1) -> UnknownLoc(Class("Package"), Set())), Map(), Map(), Set())))
     override val prog: Statement = {
-      def objectIdTypeHelper(outVar: Vars) = stmtSeq(
-        assignVar(outVar, SetLit(Seq())),
-        `for`("dt", MatchStar(Var("package"), Class("DataType")),
-          stmtSeq(
-            loadField("dt_name", Var("dt"), "name"),
-            `if`(And(Not(Eq(Var(outVar), SetLit(Seq()))), Eq(Var("dt_name"), Var("integer_name"))),
-              loadField(outVar, Var("dt"), "_Type"),
-              stmtSeq()
-            )
-          )
-        ))
       stmtSeq(
+        `new`("objectIdType", Class("Type")),
+        assignField(Var("objectIdType"), "name", Var("integer_name")),
         // Create new Schema to hold things
         `new`("schema", Class("Schema")),
         // rule DataType2Type
         `for`("dt", MatchStar(Var("package"), Class("DataType")), stmtSeq(
-            `new`("type", Class("Type")),
             loadField("dt_name", Var("dt"), "name"),
-            assignField(Var("type"), "name", Var("dt_name")),
-            assignField(Var("dt"), "_Type", Var("type")),
-            loadField("schema_types", Var("schema"), "types"),
-            assignField(Var("schema"), "types", Union(Var("schema_types"), Var("type")))
-          )
-        ),
-        objectIdTypeHelper("objectIdType"),
+            `if`(Eq(Var("dt_name"), Var("integer_name")), stmtSeq(
+                assignField(Var("dt"), "_Type", Var("objectIdType"))
+              ), stmtSeq(
+                `new`("type", Class("Type")),
+                 assignField(Var("dt"), "_Type", Var("type")),
+                 assignField(Var("type"), "name", Var("dt_name")),
+                 loadField("schema_types", Var("schema"), "types"),
+                 assignField(Var("schema"), "types", Union(Var("schema_types"), Var("type")))
+              ))
+        )),
         `new`("idString", Class("String")),
         `new`("objectIdString", Class("String")),
         `for`("at", MatchStar(Var("package"), Class("Attribute")), stmtSeq(

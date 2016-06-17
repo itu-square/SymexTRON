@@ -442,7 +442,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
-      //println(PrettyPrinter.pretty(smem, initial = true))
+      println(PrettyPrinter.pretty(smem, initial = true))
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
       extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)
     }
