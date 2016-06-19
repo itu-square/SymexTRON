@@ -32,7 +32,7 @@ object SpatialDesc {
   val _sd_descendantpools = GenLens[SpatialDesc](_.descendantpools)
 }
 
-case class SSymbolDesc(cl : Class, crd : Cardinality)
+case class SSymbolDesc(cl : Class, notinstof: Set[Class], crd : Cardinality)
 
 sealed trait SymbolDesc
 case class Loced(l : Loc) extends SymbolDesc
@@ -97,5 +97,5 @@ object CMem {
 
 sealed trait ForState
 case object NormalForState extends ForState
-case class MatchForState(continue: Boolean) extends ForState
-case class MatchStarForState(totalCount: Int, continue: Boolean) // last dp count should be added as well for symmetry breaking
+case class MatchForState(c : Class) extends ForState
+case class MatchStarForState(c : Class, contMatch : Boolean /* TODO Replace with notinstof bounds */, prevMatched : Int, prevLocs: Set[Loc], descendants: Seq[SetSymbol]) extends ForState// last dp count should be added as well for symmetry breaking

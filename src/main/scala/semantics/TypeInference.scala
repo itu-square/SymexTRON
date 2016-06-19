@@ -11,7 +11,7 @@ import scalaz.syntax.std.option._
 class TypeInference(defs: Map[Class, ClassDefinition]) {
 
 
-  // TODO Calculate set of types instead
+  // TODO Calculate set of types instead and include notinstof to get complete bounds
   def inferSetType(ee : SetExpr[IsSymbolic.type], heap: SHeap): Option[Class] = ee match {
     case SetLit(es) => es match {
       case Seq() => none

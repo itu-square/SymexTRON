@@ -13,7 +13,6 @@ import scalaz._
 import scalaz.concurrent.Task
 import scalaz.stream._
 import MatchExpr._
-import org.scalatest.tools.ReporterConfigurations
 
 class SymbolicExecutor(defs: Map[Class, ClassDefinition],
                        kappa: Int = 3, delta: Int = 3, beta: Int = 5) {
@@ -24,7 +23,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SHeap)] =
     {
       for {
-        (Seq(loc), nheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), heap))
+        (Seq(loc), nheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), Set(), heap))
         (sdesc, nnheap) <- EitherT[Process[Task, ?], String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
         res <- EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SHeap)](if (defs.childfields.contains(f))
           (sdesc.children(f), nnheap).right.point[Process[Task, ?]]
@@ -52,7 +51,7 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     })(heap)
 
   def update(sym: Symbol, f: Fields, ee: SetExpr[IsSymbolic.type], heap: SHeap): EitherT[Process[Task, ?], String, SHeap] = for {
-      (Seq(loc), nheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), heap))
+      (Seq(loc), nheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(Seq(sym), Set(), heap))
       (sdesc, nnheap) <- EitherT[Process[Task, ?], String, (SpatialDesc, SHeap)](lazyInitializer.unfold(loc, f, nheap))
       res <- EitherT[Process[Task, ?], String, SHeap](if (defs.childfields.contains(f)) {
           val nnnheap = disown(ee, loc, f, nnheap)
@@ -66,18 +65,20 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
   def execute(pres : Set[SMem], c : Statement): Process[Task, String \/ SMem] = {
     for {
       pre <- Process.emitAll(pres.toSeq)
-      _ <- checkMemoryConsistency(pre).point[Process[Task, ?]]
+      _ <- checkMemoryConsistency(pre).run
       res <- executeHelper(pre, c).run
     } yield res
   }
 
 
-  def checkMemoryConsistency(pre: SMem): Process[Task, String \/ CMem] = {
+  def checkMemoryConsistency(pre: SMem): EitherT[Process[Task, ?], String, CMem] = {
     val concretised = modelFinder.concretise(pre)
-    concretised.point[Process[Task,?]].map(_.leftMap(err => { s"Inconsistent memory: ${PrettyPrinter.pretty(pre, initial = true)}" }))
+    EitherT[Process[Task, ?], String, CMem](
+      concretised.point[Process[Task,?]].map(_.leftMap(err => { s"Inconsistent memory: ${PrettyPrinter.pretty(pre, initial = true)}" }))
+    )
   }
 
-  def matchLocs(locs: Seq[Loc], c: Class, mem: SMem): String \/ (SetExpr[IsSymbolic.type], SMem) = {
+  def addDescendantsForLoc(loc: Loc, c: Class, mem: SMem): String \/ (SetSymbol, SMem) = {
     def addDescendantPool(descendantpools: DescendantPools, c: Class) = {
       if (descendantpools.contains(c)) (descendantpools(c), descendantpools, Map[SetSymbol, SSymbolDesc](), Set[BoolExpr[IsSymbolic.type]]())
       else {
@@ -87,27 +88,16 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         val subdps = defs.subtypes(c).map(descendantpools.get).filter(_.isDefined).map(_.get)
         val constraints = superdps.map(superssym => SetSubEq(ssym, superssym)).toSet[BoolExpr[IsSymbolic.type]] ++
                              subdps.map(subssym => SetSubEq(subssym, ssym)).toSet[BoolExpr[IsSymbolic.type]]
-        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, ManyOpt)), constraints)
+        (ssym, descendantpools + (c -> ssym), Map(ssym -> SSymbolDesc(c, Set(), ManyOpt)), constraints)
       }
     }
-    locs.foldLeft((Seq[SetExpr[IsSymbolic.type]](), mem).right[String]) { (st, loc) =>
-      for {
-        (presyms, mem) <- st
-        sdesc = mem.heap.currentSpatial(loc)
-        (ssym, newdp, newsslvtion, newpure) = addDescendantPool(sdesc.descendantpools, c)
-      } yield (presyms :+ ssym,
-            ((_sm_heap ^|-> _sh_ssvltion).modify(_ ++ newsslvtion) andThen
-              (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
-                (_sm_heap ^|-> _sh_currentSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
-                  (_sm_heap ^|-> _sh_pure).modify(_ ++ newpure))(mem))
-    }.map { case (ssyms, mem) =>
-      if (ssyms.isEmpty) (SetLit(Seq()), mem) else {
-      val ssymdisjoint : Seq[BoolExpr[IsSymbolic.type]] =
-        for (ssym1 <- ssyms; ssym2 <- ssyms; if ssym1 != ssym2) yield Eq(Union(ssym1, ssym2), SetLit(Seq()))
-      (ssyms.tail.foldLeft(ssyms.head : SetExpr[IsSymbolic.type])(Union(_,_)),
-        (_sm_heap ^|-> _sh_pure).modify(_ ++ ssymdisjoint.toSet)(mem))
-      }
-    }
+    for {
+      sdesc <- mem.heap.currentSpatial.get(loc).cata(_.right, s"Unknown loc ${PrettyPrinter.pretty(loc)}".left)
+      (ssym, newdp, newsslvtion, newpure) = addDescendantPool(sdesc.descendantpools, c)
+    } yield (ssym, ((_sm_heap ^|-> _sh_ssvltion).modify(_ ++ newsslvtion) andThen
+                   (_sm_heap ^|-> _sh_initSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
+                   (_sm_heap ^|-> _sh_currentSpatial).modify(_ + (loc -> _sd_descendantpools.set(newdp)(sdesc))) andThen
+                   (_sm_heap ^|-> _sh_pure).modify(_ ++ newpure))(mem))
   }
 
 
@@ -152,53 +142,86 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
         newfmem = (_sm_heap ^|-> _sh_pure).modify(_ + not(econd))(pre)
         execTrue =
           for {
-            _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(newtmem))
+            _ <- checkMemoryConsistency(newtmem)
             res <- executeHelper(newtmem, ts)
           } yield res
         execFalse =
           for {
-            _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(newfmem))
+            _ <- checkMemoryConsistency(newfmem)
             res <- executeHelper(newfmem, fs)
           } yield res
         res <-  EitherT[Process[Task, ?], String, SMem](execTrue.run.tee(execFalse.run)(teePlus.interleaveAll))
       } yield res
       case For(_, x, m, sb) =>
+        def foreach(iteration: Int, e : SetExpr[IsSymbolic.type], state: ForState, sMem: SMem): EitherT[Process[Task, ?], String, (ForState, SMem)] = {
+          EitherT[Process[Task, ?], String, (ForState, SMem)](
+            (for {
+              fmem <- EitherT[Process[Task, ?], String, SMem]((_sm_heap ^|-> _sh_pure).modify(_ + Eq(e, SetLit(Seq())))(sMem).right.point[Process[Task, ?]])
+              _ <- checkMemoryConsistency(fmem)
+            } yield (state, fmem)).run ++ (
+                 if (iteration < beta) {
+                   partition1(sMem, e).fold[Process[Task, String \/ (ForState, SMem)]](err => err.left.point[Process[Task, ?]], { case (sym, rest, sMem2) =>
+                     state match {
+                       case NormalForState =>
+                         (for {
+                           _ <- checkMemoryConsistency(sMem2)
+                           sMem3 <- executeHelper(_sm_currentStack.modify(_.updated(x, SetLit(Seq(sym))))(sMem2), sb)
+                           forres <- foreach(iteration = iteration + 1, rest.fold(SetLit(_),identity), NormalForState, sMem3)
+                         } yield forres).run
+                       case MatchForState(c) =>
+                         (for {
+                           (cont, sMem3) <- matchSym(sym, rest, c, sMem2)
+                           _ <- checkMemoryConsistency(sMem3)
+                           forres <- if (cont) for {
+                                                 sMem4 <- executeHelper(_sm_currentStack.modify(_.updated(x, SetLit(Seq(sym))))(sMem3), sb)
+                                                 forres <- foreach(iteration = iteration + 1, rest.fold(SetLit(_), identity), MatchForState(c), sMem4)
+                                              } yield forres
+                                    else EitherT.right[Process[Task, ?], String, (ForState, SMem)]((state, sMem3).point[Process[Task, ?]])
+                         } yield forres).run
+                       case MatchStarForState(c, contMatch, prevMatched, prevLocs, descendants) =>
+                         (for {
+                           (cont, sMem3) <- if (contMatch) matchSym(sym, rest, c, sMem2)
+                                            else EitherT.right[Process[Task, ?], String, (Boolean, SMem)]((false, sMem2).point[Process[Task, ?]])
+                           (Seq(loc), nheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](
+                             lazyInitializer.findLocs(Seq(sym), prevLocs, sMem3.heap) : Process[Task, String \/ (Seq[Loc], SHeap)])
+                           sMem4 = _sm_heap.set(nheap)(sMem3)
+                           (ssym, sMem5) <- EitherT[Process[Task, ?], String, (SetSymbol, SMem)](addDescendantsForLoc(loc, c, sMem4).point[Process[Task, ?]])
+                           _ <- checkMemoryConsistency(sMem5)
+                           forres <- if (cont) for {
+                                       sMem6 <- executeHelper(_sm_currentStack.modify(_.updated(x, SetLit(Seq(sym))))(sMem5), sb)
+                                       forres <- foreach(iteration = iteration + 1, rest.fold(SetLit(_), identity), MatchStarForState(c, cont, prevMatched + 1, prevLocs + loc, descendants :+ ssym), sMem6)
+                                     } yield forres
+                                     else foreach(iteration = iteration + 1, rest.fold(SetLit(_), identity), MatchStarForState(c, cont, prevMatched, prevLocs + loc, descendants :+ ssym), sMem5)
+                         } yield forres).run
+                     }
+                 })
+               } else Process.halt: Process[Task, String \/ (ForState, SMem)]
+              ))
+        }
         for {
           ee <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(pre), _me_e.get(m))
-          (syms, oee, imem) <-  EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1)).map {
-            count => findSyms(count, pre, ee)
-          })
-          (nsyms, nimem) <- m match {
-            case MSet(e) => EitherT.right[Process[Task, ?], String, (Seq[Symbol], SMem)]((syms, imem).point[Process[Task, ?]])
-            case Match(e, c) =>
-                EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](Process.emitAll(matchSyms(oee, syms, imem, c))).map { case (incsyms, _, mem) => (incsyms, mem) }
-            case MatchStar(e, c) =>
-              for {
-                (incsyms, excsyms, nimem) <- EitherT.right[Process[Task, ?], String, (Seq[Symbol], Seq[Symbol], SMem)](Process.emitAll(matchSyms(oee, syms, imem, c)))
-                (locs, nniheap) <- EitherT[Process[Task, ?], String, (Seq[Loc], SHeap)](lazyInitializer.findLocs(incsyms ++ excsyms, nimem.heap))
-                nnmem = _sm_heap.set(nniheap)(nimem)
-                (dpe, fmem) <- EitherT[Process[Task, ?], String, (SetExpr[IsSymbolic.type], SMem)](matchLocs(locs, c, nnmem).point[Process[Task, ?]])
-                (msyms, _, nfmem) <- EitherT[Process[Task, ?], String, (Seq[Symbol], SetExpr[IsSymbolic.type], SMem)](Process.emitAll(List.range(0,beta + 1 - incsyms.length)).map {
-                  count => findSyms(count, fmem, dpe)
-                })
-              } yield (incsyms ++ msyms, nfmem)
+          (resForState, imem) <- foreach(0, ee, m match {
+            case MSet(e) => NormalForState
+            case Match(e, c) => MatchForState(c)
+            case MatchStar(e, c) => MatchStarForState(c, true, 0, Set(), Seq())
+          }, pre)
+          resMem <- resForState match {
+            case NormalForState => EitherT.right[Process[Task,?], String, SMem](imem.point[Process[Task, ?]])
+            case MatchForState(c) => EitherT.right[Process[Task,?], String, SMem](imem.point[Process[Task, ?]])
+            case MatchStarForState(c, contMatch, prevMatched, prevLocs, descendants) =>
+              foreach(prevMatched, descendants.fold[SetExpr[IsSymbolic.type]](SetLit(Seq()))(Union(_,_)), NormalForState, imem).map(_._2)
           }
-          _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(nimem))
-          // TODO: Fix ordering so it coincides with concrete executor ordering
-          iterated <- nsyms.foldLeft(EitherT[Process[Task, ?], String, SMem](nimem.right.point[Process[Task, ?]])) { (memr, sym) =>
-            memr.flatMap { mem => executeHelper(_sm_currentStack.modify(_ + (x -> SetLit(Seq(sym))))(mem), sb) }
-          }
-        } yield iterated
+        } yield resMem
       case Fix(_, e, sb) =>
         def fixEqCase(bmem: SMem): EitherT[Process[Task, ?], String, SMem] = for {
-            _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(bmem))
+            _ <- checkMemoryConsistency(bmem)
             amem <- executeHelper(bmem, sb)
             eeb <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(bmem), e)
             eea <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(amem), e)
             updatedMem = (_sm_heap ^|-> _sh_pure).modify(_ + Eq(eeb, eea))(amem)
           } yield updatedMem
         def fixNeqCase(bmem: SMem, k: Int): EitherT[Process[Task, ?], String, SMem] = for {
-            _ <- EitherT[Process[Task, ?], String, CMem](checkMemoryConsistency(bmem))
+            _ <- checkMemoryConsistency(bmem)
             imem <- executeHelper(bmem, sb)
             eeb <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(bmem), e)
             eei <- evalSetExpr[Process[Task, ?]](_sm_currentStack.get(imem), e)
@@ -209,43 +232,64 @@ class SymbolicExecutor(defs: Map[Class, ClassDefinition],
     }
   }
 
-
-  def matchSyms(ee: SetExpr[IsSymbolic.type], syms: Seq[Symbol], imem: SMem, c: Class): Seq[(Seq[Symbol], Seq[Symbol], SMem)] = {
-    def partitionSyms(syms: Seq[Symbol], mem: SMem, c: Class): Seq[(Seq[Symbol], Seq[Symbol], SMem)] = for {
-      (incl, excl) <- List.range(0, syms.length + 1).map(syms.splitAt)
-      nmem = (_sm_heap ^|-> _sh_svltion).modify(_.mapValuesWithKeys((s, sdesc) =>
-        sdesc match {
-          case Loced(l) => sdesc // TODO Refine loc with type?
-          case sdesc:UnknownLoc =>
-            if (excl.contains(s)) { sdesc.copy(notinstof = sdesc.notinstof + c) }
-            else if (incl.contains(s)) { sdesc.copy(cl = c, notinstof = sdesc.notinstof.intersect(defs.subtypesOrSelf(c))) }
-            else sdesc
-        }
-      ))(mem)
-    } yield (incl, excl, nmem)
-    val ocr = typeInference.inferSetType(ee, imem.heap)
-    ocr.cata({ oc =>
-      if (defs.subtypesOrSelf(c).contains(oc)) Seq((syms, Seq(), imem))
-      else if (defs.maxClass(c, oc).isDefined) partitionSyms(syms, imem, c)
-      else Seq((Seq(), syms, imem))
-    }, Seq((Seq(), syms, imem)))
+  def matchSym(sym: Symbol, rest: Seq[Symbol] \/ SetSymbol, c: Class, mem: SMem): EitherT[Process[Task, ?], String, (Boolean, SMem)] = {
+    for {
+      symdesc <- EitherT[Process[Task, ?], String, SymbolDesc](mem.heap.svltion.get(sym).cata(_.right, s"Unknown symbol $sym".left).point[Process[Task, ?]])
+      (symtype, symtn) <- symdesc match {
+        case Loced(l) =>
+          for {
+            sdesc <- EitherT[Process[Task, ?], String, SpatialDesc](mem.heap.currentSpatial.get(l).cata(_.right, s"Unknow loc ${PrettyPrinter.pretty(l)}".left).point[Process[Task, ?]])
+          } yield (sdesc.cl, sdesc.notinstof)
+        case UnknownLoc(cl, notinstof) => EitherT.right[Process[Task, ?], String, (Class, Set[Class])]((cl, notinstof).point[Process[Task, ?]])
+      }
+      res <- if (symtn.exists(oc => defs.subtypesOrSelf(oc).contains(c))) EitherT.right[Process[Task, ?], String, (Boolean, SMem)]((false, mem).point[Process[Task, ?]])
+              else if (defs.subtypesOrSelf(c).contains(symtype)) EitherT.right[Process[Task, ?], String, (Boolean, SMem)]((true, mem).point[Process[Task, ?]])
+              else if (defs.maxClass(c, symtype).isDefined) {
+                val truemem = (_sm_heap ^|-> _sh_svltion).modify(_.updated(sym, symdesc match {
+                  case Loced(l) => symdesc // TODO Refine loc wity type?
+                  case symdesc:UnknownLoc => symdesc.copy(cl = c, notinstof = symdesc.notinstof.intersect(defs.subtypesOrSelf(c)))
+                }))(mem)
+                val falsemem = {
+                  def exludeC(sym : Symbol, symdesc : SymbolDesc, mem: SMem) = symdesc match {
+                    case Loced(l) =>
+                      val sdesc = mem.heap.currentSpatial(l)
+                      ((_sm_heap ^|-> _sh_initSpatial).modify(_.updated(l, sdesc.copy(notinstof = sdesc.notinstof + c))) `andThen`
+                        (_sm_heap ^|-> _sh_currentSpatial).modify(_.updated(l, sdesc.copy(notinstof = sdesc.notinstof + c))))(mem)
+                    case symdesc:UnknownLoc =>(_sm_heap ^|-> _sh_svltion).modify(_.updated(sym, symdesc.copy(notinstof = symdesc.notinstof + c)))(mem)
+                  }
+                  val imem = rest.fold(syms => {
+                    syms.foldLeft(mem) { (imem, sym) =>
+                      val symdesc = mem.heap.svltion(sym) // TODO get safely
+                      exludeC(sym, symdesc, imem)
+                    }
+                  }, ssym => {
+                    val ssymdesc = mem.heap.ssvltion(ssym)
+                    (_sm_heap ^|-> _sh_ssvltion).modify(_.updated(ssym, ssymdesc.copy(notinstof = ssymdesc.notinstof + c)))(mem)
+                    }
+                  )
+                  exludeC(sym, symdesc, imem)
+                }
+                EitherT.right[Process[Task, ?], String, (Boolean, SMem)](Process((false, falsemem), (true, truemem)))
+              }
+              else EitherT.right[Process[Task, ?], String, (Boolean, SMem)]((false, mem).point[Process[Task, ?]])
+    } yield res
   }
 
-  private def partition1(mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Symbol, SetExpr[IsSymbolic.type], SMem) = eres match {
+  private def partition1(mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Symbol, Seq[Symbol] \/ SetSymbol, SMem) = eres match {
     case SetLit(es) =>
       es match {
         case Seq() => s"Empty set: $eres".left
-        case x@Symbol(_) +: xs => (x, SetLit(xs) : SetExpr[IsSymbolic.type], mem).right[String]
+        case (x@Symbol(_)) +: xs => (x, xs.map {case x:Symbol => x}.left, mem).right[String]
       }
     case _ =>
       val nsym = Symbol(freshSym)
       val nssym = SetSymbol(freshSym)
       for {
-        nsymtype <- typeInference.inferSetType(eres, mem.heap).cata(_.right, s"Empty set: $eres".left)
+        nsymtype <- typeInference.inferSetType(eres, mem.heap).cata(_.right, s"Empty set: $eres".left) // TODO Infer notinstof bounds as well
         nmem = ((_sm_heap ^|-> _sh_svltion).modify(_.updated(nsym, UnknownLoc(nsymtype, Set()))) andThen
-                (_sm_heap ^|-> _sh_ssvltion).modify(_.updated(nssym, SSymbolDesc(nsymtype, ManyOpt))) andThen
+                (_sm_heap ^|-> _sh_ssvltion).modify(_.updated(nssym, SSymbolDesc(nsymtype, Set(), ManyOpt))) andThen
                 (_sm_heap ^|-> _sh_pure).modify(_ + Eq(ISect(SetLit(Seq(nsym)), nssym), SetLit(Seq())) + Eq(Union(SetLit(Seq(nsym)), nssym), eres)))(mem)
-      } yield (nsym, nssym, nmem)
+      } yield (nsym, nssym.right, nmem)
   }
 
   private def findSyms(count: Int, mem: SMem, eres: SetExpr[IsSymbolic.type]): String \/ (Seq[Symbol], SetExpr[IsSymbolic.type], SMem) = {

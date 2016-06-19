@@ -24,10 +24,10 @@ object RenameFieldRefactoring extends Refactoring {
     val inputStack = SStack.initial(Set(),Map("package" -> SetLit(Seq(Symbol(packageId))), "class" -> SetLit(Seq(Symbol(classId))),
       "old_field" -> SetLit(Seq(Symbol(oldFieldId))), "new_field" -> SetLit(Seq(Symbol(newFieldId)))))
     val inputHeap = SHeap.initial(
-      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), ManyOpt)
-        , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), ManyOpt)
-        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), ManyOpt)
-        , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt)
+      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Set(), ManyOpt)
+        , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Set(), ManyOpt)
+        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Set(), ManyOpt)
+        , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Set(), Opt)
       )
       , Map(Symbol(packageId) -> Loced(Loc(packageId)),
         Symbol(classId) -> Loced(Loc(classId)),
@@ -85,10 +85,10 @@ object RenameMethodRefactoring extends Refactoring {
     val inputStack = SStack.initial(Set(),Map("package" -> SetLit(Seq(Symbol(packageId))), "class" -> SetLit(Seq(Symbol(classId))),
       "old_method" -> SetLit(Seq(Symbol(oldMethodId))), "new_method" -> SetLit(Seq(Symbol(newMethodId)))))
     val inputHeap = SHeap.initial(
-      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), ManyOpt)
-        , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), ManyOpt)
-        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), ManyOpt)
-        , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Opt)
+      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Set(), ManyOpt)
+        , SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Set(), ManyOpt)
+        , SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Set(), ManyOpt)
+        , SetSymbol(classSuperId) -> SSymbolDesc(Class("Class"), Set(), Opt)
       ),
       Map(Symbol(packageId) -> Loced(Loc(packageId)),
         Symbol(classId) -> Loced(Loc(classId)),
@@ -160,7 +160,7 @@ object ExtractSuperclassRefactoring extends Refactoring {
     val inputStack = SStack.initial(Set(), Map("package" -> SetLit(Seq(Symbol(packageId))), "class1" -> SetLit(Seq(Symbol(class1Id))),
       "class2" -> SetLit(Seq(Symbol(class2Id))), "sc_name" -> SetLit(Seq(Symbol(scnameId)))))
     val inputHeap = SHeap.initial(
-      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), ManyOpt)),
+      Map(SetSymbol(packageClassesId) -> SSymbolDesc(Class("Class"), Set(), ManyOpt)),
       Map(
         Symbol(packageId) -> Loced(Loc(packageId)),
         Symbol(scnameId) -> UnknownLoc(Class("String"), Set()),
@@ -226,9 +226,9 @@ object ReplaceDelegationWithInheritance extends Refactoring {
         val inputStack = SStack.initial(Set(), Map("class" -> SetLit(Seq(Symbol(classId))),
                              "field" -> SetLit(Seq(Symbol(fieldId)))))
         val inputHeap = SHeap.initial(
-          Map(SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), ManyOpt),
-              SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), ManyOpt),
-              SetSymbol(classSuperId) -> SSymbolDesc(Class("String"), Opt)),
+          Map(SetSymbol(classFieldsId) -> SSymbolDesc(Class("Field"), Set(), ManyOpt),
+              SetSymbol(classMethodsId) -> SSymbolDesc(Class("Method"), Set(), ManyOpt),
+              SetSymbol(classSuperId) -> SSymbolDesc(Class("String"), Set(), Opt)),
           Map(Symbol(classId) -> Loced(Loc(classId)),
               Symbol(fieldId) -> UnknownLoc(Class("Field"), Set()),
               Symbol(classNameId) -> UnknownLoc(Class("String"), Set())),

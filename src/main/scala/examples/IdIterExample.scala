@@ -16,7 +16,7 @@ object IdIterExample extends Example {
     val stack = Map("X" -> SetSymbol(-1))
     Set(
       SMem(SStack.initial(Set(), stack),
-        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntSet"), ManyOpt)), Map(), Map(), Map(), Set()))
+        SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("IntSet"), Set(), ManyOpt)), Map(), Map(), Map(), Set()))
     )
   }
 

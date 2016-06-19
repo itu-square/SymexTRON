@@ -30,7 +30,7 @@ trait RegexSimplication extends Example {
     )
   override val pres: Set[SMem] = Set(
     SMem(SStack.initial(Set(), Map("regex" -> SetSymbol(-1))),
-      SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("RegexRef"), Req)),Map(),Map(), Map(), Set()))
+      SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("RegexRef"), Set(), Req)),Map(),Map(), Map(), Set()))
   )
 }
 

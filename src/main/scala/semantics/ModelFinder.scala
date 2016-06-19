@@ -442,7 +442,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
-      println(PrettyPrinter.pretty(smem, initial = true))
+      //println(PrettyPrinter.pretty(smem, initial = true))
       findSolution(cs ++ classesPresentConstraints ++ fieldsPresentConstraints, bs) }.map{inst =>
       extractConcreteMemory(inst, _sm_initStack.get(smem).keySet)
     }
@@ -480,9 +480,15 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
 
     } else Formula.TRUE
     val varroots = _sm_roots.get(smem)
-    val ssvconstraints = smem.heap.ssvltion.toList.map { case (ssym, ssdesc) =>
-        cardConstraint(ssymmap(ssym), ssdesc.crd) and
-          (ssymmap(ssym).join(TypesRel.typeOfSet) eq TypesRel.typerels(ssdesc.cl))
+    val ssvconstraints = smem.heap.ssvltion.toList.flatMap { case (ssym, ssdesc) =>
+        val notinstofconstraints = ssdesc.notinstof.map(ncl => {
+            val l = Variable.unary("l")
+            (l in ssymmap(ssym).join(SymbolicSetRel.locs)) implies
+              (TypesRel.typerels(ncl) in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)).not forAll (l oneOf LocsRel.self)
+          }
+        ).toList
+        notinstofconstraints ++ List(cardConstraint(ssymmap(ssym), ssdesc.crd),
+          ssymmap(ssym).join(TypesRel.typeOfSet) eq TypesRel.typerels(ssdesc.cl))
     }
     val svconstraints = smem.heap.svltion.toList.flatMap { case (sym, sdesc) =>
       sdesc match {

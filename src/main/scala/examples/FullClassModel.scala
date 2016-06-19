@@ -13,7 +13,7 @@ object FullClassModel {
                               Map("name" -> FieldDefinition(Class("String"), Req, Ordinary),
                                   "type" -> FieldDefinition(Class("Class"), Req, Ordinary)))
    , ClassDefinition("Method", Map("params" -> FieldDefinition(Class("Parameter"), ManyOpt, Ordinary),
-                                        "body" -> FieldDefinition(Class("Statement"), Req, Ordinary)),
+                                   "body" -> FieldDefinition(Class("Statement"), Req, Ordinary)),
                         Map("name" -> FieldDefinition(Class("String"), Req, Ordinary),
                             "type" -> FieldDefinition(Class("Class"), Req, Ordinary)))
    , ClassDefinition("Parameter", Map(),

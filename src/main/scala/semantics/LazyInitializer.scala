@@ -24,7 +24,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
     (SpatialDesc(cl, notinstof, AbstractDesc, children, refs, Map()), _sh_ssvltion.modify(_ ++ newssvltionc ++ newssvltionr)(heap))
   }
 
-  def findLocs(syms: Seq[Symbol], heap: SHeap): Process0[String \/ (Seq[Loc], SHeap)] = {
+  def findLocs(syms: Seq[Symbol], excluded: Set[Loc], heap: SHeap): Process0[String \/ (Seq[Loc], SHeap)] = {
     def relevantLocs(nheap: SHeap, cl: Class, notinstof: Set[Class]): Set[Loc] = {
       // TODO: Filter safely
       nheap.locOwnership.filter { case (loc, ownership) => ownership match {
@@ -32,7 +32,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
         case NewlyCreated => false
       }
       }.filter { case (loc, _) => defs.subtypesOrSelf(cl).contains(nheap.currentSpatial(loc).cl) &&
-         !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(nheap.currentSpatial(loc).cl)) }.keySet
+         !notinstof.any(notc => defs.subtypesOrSelf(notc).contains(nheap.currentSpatial(loc).cl)) }.keySet.diff(excluded)
     }
     def addNewLoc(sym: Symbol, newLoc: Loc, sdesc: SpatialDesc, ownership: Ownership, nheap: SHeap): SHeap = {
       val nnheap = (_sh_svltion.modify(_ + (sym -> Loced(newLoc))) andThen
@@ -79,7 +79,7 @@ class LazyInitializer(symcounter: Counter, loccounter: Counter, defs: Map[Class,
               (svltion, fields + (f -> SetLit(Seq())))
             case _ =>
               val sym = SetSymbol(symcounter.++)
-              (svltion + (sym -> SSymbolDesc(cl, crd)), fields + (f -> sym))
+              (svltion + (sym -> SSymbolDesc(cl, Set(), crd)), fields + (f -> sym))
           }
       }
     }

@@ -36,7 +36,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
     ClassDefinition("Female", Map(), Map(), superclass = Some(Class("Person")))
   )
   override val pres: Set[SMem] = Set(SMem(SStack.initial(Set("families"), Map("families" -> SetSymbol(-1))),
-    SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("Family"), ManyOpt)), Map(), Map(), Map(), Set())))
+    SHeap.initial(Map(SetSymbol(-1) -> SSymbolDesc(Class("Family"), Set(), ManyOpt)), Map(), Map(), Map(), Set())))
   override val prog: Statement = {
     def isFemaleHelper(self: SetExpr[IsProgram.type], outVar: Vars): Statement = stmtSeq(
       loadField("self_familyMother", self, "familyMother"),
@@ -124,7 +124,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
     )
     override val pres: Set[SMem] = Set(SMem(SStack.initial(Set("package", "integer_name"),Map("package" -> SetLit(Seq(Symbol(-1))),
       "integer_name" -> SetSymbol(-2))),
-      SHeap.initial(Map(SetSymbol(-2) -> SSymbolDesc(Class("Int"), Req)), Map(Symbol(-1) -> UnknownLoc(Class("Package"), Set())), Map(), Map(), Set())))
+      SHeap.initial(Map(SetSymbol(-2) -> SSymbolDesc(Class("Int"), Set(), Req)), Map(Symbol(-1) -> UnknownLoc(Class("Package"), Set())), Map(), Map(), Set())))
     override val prog: Statement = {
       stmtSeq(
         `new`("objectIdType", Class("Type")),
