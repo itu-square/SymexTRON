@@ -100,7 +100,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
 
     override val wellRooted = true
 
-    override val excludedBranches = Set(BranchPoint(24,2), BranchPoint(56,2))
+    override val excludedBranches = Set(BranchPoint(22,2), BranchPoint(54,2))
 
     override val classDefs: Set[ClassDefinition] = Shared.stdClassDefs ++ Set(
       // Class meta-model
