@@ -34,7 +34,7 @@ class WhiteBoxTestGenerator(defs: Map[Class, ClassDefinition], prog: Statement, 
                symbExec.execute(pres, concExec.prog)
               .map(_.flatMap{ sm => symbExec.modelFinder.concretise(sm, wellRooted = wellRooted) })
               .takeWhile(_ => concExec.coverage <= coverageTarget)
-              .map { mem => mem.fold(_ => (), m => { val res = concExec.execute(m); res.leftMap(println) }); mem  }
+              .map { mem => mem.fold(_ => (), m => { val res = concExec.execute(m); /*res.leftMap(println)*/ }); mem  }
               )(wye.interrupt)
   }
 

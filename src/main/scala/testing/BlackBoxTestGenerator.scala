@@ -27,8 +27,6 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int, wellR
     def gctHelper(classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Process0[CMem] = {
       val additionalClassesToCover = metamodelcoverage.relevantClasses diff metamodelcoverage.coveredClasses
       val additionalFieldsToCover = metamodelcoverage.relevantFields diff metamodelcoverage.coveredFields
-      println(additionalClassesToCover)
-      println(additionalFieldsToCover)
       if (additionalClassesToCover.isEmpty)
         if (additionalFieldsToCover.isEmpty) Process()
         else {

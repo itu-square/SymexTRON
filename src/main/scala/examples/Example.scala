@@ -37,7 +37,7 @@ trait Example {
     println("""------------ Blackbox test generation -----------------""")
     bbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("blackboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println("""-------------------------------------------------------""")
-    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta = beta, delta = delta, kappa = kappa, wellRooted = wellRooted, timeout = 10L.minutes)
+    val wbtestgenerator = new WhiteBoxTestGenerator(defsWithKeys, prog, excludedBranches, beta = beta, delta = delta, kappa = kappa, wellRooted = wellRooted, timeout = 30L.minutes)
     println("""------------ Whitebox test generation -----------------""")
     wbtestgenerator.generateTests(pres).map(mem => DotConverter.convertCMem("whiteboxmem", mem)).map(_.toString).to(io.stdOutLines).run.run
     println(s"Coverage: ${wbtestgenerator.codeCoverage}")
