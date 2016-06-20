@@ -3,7 +3,7 @@ package testing
 import helper.Counter
 import kodkod.ast.Formula
 import kodkod.instance.Bounds
-import semantics.{MetaModelCoverageChecker, ModelFinder}
+import semantics.{PrettyPrinter, FieldMultiplicity, MetaModelCoverageChecker, ModelFinder}
 import semantics.domains.{UnknownLoc, CMem, SMem}
 import _root_.syntax.ast.{Vars, Fields, ClassDefinition, Class}
 
@@ -24,9 +24,9 @@ class BlackBoxTestGenerator(defs: Map[Class, ClassDefinition], delta: Int, wellR
   def generateCoveringTests(consideredTypes: Set[Class], pre: SMem, mems: Set[CMem]): Process0[CMem] = {
     val metamodelcoverage = new MetaModelCoverageChecker(defs, consideredTypes)
     mems.foreach(metamodelcoverage.registerMem)
-    def gctHelper(classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields)]): Process0[CMem] = {
-      val additionalClassesToCover = metamodelcoverage.relevantClasses diff metamodelcoverage.coveredClasses
-      val additionalFieldsToCover = metamodelcoverage.relevantFields diff metamodelcoverage.coveredFields
+    def gctHelper(classesUncoverable: Set[Class], fieldsUncoverable: Set[(Class, Fields, FieldMultiplicity)]): Process0[CMem] = {
+      val additionalClassesToCover = metamodelcoverage.relevantClasses diff (metamodelcoverage.coveredClasses union classesUncoverable)
+      val additionalFieldsToCover = metamodelcoverage.relevantFields diff (metamodelcoverage.coveredFields union fieldsUncoverable)
       if (additionalClassesToCover.isEmpty)
         if (additionalFieldsToCover.isEmpty) Process()
         else {

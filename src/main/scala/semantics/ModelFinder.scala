@@ -243,20 +243,25 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
   }
 
   private
-  def fieldPresenceConstraint(field: (Class, Fields)): Formula = {
+  def fieldPresenceConstraint(fieldconstr: (Class, Fields, FieldMultiplicity)): Formula = {
+    val (clazz, field, mult) = fieldconstr
     val v = Variable.unary("v")
     val ol = Variable.unary("ol")
-    val ool = Variable.unary("ool")
     val l = Variable.unary("l")
     val f = Variable.unary("f")
     val t = Variable.unary("t")
     (ol in v.join(VarsRel.vals)) and
       ((l product ol) in ReachabilityRel.reachableBy.reflexiveClosure) and
         (t in l.join(TypesRel.typeOfLoc).join(TypesRel.isSubType)) and
-          (f eq FieldsRel.fieldsrels(field._2)) and
-            ((l product f product ool) in LocsRel.fields) `forSome`
-              ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (ool oneOf LocsRel.self) and (l oneOf LocsRel.self) and
-                (f oneOf FieldsRel.self)) forAll (t oneOf TypesRel.typerels(field._1))
+            ({ val lf = f.join(l.join(LocsRel.fields))
+              mult match {
+                case ZeroMultiplicity => lf.no
+                case OneMultiplicity => lf.one
+                case SomeMultiplicity => lf.count.gt(IntConstant.constant(1))
+              }
+            }) `forSome`
+              ((v oneOf VarsRel.self) and (ol oneOf LocsRel.self) and (l oneOf LocsRel.self)) forAll
+                 ((t oneOf TypesRel.typerels(clazz)) and (f oneOf FieldsRel.fieldsrels(field)))
   }
 
   private
@@ -438,7 +443,7 @@ class ModelFinder(defs: Map[Class, ClassDefinition], delta: Int) {
     } yield (cs1 ++ cs2, op(ee1, ee2))
   }
 
-  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields)] = Set(), hasTracking: Boolean = false, wellRooted: Boolean = false): String \/ CMem = {
+  def concretise(smem: SMem, classesPresent: Set[Class] = Set(), fieldsPresent: Set[(Class,Fields, FieldMultiplicity)] = Set(), hasTracking: Boolean = false, wellRooted: Boolean = false): String \/ CMem = {
     concretisationConstraints(smem, hasTracking, wellRooted).flatMap{ case (cs, bs) =>
       val classesPresentConstraints = classesPresent.map(cl => classPresenceConstraint(cl)).toList
       val fieldsPresentConstraints = fieldsPresent.map(f => fieldPresenceConstraint(f)).toList
