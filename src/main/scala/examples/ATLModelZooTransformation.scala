@@ -13,7 +13,7 @@ trait ATLModelZooTransformation extends Example { }
 // This example is a bit traditionalist, but we wanted to pick something from the transformation Zoo
 object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   override val wellRooted = true
-  override val delta = 5
+  override val delta = 6
   override val beta = 3
   override val excludedBranches = Set(BranchPoint(2,1) /* There must be at least two members (father and mother) in each family */
     , BranchPoint(22,0) /* Not female means not mother */, BranchPoint(24,1) /* Not female means not daughter */,
@@ -65,10 +65,10 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
         ))
     )
     stmtSeq(
-      assignVar("persons", SetLit(Seq())),
+    assignVar("persons", SetLit(Seq())),
       `for`("member", MatchStar(Var("families"), Class("Member")), stmtSeq(
         isFemaleHelper(Var("member"), "isFemale"),
-        `if`(Eq(Var("isFemale"), SetLit(Seq())),
+        `if`(Not(Eq(Var("isFemale"), SetLit(Seq()))),
           stmtSeq(
             `new`("female", Class("Female")),
             familyNameHelper(Var("member"), "familyName"),
@@ -253,7 +253,7 @@ object FamiliesToPersonsTransformation extends ATLModelZooTransformation {
   }
 
   object PathExp2PetriNetTransformation extends ATLModelZooTransformation {
-    override val delta = 5
+    override val delta = 6
     override val wellRooted = true
     // Particularly interesting because it requires an ordering of resolution of elements which I am not sure is supported
     // by other frameworks
