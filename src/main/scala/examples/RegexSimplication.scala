@@ -5,10 +5,6 @@ import syntax.ast.Statement._
 import syntax.ast._
 
 
-// Perhaps include a chapter about copying transformations for final OOPSLA submission
-/**
-  * Created by asal on 03/05/2016.
-  */
 trait RegexSimplication extends Example {
   override val beta = 3
 
@@ -34,6 +30,8 @@ trait RegexSimplication extends Example {
   )
 }
 
+
+// Relies on deep `equivalence` feature, which is currently unsupported
 object RegexAltSimplification extends RegexSimplication {
   override val excludedBranches = Set(BranchPoint(0,0), BranchPoint(3,2))
 
