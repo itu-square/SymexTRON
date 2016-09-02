@@ -25,7 +25,7 @@ Call `sbt test` in the SymexTRON directory.
 
 Call `sbt run` in the SymexTRON directory.
 
-The main evaluation source file is 'src/main/scala/examples/evaluation/Evaluation.scala`, and it uses some of the example files
+The main evaluation source file is `src/main/scala/examples/evaluation/Evaluation.scala`, and it uses some of the example files
 from the containing `examples` folder.
 
 ### To make an example program:
