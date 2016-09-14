@@ -21,12 +21,31 @@ First go to the source directory by using `cd $HOME/Documents/SymexTRON` and the
 
 Call `sbt test` in the SymexTRON directory.
 
-### To run the evaluation:
+### To run the SLE paper evaluation:
 
 Call `sbt run` in the SymexTRON directory.
 
 The main evaluation source file is `src/main/scala/examples/evaluation/Evaluation.scala`, and it uses some of the example files
 from the containing `examples` folder.
+
+The evaluation subjects from the paper and accompanying technical report can be found as follows:
+
+| Program              | File                            | Object                              |
+| ---------------------|---------------------------------|-------------------------------------|
+| RenameField          | Refactoring.scala               | RenameFieldRefactoring              |
+| RenameMethod         | Refactoring.scala               | RenameMethodRefactoring             |
+| ExtractSuper         | Refactoring.scala               | ExtractSuperclassRefactoring        |
+| ReplaceDelegation    | Refactoring.scala               | ReplaceDelegationWithInheritance    |
+| Fam2Pers             | ATLModelZooTransformation.scala | FamiliesToPersonsTransformation     |
+| Path2Petri           | ATLModelZooTransformation.scala | PathExp2PetriNetTransformation      |
+| Class2Rel            | ATLModelZooTransformation.scala | ClassToRelationalTransformation     |
+| Toy1                 | IntListExample.scala            | IntListContainsElementExample       |
+| Toy2                 | IntListExample.scala            | IntListHeadTailEqExample            |
+| Toy3                 | Class2TableExample.scala        | Class2TableSimpleExample            |
+| Toy4                 | Class2TableExample.scala        | Class2TableDeepMatchingExample      |
+| Toy5                 | BlogPostFeedExample.scala       | BlogPostFeedTimestampsExample       |
+| Toy6                 | BlogPostFeedExample.scala       | BlogPostFeedCapitaliseTitlesExample |
+| Toy7                 | ContactBookExample.scala        | ContactBookExample                  |
 
 ### To make an example program:
 
