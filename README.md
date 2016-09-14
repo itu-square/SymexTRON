@@ -49,7 +49,9 @@ The evaluation subjects from the paper and accompanying technical report can be 
 
 ### To make an example program:
 
-Make a new file with your example name e.g. `FooExample.scala` which contains an object `FooExample` that inherits from the `examples.Example` trait.
+The description of the AST for type-definitions and programs is available in the [SYNTAX.md](SYNTAX.md) file.
+
+To make an example, start by creating a new file with your example name e.g. `FooExample.scala` which contains an object `FooExample` that inherits from the `examples.Example` trait.
 Then override the `classDefs` (containing the metamodel/type-definitions), `pres` (containing the initial memory) and `prog` (containing the TRON program) values to contain your desired program. Remember to add the following imports:
 
 ```
