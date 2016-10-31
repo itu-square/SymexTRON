@@ -1,33 +1,37 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8">
+    <meta charset='utf-8'>
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>SymexTRON by models-team</title>
-
-    <link rel="stylesheet" href="stylesheets/styles.css">
-    <link rel="stylesheet" href="stylesheets/github-dark.css">
-    <script src="javascripts/scale.fix.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-dark.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
     <!--[if lt IE 9]>
     <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
+    <title>SymexTRON by models-team</title>
   </head>
+
   <body>
-    <div class="wrapper">
-      <header>
-        <h1>SymexTRON</h1>
-        <p>Symbolic Execution of TRON</p>
-        <p class="view"><a href="https://github.com/models-team/SymexTRON">View the Project on GitHub <small>models-team/SymexTRON</small></a></p>
-        <ul>
-          <li><a href="https://github.com/models-team/SymexTRON/zipball/master">Download <strong>ZIP File</strong></a></li>
-          <li><a href="https://github.com/models-team/SymexTRON/tarball/master">Download <strong>TAR Ball</strong></a></li>
-          <li><a href="https://github.com/models-team/SymexTRON">View On <strong>GitHub</strong></a></li>
-        </ul>
-      </header>
-      <section>
-        <p><img src="https://github.com/models-team/SymexTRON/raw/master/README/GPLv3-badge.png" alt="GPLv3 licensed"></p>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>SymexTRON</h1>
+          <h2>Symbolic Execution of TRON</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/models-team/SymexTRON/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/models-team/SymexTRON/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/models-team/SymexTRON" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <p><img src="https://github.com/models-team/SymexTRON/raw/master/README/GPLv3-badge.png" alt="GPLv3 licensed"></p>
 
 <p>A tool for symbolically executing TRON programs and generate white-box tests.</p>
 
@@ -62,90 +66,6 @@ In case no native solver is available, it will fallback to the Java SAT4J solver
 <p>The main evaluation source file is <code>src/main/scala/examples/evaluation/Evaluation.scala</code>, and it uses some of the example files
 from the containing <code>examples</code> folder.</p>
 
-<p>The evaluation subjects from the paper and accompanying technical report can be found as follows:</p>
-
-<table>
-<thead>
-<tr>
-<th>Program</th>
-<th>File</th>
-<th>Object</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>RenameField</td>
-<td>Refactoring.scala</td>
-<td>RenameFieldRefactoring</td>
-</tr>
-<tr>
-<td>RenameMethod</td>
-<td>Refactoring.scala</td>
-<td>RenameMethodRefactoring</td>
-</tr>
-<tr>
-<td>ExtractSuper</td>
-<td>Refactoring.scala</td>
-<td>ExtractSuperclassRefactoring</td>
-</tr>
-<tr>
-<td>ReplaceDelegation</td>
-<td>Refactoring.scala</td>
-<td>ReplaceDelegationWithInheritance</td>
-</tr>
-<tr>
-<td>Fam2Pers</td>
-<td>ATLModelZooTransformation.scala</td>
-<td>FamiliesToPersonsTransformation</td>
-</tr>
-<tr>
-<td>Path2Petri</td>
-<td>ATLModelZooTransformation.scala</td>
-<td>PathExp2PetriNetTransformation</td>
-</tr>
-<tr>
-<td>Class2Rel</td>
-<td>ATLModelZooTransformation.scala</td>
-<td>ClassToRelationalTransformation</td>
-</tr>
-<tr>
-<td>Toy1</td>
-<td>IntListExample.scala</td>
-<td>IntListContainsElementExample</td>
-</tr>
-<tr>
-<td>Toy2</td>
-<td>IntListExample.scala</td>
-<td>IntListHeadTailEqExample</td>
-</tr>
-<tr>
-<td>Toy3</td>
-<td>Class2TableExample.scala</td>
-<td>Class2TableSimpleExample</td>
-</tr>
-<tr>
-<td>Toy4</td>
-<td>Class2TableExample.scala</td>
-<td>Class2TableDeepMatchingExample</td>
-</tr>
-<tr>
-<td>Toy5</td>
-<td>BlogPostFeedExample.scala</td>
-<td>BlogPostFeedTimestampsExample</td>
-</tr>
-<tr>
-<td>Toy6</td>
-<td>BlogPostFeedExample.scala</td>
-<td>BlogPostFeedCapitaliseTitlesExample</td>
-</tr>
-<tr>
-<td>Toy7</td>
-<td>ContactBookExample.scala</td>
-<td>ContactBookExample</td>
-</tr>
-</tbody>
-</table>
-
 <h3>
 <a id="to-make-an-example-program" class="anchor" href="#to-make-an-example-program" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To make an example program:</h3>
 
@@ -163,13 +83,15 @@ import syntax.ast._
 <p>For a simple example, see the <code>IdIterExample</code> in the <code>examples</code> package.</p>
 
 <p>You can run an example by using <code>sbt 'run-main ‹example name›'</code>, e.g. <code>sbt 'run-main examples.IdIterExample'</code> for running the tool on the <code>IdIterExample</code>.</p>
-      </section>
+        </section>
+
+        <footer>
+          SymexTRON is maintained by <a href="https://github.com/models-team">models-team</a><br>
+          This page was generated by <a href="https://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
     </div>
-    <footer>
-      <p>Project maintained by <a href="https://github.com/models-team">models-team</a></p>
-      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
-    </footer>
-    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
-    
   </body>
 </html>
