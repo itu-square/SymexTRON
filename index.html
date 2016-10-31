@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>SymexTRON by models-team</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-dark.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>SymexTRON</h1>
+        <p>Symbolic Execution of TRON</p>
+        <p class="view"><a href="https://github.com/models-team/SymexTRON">View the Project on GitHub <small>models-team/SymexTRON</small></a></p>
+        <ul>
+          <li><a href="https://github.com/models-team/SymexTRON/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/models-team/SymexTRON/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/models-team/SymexTRON">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <p><img src="https://github.com/models-team/SymexTRON/raw/master/README/GPLv3-badge.png" alt="GPLv3 licensed"></p>
+
+<p>A tool for symbolically executing TRON programs and generate white-box tests.</p>
+
+<h3>
+<a id="prerequisites" class="anchor" href="#prerequisites" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Prerequisites</h3>
+
+<ul>
+<li>Scala 2.11 (tested with 2.11.8)</li>
+<li>SBT   0.13 (tested with 0.13.12)</li>
+<li>Internet access for SBT to download dependencies</li>
+</ul>
+
+<p>To run the native Plingeling solver, you must have the <code>lib/solvers/‹platform›</code> folder on your <code>java.library.path</code> (where <code>‹platform›</code> should be replaced by either <code>darwin</code> (for OS X) or <code>linux</code>).
+This can be achieved by changing the setting in the repository included <code>.sbtopts</code> file.
+In case no native solver is available, it will fallback to the Java SAT4J solver which is compatible with more platforms but is slower.</p>
+
+<h3>
+<a id="to-build" class="anchor" href="#to-build" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To build:</h3>
+
+<p>First go to the source directory by using <code>cd $HOME/Documents/SymexTRON</code> and then call <code>sbt compile</code>.</p>
+
+<h3>
+<a id="to-run-tests" class="anchor" href="#to-run-tests" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To run tests:</h3>
+
+<p>Call <code>sbt test</code> in the SymexTRON directory.</p>
+
+<h3>
+<a id="to-run-the-sle-paper-evaluation" class="anchor" href="#to-run-the-sle-paper-evaluation" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To run the SLE paper evaluation:</h3>
+
+<p>Call <code>sbt run</code> in the SymexTRON directory.</p>
+
+<p>The main evaluation source file is <code>src/main/scala/examples/evaluation/Evaluation.scala</code>, and it uses some of the example files
+from the containing <code>examples</code> folder.</p>
+
+<p>The evaluation subjects from the paper and accompanying technical report can be found as follows:</p>
+
+<table>
+<thead>
+<tr>
+<th>Program</th>
+<th>File</th>
+<th>Object</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RenameField</td>
+<td>Refactoring.scala</td>
+<td>RenameFieldRefactoring</td>
+</tr>
+<tr>
+<td>RenameMethod</td>
+<td>Refactoring.scala</td>
+<td>RenameMethodRefactoring</td>
+</tr>
+<tr>
+<td>ExtractSuper</td>
+<td>Refactoring.scala</td>
+<td>ExtractSuperclassRefactoring</td>
+</tr>
+<tr>
+<td>ReplaceDelegation</td>
+<td>Refactoring.scala</td>
+<td>ReplaceDelegationWithInheritance</td>
+</tr>
+<tr>
+<td>Fam2Pers</td>
+<td>ATLModelZooTransformation.scala</td>
+<td>FamiliesToPersonsTransformation</td>
+</tr>
+<tr>
+<td>Path2Petri</td>
+<td>ATLModelZooTransformation.scala</td>
+<td>PathExp2PetriNetTransformation</td>
+</tr>
+<tr>
+<td>Class2Rel</td>
+<td>ATLModelZooTransformation.scala</td>
+<td>ClassToRelationalTransformation</td>
+</tr>
+<tr>
+<td>Toy1</td>
+<td>IntListExample.scala</td>
+<td>IntListContainsElementExample</td>
+</tr>
+<tr>
+<td>Toy2</td>
+<td>IntListExample.scala</td>
+<td>IntListHeadTailEqExample</td>
+</tr>
+<tr>
+<td>Toy3</td>
+<td>Class2TableExample.scala</td>
+<td>Class2TableSimpleExample</td>
+</tr>
+<tr>
+<td>Toy4</td>
+<td>Class2TableExample.scala</td>
+<td>Class2TableDeepMatchingExample</td>
+</tr>
+<tr>
+<td>Toy5</td>
+<td>BlogPostFeedExample.scala</td>
+<td>BlogPostFeedTimestampsExample</td>
+</tr>
+<tr>
+<td>Toy6</td>
+<td>BlogPostFeedExample.scala</td>
+<td>BlogPostFeedCapitaliseTitlesExample</td>
+</tr>
+<tr>
+<td>Toy7</td>
+<td>ContactBookExample.scala</td>
+<td>ContactBookExample</td>
+</tr>
+</tbody>
+</table>
+
+<h3>
+<a id="to-make-an-example-program" class="anchor" href="#to-make-an-example-program" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To make an example program:</h3>
+
+<p>The description of the AST for type-definitions and programs is available in the <a href="SYNTAX.md">SYNTAX.md</a> file.
+The description of the heap representation is available in <a href="SEMANTICS.md">SEMANTICS.md</a> file.</p>
+
+<p>To make an example, start by creating a new file with your example name e.g. <code>FooExample.scala</code> which contains an object <code>FooExample</code> that inherits from the <code>examples.Example</code> trait.
+Then override the <code>classDefs</code> (containing the metamodel/type-definitions), <code>pres</code> (containing the initial memory) and <code>prog</code> (containing the TRON program) values to contain your desired program. Remember to add the following imports:</p>
+
+<pre><code>import semantics.domains._
+import syntax.ast.Statement._
+import syntax.ast._
+</code></pre>
+
+<p>For a simple example, see the <code>IdIterExample</code> in the <code>examples</code> package.</p>
+
+<p>You can run an example by using <code>sbt 'run-main ‹example name›'</code>, e.g. <code>sbt 'run-main examples.IdIterExample'</code> for running the tool on the <code>IdIterExample</code>.</p>
+      </section>
+    </div>
+    <footer>
+      <p>Project maintained by <a href="https://github.com/models-team">models-team</a></p>
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
